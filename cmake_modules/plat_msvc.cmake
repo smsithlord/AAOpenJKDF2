@@ -8,6 +8,7 @@ macro(plat_initialize)
     add_compile_definitions(WIN64_STANDALONE)
     add_compile_definitions(ARCH_64BIT)
     add_compile_definitions(WIN32)
+    add_compile_definitions(SDL_MAIN_HANDLED)
 
     include(cmake_modules/plat_feat_full_sdl2.cmake)
     set(TARGET_USE_PHYSFS FALSE)
@@ -15,7 +16,7 @@ macro(plat_initialize)
     set(TARGET_COMPILE_FREEGLUT TRUE)
     set(TARGET_FIND_OPENAL FALSE)
     set(TARGET_USE_GAMENETWORKINGSOCKETS FALSE) # TODO why does this keep breaking :(
-    set(SDL2_COMMON_LIBS SDL2main SDL::SDL)
+    set(SDL2_COMMON_LIBS SDL::SDL)
     
     set(TARGET_WIN32 TRUE)
 
@@ -23,7 +24,7 @@ macro(plat_initialize)
 endmacro()
 
 macro(plat_specific_deps)
-    set(SDL2_COMMON_LIBS SDL2main SDL::SDL)
+    set(SDL2_COMMON_LIBS SDL::SDL)
 endmacro()
 
 macro(plat_link_and_package)
@@ -43,7 +44,7 @@ macro(plat_link_and_package)
        CMAKE_BUILD_TYPE STREQUAL MinSizeRel OR
        CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo)
         # TODO: Implement WinMain() for this to work nicely
-        set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+        set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
     elseif(CMAKE_BUILD_TYPE STREQUAL Debug)
         set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
     endif()

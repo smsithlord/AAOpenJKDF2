@@ -1,0 +1,158 @@
+# OpenJKDF2 Build Notes for Windows/MSVC
+
+This document contains notes for building OpenJKDF2 on Windows with Visual Studio/MSVC, including fixes that were needed to make the build work.
+
+## Quick Start
+
+### Prerequisites
+- Python 3.8+ (installed to PATH)
+- cog (`pip install cogapp`)
+- OpenAL 1.1 SDK with `OPENALDIR` environment variable set to `C:\Program Files (x86)\OpenAL 1.1 SDK`
+- CMake 3.x or Visual Studio 2022 (which includes CMake)
+
+### Building
+```bash
+git submodule update --init
+mkdir build_msvc
+cd build_msvc
+cmake -G "Visual Studio 17 2022" -A x64 ..
+cmake --build . --config Release --target openjkdf2-64
+```
+
+### Output Location
+- **Executable**: `build_msvc/Release/openjkdf2-64.exe`
+- **Required DLLs**: `build_msvc/*.dll` (OpenAL32.dll, exchndl.dll, mgwhelp.dll, symsrv.dll)
+
+## Required Code Changes for MSVC Compilation
+
+The following changes were made to enable successful compilation with MSVC:
+
+### 1. Fix GCC `__attribute__` Compatibility
+**File**: `src/types.h` (line 133)
+
+**Issue**: MSVC doesn't support GCC's `__attribute__` syntax.
+
+**Fix**: Added a macro to ignore `__attribute__` when compiling with MSVC:
+```c
+#if defined(_MSC_VER)
+#define ALIGNED_(x) __declspec(align(x))
+#define __attribute__(x)  // <-- Added this line
+#else
+```
+
+### 2. Fix POSIX `unistd.h` Header
+**File**: `src/Main/sithCvar.c` (lines 13-15)
+
+**Issue**: `unistd.h` is a POSIX header that doesn't exist on Windows.
+
+**Fix**: Wrapped the include with a conditional:
+```c
+#ifndef _MSC_VER
+#include <unistd.h>
+#endif
+```
+
+### 3. Fix SDL2 Main Conflict
+**File**: `cmake_modules/plat_msvc.cmake` (line 11, 19, 27)
+
+**Issue**: SDL2main library provides its own `main()` wrapper that conflicts with the project's main function.
+
+**Fix**:
+- Added `SDL_MAIN_HANDLED` compile definition (line 11)
+- Removed `SDL2main` from `SDL2_COMMON_LIBS` (lines 19, 27)
+
+```cmake
+add_compile_definitions(SDL_MAIN_HANDLED)
+set(SDL2_COMMON_LIBS SDL::SDL)  # Removed SDL2main
+```
+
+### 4. Disable WIN32_EXECUTABLE for Console Output
+**File**: `cmake_modules/plat_msvc.cmake` (lines 46-47)
+
+**Issue**: WIN32_EXECUTABLE=TRUE expects WinMain instead of main and hides console output.
+
+**Fix**: Changed to FALSE for both Release and Debug builds:
+```cmake
+set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+```
+
+### 5. Fix File Reading on Windows (CRLF Issue)
+**File**: `src/Platform/Common/stdEmbeddedRes.c` (lines 68, 186)
+
+**Issue**: Opening files in text mode `"r"` on Windows causes CRLF→LF conversion, making `ftell()` size mismatch with `fread()` bytes.
+
+**Fix**: Changed both `fopen()` calls to binary mode:
+```c
+f = fopen(tmp_filepath, "rb");  // Was "r"
+```
+
+Also added error checking and debug output (lines 169-177, 194, 205-213).
+
+## Project Structure
+
+### Key Files
+- **Shaders**: `resource/shaders/*.glsl` - GLSL shaders compiled at runtime by OpenGL
+- **Engine Core**: `src/` - Main source code
+- **Platform Layer**: `src/Platform/` - Platform-specific implementations (SDL2, GL, etc.)
+- **CMake Modules**: `cmake_modules/` - Build configuration for different platforms
+
+### Shader Loading
+Shaders are loaded at runtime from the `resource/shaders/` directory relative to the executable's working directory. They must be placed in:
+```
+<working_directory>/resource/shaders/*.glsl
+```
+
+The `stdEmbeddedRes_Load()` function:
+1. Prepends `resource/` to the requested path
+2. Converts `/` to `\` on Windows
+3. Opens the file in binary mode
+4. Falls back to embedded resources if file not found
+
+### Build System
+- Uses CMake with platform-specific modules
+- `plat_msvc.cmake` handles MSVC/Visual Studio configuration
+- Submodules provide SDL2, OpenAL, GLEW, etc.
+- Python's `cog` is used to generate code (globals.c/globals.h)
+
+## Dependencies (Git Submodules)
+- SDL 2.26.5
+- SDL_mixer 2.6.3
+- OpenAL 1.23.1
+- GLEW 2.2.0
+- FreeGLUT 3.4.0
+- zlib 1.2.13
+- libpng 1.6.39
+
+## Troubleshooting
+
+### "Failed to read file" errors
+- Ensure shaders are in `resource/shaders/` relative to working directory
+- Check that files are readable (not locked by another process)
+- Verify CRLF line endings aren't causing issues (should be fixed by binary mode)
+
+### Linker errors about SDL2main
+- Ensure `SDL_MAIN_HANDLED` is defined
+- Verify `SDL2main` is removed from link libraries
+- Check that `WIN32_EXECUTABLE` is set to FALSE
+
+### Missing DLLs at runtime
+- Copy DLLs from `build_msvc/` to the directory containing the exe
+- Or run from `build_msvc/` directory
+
+## Notes for Next Time
+
+### Code Organization
+- The project is ~96% complete (2694/2798 functions excluding rasterizer)
+- Follows original JK.EXE structure closely
+- Uses IDA Pro for reverse engineering
+- Function naming follows symbols from Grim Fandango Remastered
+
+### Development Workflow
+1. Make changes to source
+2. Rebuild: `cmake --build build_msvc --config Release`
+3. Test with game assets from GOG/Steam version of Jedi Knight
+
+### Testing
+- Requires valid Jedi Knight: Dark Forces II game files
+- Place exe and DLLs in game directory with GOB files
+- See main README.md for full directory structure requirements

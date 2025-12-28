@@ -130,6 +130,7 @@ typedef uint32_t size_t;
 
 #if defined(_MSC_VER)
 #define ALIGNED_(x) __declspec(align(x))
+#define __attribute__(x)
 #else
 #if defined(__GNUC__)
 #define ALIGNED_(x) __attribute__ ((aligned(x)))

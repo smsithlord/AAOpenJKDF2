@@ -65,12 +65,12 @@ for (int i = 0; i < strlen(tmp_filepath); i++)
     SDL_free(base_path);
 #endif
 
-    f = fopen(tmp_filepath, "r");
+    f = fopen(tmp_filepath, "rb");
     if (f) {
         fseek(f, 0, SEEK_END);
         size_t len = ftell(f);
         rewind(f);
-        
+
         file_contents = (char*)malloc(len+1);
         if (!file_contents) {
             if (pOutSz) {
@@ -79,12 +79,14 @@ for (int i = 0; i < strlen(tmp_filepath); i++)
             fclose(f);
             return NULL;
         }
-        
+
         if (fread(file_contents, 1, len, f) != len)
         {
             char errtmp[256];
             snprintf(errtmp, 256, "Failed to read file `%s`!\n", filepath);
             stdEmbeddedRes_errmsg(errtmp);
+            fclose(f);
+            free(file_contents);
             return NULL;
         }
         file_contents[len] = 0;
@@ -166,6 +168,15 @@ for (int i = 0; i < strlen(tmp_filepath); i++)
     free(r);
 #endif
 
+    // Debug: Print current working directory and file path
+    char cwd[256];
+#ifdef WIN32
+    GetCurrentDirectoryA(256, cwd);
+#else
+    getcwd(cwd, 256);
+#endif
+    stdPlatform_Printf("stdEmbeddedRes: CWD = %s\n", cwd);
+    stdPlatform_Printf("stdEmbeddedRes: Attempting to load: %s\n", tmp_filepath);
 
 #ifdef TARGET_TWL
     exists = stat(tmp_filepath, &statstuff) >= 0;
@@ -174,14 +185,16 @@ for (int i = 0; i < strlen(tmp_filepath); i++)
     }
 #endif
 
-    f = fopen(tmp_filepath, "r");
+    f = fopen(tmp_filepath, "rb");
     if (f)
     {
 retry_file:
         fseek(f, 0, SEEK_END);
         size_t len = ftell(f);
         rewind(f);
-        
+
+        stdPlatform_Printf("stdEmbeddedRes: File opened successfully, size = %zu bytes\n", len);
+
         file_contents = (char*)malloc(len+1);
         if (!file_contents) {
             if (pOutSz) {
@@ -190,12 +203,15 @@ retry_file:
             fclose(f);
             return NULL;
         }
-        
-        if (fread(file_contents, 1, len, f) != len)
+
+        size_t bytes_read = fread(file_contents, 1, len, f);
+        if (bytes_read != len)
         {
             char errtmp[256];
-            snprintf(errtmp, 256, "Failed to read file `%s`!\n", filepath);
+            snprintf(errtmp, 256, "Failed to read file `%s`! Expected %zu bytes, got %zu\n", filepath, len, bytes_read);
             stdEmbeddedRes_errmsg(errtmp);
+            fclose(f);
+            free(file_contents);
             return NULL;
         }
         file_contents[len] = 0;
