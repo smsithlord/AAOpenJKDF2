@@ -24,6 +24,7 @@
 
 #include "stdPlatform.h"
 #include "jk.h"
+#include "Platform/Common/libretro_integration.h"
 
 #if defined(TARGET_TWL)
 #include <nds.h>
@@ -141,6 +142,9 @@ int jkGame_Update()
     static int jkGame_Update_End = 0;
 
     jkGame_Update_Start = stdPlatform_GetTimeMsec();
+
+    // Update Libretro emulation (runs one frame of emulator)
+    libretro_integration_update();
 
     // HACK HACK HACK: Adjust zNear depending on if we're using the scope/camera views
 #if defined(SDL2_RENDER) || defined(TARGET_TWL)

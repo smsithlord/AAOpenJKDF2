@@ -72,6 +72,7 @@
 
 #include "Platform/Common/stdHttp.h"
 #include "Platform/Common/stdUpdater.h"
+#include "Platform/Common/libretro_integration.h"
 
 #if defined(PLATFORM_POSIX)
 #include <locale.h>
@@ -434,7 +435,10 @@ int Main_Startup(const char *cmdline)
 
         // Register dynamic texture callback for compscreen.mat
         // Uncomment the line below to enable the example callback
-        rdDynamicTexture_Register("compscreen.mat", rdDynamicTexture_ExampleCallback, NULL);
+        //rdDynamicTexture_Register("compscreen.mat", rdDynamicTexture_ExampleCallback, NULL);
+
+        // Initialize Libretro integration
+        libretro_integration_init();
 
 #ifdef QUAKE_CONSOLE
         jkQuakeConsole_Startup(); // Added
@@ -469,6 +473,9 @@ int Main_Startup(const char *cmdline)
 void Main_Shutdown()
 {
     stdPlatform_Printf("OpenJKDF2: %s\n", __func__);
+
+    // Shutdown Libretro integration
+    libretro_integration_shutdown();
 
     std3D_Shutdown(); // Added
 #ifdef QUAKE_CONSOLE
