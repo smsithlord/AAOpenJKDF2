@@ -2877,16 +2877,35 @@ int std3D_AddToTextureCache(stdVBuffer *vbuf, rdDDrawSurface *texture, int is_al
 {
     if (Main_bHeadless) return 1;
     if (!vbuf || !texture) return 1;
-    if (texture->texture_loaded) return 1;
 
-    if (std3D_loadedTexturesAmt >= STD3D_MAX_TEXTURES) {
+    // Handle texture re-upload for dynamic textures
+    int is_reupload = 0;
+    if (texture->texture_loaded && texture->texture_dirty)
+    {
+        is_reupload = 1;
+        texture->texture_dirty = 0;
+    }
+    else if (texture->texture_loaded)
+    {
+        return 1;
+    }
+
+    if (!is_reupload && std3D_loadedTexturesAmt >= STD3D_MAX_TEXTURES) {
         stdPlatform_Printf("ERROR: Texture cache exhausted!! Ask ShinyQuagsire to increase the size.\n");
         return 1;
     }
     //printf("Add to texture cache\n");
-    
+
     GLuint image_texture;
-    glGenTextures(1, &image_texture);
+    if (is_reupload)
+    {
+        // Reuse existing texture ID for dynamic texture updates
+        image_texture = texture->texture_id;
+    }
+    else
+    {
+        glGenTextures(1, &image_texture);
+    }
     uint8_t* image_8bpp = (uint8_t*)vbuf->sdlSurface->pixels;
     uint16_t* image_16bpp = (uint16_t*)vbuf->sdlSurface->pixels;
     uint8_t* pal = (uint8_t*)vbuf->palette;
@@ -3036,13 +3055,16 @@ int std3D_AddToTextureCache(stdVBuffer *vbuf, rdDDrawSurface *texture, int is_al
     }
 
     
-    std3D_aLoadedSurfaces[std3D_loadedTexturesAmt] = texture;
-    std3D_aLoadedTextures[std3D_loadedTexturesAmt++] = image_texture;
-    /*ext->surfacebuf = image_data;
-    ext->surfacetex = image_texture;
-    ext->surfacepaltex = pal_texture;*/
-    
-    texture->texture_id = image_texture;
+    if (!is_reupload)
+    {
+        std3D_aLoadedSurfaces[std3D_loadedTexturesAmt] = texture;
+        std3D_aLoadedTextures[std3D_loadedTexturesAmt++] = image_texture;
+        /*ext->surfacebuf = image_data;
+        ext->surfacetex = image_texture;
+        ext->surfacepaltex = pal_texture;*/
+
+        texture->texture_id = image_texture;
+    }
     texture->emissive_texture_id = 0;
     texture->displacement_texture_id = 0;
     texture->texture_loaded = 1;

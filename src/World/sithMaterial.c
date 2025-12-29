@@ -6,6 +6,7 @@
 #include "World/sithWorld.h"
 #include "Main/sithMain.h"
 #include "Engine/rdMaterial.h"
+#include "Engine/rdDynamicTexture.h"
 #include "Platform/std3D.h"
 #include "jk.h"
 
@@ -185,6 +186,10 @@ LABEL_10:
                 v8->id = v12;
             }
             v4->numMaterialsLoaded = v11 + 1;
+
+            // Attach dynamic texture callback AFTER material is in final location
+            rdMaterial_AttachDynamicCallback(v8, a1);
+
             return v8;
         }
         if ( !_strcmp(a1, "dflt.mat") )

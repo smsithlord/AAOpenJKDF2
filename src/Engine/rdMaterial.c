@@ -1,6 +1,7 @@
 #include "rdMaterial.h"
 
 #include "General/stdString.h"
+#include "General/stdHashTable.h"
 #include "Engine/rdroid.h"
 #include "Win95/stdDisplay.h"
 #include "Win95/std.h"
@@ -11,6 +12,7 @@
 
 #ifdef SDL2_RENDER
 #include "Platform/GL/jkgm.h"
+#include <SDL.h>
 #endif
 
 #ifdef TARGET_TWL
@@ -26,6 +28,14 @@ int rdMaterial_numCachedMaterials = 0;
 
 #endif
 
+// Dynamic texture callback system
+typedef struct rdDynamicTextureEntry {
+    rdDynamicTextureCallback callback;
+    void* userData;
+} rdDynamicTextureEntry;
+
+static stdHashTable* rdMaterial_dynamicTextureRegistry = NULL;
+
 rdMaterialLoader_t rdMaterial_RegisterLoader(rdMaterialLoader_t load)
 {
     rdMaterialLoader_t result = pMaterialsLoader;
@@ -38,6 +48,126 @@ rdMaterialUnloader_t rdMaterial_RegisterUnloader(rdMaterialUnloader_t unload)
     rdMaterialUnloader_t result = pMaterialsUnloader;
     pMaterialsUnloader = unload;
     return result;
+}
+
+void rdMaterial_RegisterDynamicTexture(const char* matName, rdDynamicTextureCallback callback, void* userData)
+{
+    if (!rdMaterial_dynamicTextureRegistry)
+    {
+        rdMaterial_dynamicTextureRegistry = stdHashTable_New(32);
+        if (!rdMaterial_dynamicTextureRegistry)
+            return;
+    }
+
+    rdDynamicTextureEntry* entry = (rdDynamicTextureEntry*)rdroid_pHS->alloc(sizeof(rdDynamicTextureEntry));
+    if (!entry)
+        return;
+
+    entry->callback = callback;
+    entry->userData = userData;
+
+    stdHashTable_SetKeyVal(rdMaterial_dynamicTextureRegistry, matName, entry);
+
+    // DEBUG: Print registration
+    jk_printf("OpenJKDF2: Registered dynamic texture callback for '%s'\n", matName);
+}
+
+void rdMaterial_UpdateDynamicTexture(rdMaterial* material, rdTexture* texture, int mipLevel)
+{
+    // DEBUG: Only print for compscreen.mat (print once per call for debugging)
+#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+    static int compscreenDebugOnce = 0;
+    int isCompscreen = material && _strstr(material->mat_full_fpath, "compscreen");
+    if (isCompscreen && !compscreenDebugOnce++) {
+        jk_printf("OpenJKDF2: UpdateDynamicTexture for COMPSCREEN: material=%p texture=%p mipLevel=%d\n",
+                  material, texture, mipLevel);
+        jk_printf("  material->dynamicCallback=%p\n", material->dynamicCallback);
+        jk_printf("  texture->num_mipmaps=%d\n", texture ? texture->num_mipmaps : -1);
+    }
+#endif
+
+    if (!material || !texture || !material->dynamicCallback)
+        return;
+
+    // Get the texture buffer for this mip level
+    if (mipLevel < 0 || mipLevel >= (int)texture->num_mipmaps) {
+#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+        if (isCompscreen && compscreenDebugOnce == 1) {
+            jk_printf("  EARLY RETURN: mipLevel check failed (mipLevel=%d, num_mipmaps=%d)\n",
+                      mipLevel, texture->num_mipmaps);
+        }
+#endif
+        return;
+    }
+
+    stdVBuffer* vbuf = texture->texture_struct[mipLevel];
+    if (!vbuf) {
+#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+        if (isCompscreen && compscreenDebugOnce == 1) {
+            jk_printf("  EARLY RETURN: vbuf is NULL\n");
+        }
+#endif
+        return;
+    }
+
+    // Get pixel data - use sdlSurface->pixels for SDL2, or surface_lock_alloc for other platforms
+    void* pixelData = NULL;
+#ifdef SDL2_RENDER
+    if (vbuf->sdlSurface && vbuf->sdlSurface->pixels) {
+        pixelData = vbuf->sdlSurface->pixels;
+    }
+#else
+    pixelData = vbuf->surface_lock_alloc;
+#endif
+
+    if (!pixelData) {
+#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+        if (isCompscreen && compscreenDebugOnce == 1) {
+            jk_printf("  EARLY RETURN: pixelData is NULL (sdlSurface=%p, pixels=%p)\n",
+                      vbuf->sdlSurface, vbuf->sdlSurface ? vbuf->sdlSurface->pixels : NULL);
+        }
+#endif
+        return;
+    }
+
+    int width = 1 << (texture->width_bitcnt - mipLevel);
+    int height = (texture->height_minus_1 >> mipLevel) + 1;
+
+#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+    if (isCompscreen && compscreenDebugOnce == 1) {
+        jk_printf("  SUCCESS: Invoking callback! (mip %d, %dx%d, vbuf=%p, pixels=%p)\n",
+                  mipLevel, width, height, vbuf, pixelData);
+    }
+#endif
+
+    // Invoke the callback to modify pixel data
+    material->dynamicCallback(
+        material,
+        texture,
+        mipLevel,
+        pixelData,
+        width,
+        height,
+        material->texFormat,
+        material->dynamicCallbackUserData
+    );
+}
+
+// Attach dynamic callback to material by filename
+void rdMaterial_AttachDynamicCallback(rdMaterial* material, const char* matFilename)
+{
+    if (!rdMaterial_dynamicTextureRegistry || !material || !matFilename)
+        return;
+
+    rdDynamicTextureEntry* entry = (rdDynamicTextureEntry*)stdHashTable_GetKeyVal(
+        rdMaterial_dynamicTextureRegistry, matFilename);
+
+    if (entry) {
+        material->dynamicCallback = entry->callback;
+        material->dynamicCallbackUserData = entry->userData;
+        jk_printf("OpenJKDF2: ATTACHED callback=%p to material '%s' at %p (id=%d/0x%X)\n",
+                  material->dynamicCallback, matFilename, material, material->id, material->id);
+    }
 }
 
 rdMaterial* rdMaterial_Load(char *material_fname, int create_ddraw_surface, int gpu_memory)
@@ -771,6 +901,17 @@ int rdMaterial_AddToTextureCache(rdMaterial *pMaterial, rdTexture *texture, int 
         rdMaterial_UpdateFrameCount(pMaterial);
     //}
 #endif
+
+    // For dynamic textures, ensure data is loaded before modifying pixels
+    if (pMaterial->dynamicCallback) {
+#if defined(RDMATERIAL_LRU_LOAD_UNLOAD)
+        rdMaterial_EnsureData(pMaterial);
+#endif
+    }
+
+    // Update dynamic texture if callback is registered
+    rdMaterial_UpdateDynamicTexture(pMaterial, texture, mipmap_level);
+
     stdVBuffer* mipmap = texture->texture_struct[mipmap_level];
 
 #ifdef SDL2_RENDER
@@ -782,21 +923,32 @@ int rdMaterial_AddToTextureCache(rdMaterial *pMaterial, rdTexture *texture, int 
     if ( no_alpha )
     {
         rdDDrawSurface* surface = &texture->opaqueMats[mipmap_level];
-        if (surface->texture_loaded)
+
+        // For dynamic textures, always re-upload
+        if (pMaterial->dynamicCallback)
         {
+            // Set dirty flag to trigger re-upload in std3D_AddToTextureCache
+            surface->texture_dirty = 1;
+            // Fall through to upload code below - don't early return!
+        }
+        else if (surface->texture_loaded)
+        {
+            // Normal textures: if already loaded, just update frame count
             std3D_UpdateFrameCount(surface);
             return 1;
         }
+
+        // Upload texture (for both initial load and dynamic re-upload)
 #ifdef SDL2_RENDER
 #if defined(TARGET_CAN_JKGM)
-        else if (jkgm_std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha, pMaterial, cel_idx))
+        if (jkgm_std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha, pMaterial, cel_idx))
         {
             //printf("rdmat Init %s %x %x\n", pMaterial->mat_fpath, surface->texture_id, std3D_loadedTexturesAmt);
             return 1;
         }
 #endif
 #endif
-        else if (std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha))
+        if (std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha))
         {
             //printf("rdmat Init %s %x %x\n", pMaterial->mat_fpath, surface->texture_id, std3D_loadedTexturesAmt);
             return 1;
@@ -806,21 +958,32 @@ int rdMaterial_AddToTextureCache(rdMaterial *pMaterial, rdTexture *texture, int 
     else
     {
         rdDDrawSurface* surface = &texture->alphaMats[mipmap_level];
-        if ( surface->texture_loaded )
+
+        // For dynamic textures, always re-upload
+        if (pMaterial->dynamicCallback)
         {
+            // Set dirty flag to trigger re-upload in std3D_AddToTextureCache
+            surface->texture_dirty = 1;
+            // Fall through to upload code below - don't early return!
+        }
+        else if (surface->texture_loaded)
+        {
+            // Normal textures: if already loaded, just update frame count
             std3D_UpdateFrameCount(surface);
             return 1;
         }
+
+        // Upload texture (for both initial load and dynamic re-upload)
 #ifdef SDL2_RENDER
 #if defined(TARGET_CAN_JKGM)
-        else if (jkgm_std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha, pMaterial, cel_idx))
+        if (jkgm_std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, no_alpha, pMaterial, cel_idx))
         {
             //printf("rdmat Init %s %x %x\n", pMaterial->mat_fpath, surface->texture_id, std3D_loadedTexturesAmt);
             return 1;
         }
 #endif
 #endif
-        else if (std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, 0))
+        if (std3D_AddToTextureCache(mipmap, surface, texture->alpha_en & 1, 0))
         {
             //printf("rdmat Init %s %x %x\n", pMaterial->mat_fpath, surface->texture_id, std3D_loadedTexturesAmt);
             return 1;

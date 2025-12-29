@@ -1010,6 +1010,7 @@ typedef struct rdDDrawSurface
     uint32_t frameNum;
     rdDDrawSurface* pPrevCachedTexture;
     rdDDrawSurface* pNextCachedTexture;
+    int texture_dirty;
     
     //uint32_t texture_area;
     //uint32_t gpu_accel_maybe;
@@ -1254,6 +1255,12 @@ typedef struct rdMaterialHeader
     rdTexFormat texFormat;
 } rdMaterialHeader;
 
+// Forward declare rdMaterial struct for callback typedef
+struct rdMaterial;
+
+// Forward declaration for callback typedef
+typedef void (*rdDynamicTextureCallback)(struct rdMaterial* material, rdTexture* texture, int mipLevel, void* pixelData, int width, int height, rdTexFormat format, void* userData);
+
 typedef struct rdMaterial
 {
     uint32_t tex_type;
@@ -1284,11 +1291,13 @@ typedef struct rdMaterial
     rdTexture *textures;
 #ifdef RDMATERIAL_LRU_LOAD_UNLOAD
     uint16_t bDataLoaded;
-    uint16_t bMetadataLoaded; 
+    uint16_t bMetadataLoaded;
     int frameNum;
     rdMaterial* pPrevCachedMaterial;
     rdMaterial* pNextCachedMaterial;
 #endif
+    rdDynamicTextureCallback dynamicCallback;
+    void* dynamicCallbackUserData;
 } rdMaterial;
 
 struct sithPuppet

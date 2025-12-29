@@ -21,6 +21,9 @@ extern "C" {
 
 rdMaterialLoader_t rdMaterial_RegisterLoader(rdMaterialLoader_t load);
 rdMaterialUnloader_t rdMaterial_RegisterUnloader(rdMaterialUnloader_t unload);
+void rdMaterial_RegisterDynamicTexture(const char* matName, rdDynamicTextureCallback callback, void* userData);
+void rdMaterial_UpdateDynamicTexture(rdMaterial* material, rdTexture* texture, int mipLevel);
+void rdMaterial_AttachDynamicCallback(rdMaterial* material, const char* matFilename);
 rdMaterial* rdMaterial_Load(char *material_fname, int create_ddraw_surface, int gpu_memory);
 int rdMaterial_LoadEntry(char *mat_fpath, rdMaterial *material, int create_ddraw_surface, int gpu_mem);
 void rdMaterial_Free(rdMaterial *material);

@@ -624,6 +624,13 @@ void jkgm_populate_shortcuts(stdVBuffer *vbuf, rdDDrawSurface *texture, rdMateri
 int jkgm_std3D_AddToTextureCache(stdVBuffer *vbuf, rdDDrawSurface *texture, int is_alpha_tex, int no_alpha, rdMaterial* material, int cel)
 {
     if (Main_bHeadless) return 0;
+
+    // Dynamic textures should use the standard path, not JKGM
+    if (material->dynamicCallback)
+    {
+        return 0;  // Fall back to std3D_AddToTextureCache
+    }
+
     if (texture->texture_loaded) return 1;
 
     rdTexture *pRdTexture = &material->textures[cel];

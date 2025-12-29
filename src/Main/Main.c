@@ -58,6 +58,7 @@
 #include "Main/jkMain.h"
 #include "Main/jkQuakeConsole.h"
 #include "Engine/rdroid.h"
+#include "Engine/rdDynamicTexture.h"
 #include "Main/sithMain.h"
 #include "Dss/sithMulti.h"
 #include "General/stdString.h"
@@ -430,6 +431,11 @@ int Main_Startup(const char *cmdline)
         jkSmack_Startup();
 
         std3D_Startup(); // Added
+
+        // Register dynamic texture callback for compscreen.mat
+        // Uncomment the line below to enable the example callback
+        rdDynamicTexture_Register("compscreen.mat", rdDynamicTexture_ExampleCallback, NULL);
+
 #ifdef QUAKE_CONSOLE
         jkQuakeConsole_Startup(); // Added
 #endif
