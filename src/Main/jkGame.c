@@ -24,7 +24,8 @@
 
 #include "stdPlatform.h"
 #include "jk.h"
-#include "Platform/Common/libretro_integration.h"
+#include "Platform/Common/AACoreManager.h"
+#include "Main/jkSpawn.h"
 
 #if defined(TARGET_TWL)
 #include <nds.h>
@@ -143,8 +144,11 @@ int jkGame_Update()
 
     jkGame_Update_Start = stdPlatform_GetTimeMsec();
 
-    // Update Libretro emulation (runs one frame of emulator)
-    libretro_integration_update();
+    // Update aarcadecore.dll (Libretro, web browser, etc.)
+    AACoreManager_Update();
+
+    // Check for 3DO spawn key
+    jkSpawn_Update();
 
     // HACK HACK HACK: Adjust zNear depending on if we're using the scope/camera views
 #if defined(SDL2_RENDER) || defined(TARGET_TWL)

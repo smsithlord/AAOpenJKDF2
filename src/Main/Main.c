@@ -72,7 +72,7 @@
 
 #include "Platform/Common/stdHttp.h"
 #include "Platform/Common/stdUpdater.h"
-#include "Platform/Common/libretro_integration.h"
+#include "Platform/Common/AACoreManager.h"
 
 #if defined(PLATFORM_POSIX)
 #include <locale.h>
@@ -437,8 +437,8 @@ int Main_Startup(const char *cmdline)
         // Uncomment the line below to enable the example callback
         //rdDynamicTexture_Register("compscreen.mat", rdDynamicTexture_ExampleCallback, NULL);
 
-        // Initialize Libretro integration
-        libretro_integration_init();
+        // Load and initialize aarcadecore.dll
+        AACoreManager_Init();
 
 #ifdef QUAKE_CONSOLE
         jkQuakeConsole_Startup(); // Added
@@ -474,8 +474,8 @@ void Main_Shutdown()
 {
     stdPlatform_Printf("OpenJKDF2: %s\n", __func__);
 
-    // Shutdown Libretro integration
-    libretro_integration_shutdown();
+    // Shutdown aarcadecore.dll
+    AACoreManager_Shutdown();
 
     std3D_Shutdown(); // Added
 #ifdef QUAKE_CONSOLE

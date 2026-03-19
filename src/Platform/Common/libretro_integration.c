@@ -6,6 +6,7 @@
  */
 
 #include "libretro_host.h"
+#include "../../libretro_examples/libretro.h"
 #include "../../Engine/rdDynamicTexture.h"
 #include "../../Engine/rdMaterial.h"
 #include "../../stdPlatform.h"
@@ -165,11 +166,47 @@ void libretro_integration_init(void)
     stdPlatform_Printf("Libretro: Emulator output will appear on compscreen.mat\n");
 }
 
+static int16_t libretro_build_joypad_state(void)
+{
+    int16_t buttons = 0;
+
+    /* Map OpenJKDF2 gamepad keys to Libretro RETRO_DEVICE_JOYPAD bits.
+     * stdControl_aKeyInfo[] is nonzero when a key is pressed.
+     * SDL button A = KEY_JOY1_B1, B = B2, X = B3, Y = B4, etc.
+     * See stdControl_ReadGamepad() in SDL2/stdControl.c for the mapping. */
+    /* Map by physical position: Xbox bottom=SNES bottom, etc. */
+    if (stdControl_aKeyInfo[KEY_JOY1_B1])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_B);      /* Xbox A (bottom) → SNES B (bottom) */
+    if (stdControl_aKeyInfo[KEY_JOY1_B2])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_A);      /* Xbox B (right)  → SNES A (right)  */
+    if (stdControl_aKeyInfo[KEY_JOY1_B3])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_Y);      /* Xbox X (left)   → SNES Y (left)   */
+    if (stdControl_aKeyInfo[KEY_JOY1_B4])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_X);      /* Xbox Y (top)    → SNES X (top)    */
+    if (stdControl_aKeyInfo[KEY_JOY1_B5])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_SELECT);
+    if (stdControl_aKeyInfo[KEY_JOY1_B7])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_START);
+    if (stdControl_aKeyInfo[KEY_JOY1_B10])    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L);
+    if (stdControl_aKeyInfo[KEY_JOY1_B11])    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R);
+    if (stdControl_aKeyInfo[KEY_JOY1_B16])    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L2);
+    if (stdControl_aKeyInfo[KEY_JOY1_B17])    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R2);
+    if (stdControl_aKeyInfo[KEY_JOY1_B8])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L3);
+    if (stdControl_aKeyInfo[KEY_JOY1_B9])     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R3);
+    if (stdControl_aKeyInfo[KEY_JOY1_HUP])    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_UP);
+    if (stdControl_aKeyInfo[KEY_JOY1_HDOWN])  buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_DOWN);
+    if (stdControl_aKeyInfo[KEY_JOY1_HLEFT])  buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_LEFT);
+    if (stdControl_aKeyInfo[KEY_JOY1_HRIGHT]) buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_RIGHT);
+
+    return buttons;
+}
+
 void libretro_integration_update(void)
 {
     if (!g_libretro) {
         return;
     }
+
+    /* Forward gamepad input to the Libretro core */
+    int16_t joypad_buttons = libretro_build_joypad_state();
+    if (joypad_buttons) {
+        stdPlatform_Printf("Libretro: Joypad input=0x%04X\n", (unsigned)(uint16_t)joypad_buttons);
+    }
+    libretro_host_set_input(g_libretro, 0, joypad_buttons);
 
     /* Run one frame of emulation */
     libretro_host_run_frame(g_libretro);

@@ -1,0 +1,94 @@
+/*
+ * aarcadecore_api.h — Public C API for the AArcade Core DLL
+ *
+ * This header is shared between the DLL and any host application.
+ * It contains NO engine-specific types — only standard C types.
+ * Any game engine can use this interface.
+ */
+
+#ifndef AARCADECORE_API_H
+#define AARCADECORE_API_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* API version — bump when the interface changes */
+#define AARCADECORE_API_VERSION 2
+
+/* DLL export/import macros */
+#ifdef _WIN32
+  #ifdef AARCADECORE_EXPORTS
+    #define AARCADECORE_EXPORT __declspec(dllexport)
+  #else
+    #define AARCADECORE_EXPORT __declspec(dllimport)
+  #endif
+#else
+  #define AARCADECORE_EXPORT __attribute__((visibility("default")))
+#endif
+
+/* ========================================================================
+ * Host callbacks — provided by the host application at init time
+ *
+ * These let the DLL interact with the host without knowing engine types.
+ * The host OWNS the render callback — the DLL just provides pixels when asked.
+ * ======================================================================== */
+typedef void (*AACore_PrintfFn)(const char* fmt, ...);
+typedef int  (*AACore_GetKeyStateFn)(int key_index);
+
+typedef struct AACoreHostCallbacks {
+    int api_version;
+    AACore_PrintfFn       host_printf;
+    AACore_GetKeyStateFn  get_key_state;
+} AACoreHostCallbacks;
+
+/* ========================================================================
+ * Exported DLL functions
+ * ======================================================================== */
+
+AARCADECORE_EXPORT int  aarcadecore_get_api_version(void);
+AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbacks);
+AARCADECORE_EXPORT void aarcadecore_shutdown(void);
+AARCADECORE_EXPORT void aarcadecore_update(void);
+AARCADECORE_EXPORT bool aarcadecore_is_active(void);
+
+/* Get the material name the DLL wants to render to (e.g., "compscreen.mat").
+ * The host should register its own engine-native texture callback for this material. */
+AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void);
+
+/* Called by the host's texture callback to let the DLL fill a pixel buffer.
+ * The host provides the buffer; the DLL writes pixels into it. */
+AARCADECORE_EXPORT void aarcadecore_render_texture(
+    void* pixelData, int width, int height, int is16bit, int bpp);
+
+/* Get the audio sample rate the DLL needs (e.g., 32040 for SNES).
+ * Returns 0 if no audio is available. Host uses this to open its audio device. */
+AARCADECORE_EXPORT int aarcadecore_get_audio_sample_rate(void);
+
+/* Pull audio samples from the DLL into the host's buffer.
+ * buffer: interleaved stereo int16_t (L,R,L,R,...)
+ * max_frames: max frames to read (1 frame = 2 samples)
+ * Returns number of frames actually written. */
+AARCADECORE_EXPORT int aarcadecore_get_audio_samples(int16_t* buffer, int max_frames);
+
+/* ========================================================================
+ * Function pointer typedefs for dynamic loading
+ * ======================================================================== */
+typedef int   (*aarcadecore_get_api_version_t)(void);
+typedef bool  (*aarcadecore_init_t)(const AACoreHostCallbacks* host_callbacks);
+typedef void  (*aarcadecore_shutdown_t)(void);
+typedef void  (*aarcadecore_update_t)(void);
+typedef bool  (*aarcadecore_is_active_t)(void);
+typedef const char* (*aarcadecore_get_material_name_t)(void);
+typedef void  (*aarcadecore_render_texture_t)(void* pixelData, int width, int height, int is16bit, int bpp);
+typedef int   (*aarcadecore_get_audio_sample_rate_t)(void);
+typedef int   (*aarcadecore_get_audio_samples_t)(int16_t* buffer, int max_frames);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* AARCADECORE_API_H */

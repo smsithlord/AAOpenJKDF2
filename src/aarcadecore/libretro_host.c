@@ -8,7 +8,7 @@
 #include "libretro_host.h"
 #include "../../libretro_examples/libretro.h"
 
-#include "SDL2_helper.h"
+#include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,8 +78,7 @@ struct LibretroHost {
     /* Input state - 16-bit RETRO_DEVICE_JOYPAD button mask per port */
     int16_t input_state[2];
 
-    /* Audio state */
-    SDL_AudioDeviceID audio_dev;
+    /* Audio state — ring buffer collects samples from core, host pulls them */
     int16_t* audio_ring_buf;
     size_t audio_ring_size;   /* capacity in int16_t samples (L+R interleaved) */
     size_t audio_ring_write;  /* write cursor */
@@ -187,36 +186,14 @@ static size_t audio_ring_free(void)
     return g_current_host->audio_ring_size - 1 - audio_ring_available();
 }
 
-/* SDL2 audio device callback — pulls from ring buffer */
-static void host_sdl_audio_callback(void* userdata, Uint8* stream, int len)
-{
-    LibretroHost* host = (LibretroHost*)userdata;
-    int16_t* out = (int16_t*)stream;
-    size_t samples_needed = (size_t)len / sizeof(int16_t);
-    size_t avail = audio_ring_available();
-    size_t to_copy = samples_needed < avail ? samples_needed : avail;
-    size_t i;
-
-    for (i = 0; i < to_copy; i++) {
-        out[i] = host->audio_ring_buf[host->audio_ring_read];
-        host->audio_ring_read = (host->audio_ring_read + 1) % host->audio_ring_size;
-    }
-    /* Fill remainder with silence if underrun */
-    for (; i < samples_needed; i++) {
-        out[i] = 0;
-    }
-}
-
 static void host_audio_sample_callback(int16_t left, int16_t right)
 {
     if (!g_current_host || !g_current_host->audio_ring_buf) return;
     if (audio_ring_free() < 2) return;
-    SDL_LockAudioDevice(g_current_host->audio_dev);
     g_current_host->audio_ring_buf[g_current_host->audio_ring_write] = left;
     g_current_host->audio_ring_write = (g_current_host->audio_ring_write + 1) % g_current_host->audio_ring_size;
     g_current_host->audio_ring_buf[g_current_host->audio_ring_write] = right;
     g_current_host->audio_ring_write = (g_current_host->audio_ring_write + 1) % g_current_host->audio_ring_size;
-    SDL_UnlockAudioDevice(g_current_host->audio_dev);
 }
 
 static size_t host_audio_sample_batch_callback(const int16_t* data, size_t frames)
@@ -226,14 +203,12 @@ static size_t host_audio_sample_batch_callback(const int16_t* data, size_t frame
         return frames;
 
     samples = frames * 2; /* stereo interleaved */
-    SDL_LockAudioDevice(g_current_host->audio_dev);
     free_space = audio_ring_free();
     to_write = samples < free_space ? samples : free_space;
     for (i = 0; i < to_write; i++) {
         g_current_host->audio_ring_buf[g_current_host->audio_ring_write] = data[i];
         g_current_host->audio_ring_write = (g_current_host->audio_ring_write + 1) % g_current_host->audio_ring_size;
     }
-    SDL_UnlockAudioDevice(g_current_host->audio_dev);
     return to_write / 2; /* return frames written */
 }
 
@@ -433,34 +408,15 @@ bool libretro_host_load_game(LibretroHost* host, const char* game_path)
 
     host->game_loaded = true;
 
-    /* Initialize SDL2 audio for Libretro output */
+    /* Allocate audio ring buffer — host will pull samples via libretro_host_read_audio */
     {
-        SDL_AudioSpec want, have;
         int sample_rate = (int)host->av_info.timing.sample_rate;
         if (sample_rate <= 0) sample_rate = 48000;
-
-        memset(&want, 0, sizeof(want));
-        want.freq = sample_rate;
-        want.format = AUDIO_S16SYS;
-        want.channels = 2;
-        want.samples = 2048;
-        want.callback = host_sdl_audio_callback;
-        want.userdata = host;
-
-        host->audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-        if (host->audio_dev > 0) {
-            /* Ring buffer: ~4 frames worth of audio */
-            host->audio_ring_size = sample_rate / 4; /* ~0.25s in stereo samples */
-            if (host->audio_ring_size < 16384) host->audio_ring_size = 16384;
-            host->audio_ring_buf = (int16_t*)calloc(host->audio_ring_size, sizeof(int16_t));
-            host->audio_ring_write = 0;
-            host->audio_ring_read = 0;
-            SDL_PauseAudioDevice(host->audio_dev, 0);
-            printf("Libretro: Audio initialized - %d Hz, %d ch, buf=%d\n",
-                   have.freq, have.channels, have.samples);
-        } else {
-            printf("Libretro: Failed to open audio device: %s\n", SDL_GetError());
-        }
+        host->audio_ring_size = sample_rate / 4;
+        if (host->audio_ring_size < 16384) host->audio_ring_size = 16384;
+        host->audio_ring_buf = (int16_t*)calloc(host->audio_ring_size, sizeof(int16_t));
+        host->audio_ring_write = 0;
+        host->audio_ring_read = 0;
     }
 
     return true;
@@ -529,10 +485,7 @@ void libretro_host_destroy(LibretroHost* host)
         SDL_UnloadObject(host->core_dll);
     }
 
-    /* Close audio device and free ring buffer */
-    if (host->audio_dev > 0) {
-        SDL_CloseAudioDevice(host->audio_dev);
-    }
+    /* Free audio ring buffer */
     if (host->audio_ring_buf) {
         free(host->audio_ring_buf);
     }
@@ -561,4 +514,30 @@ void libretro_host_get_system_info(LibretroHost* host,
 
     if (out_name) *out_name = host->system_info.library_name;
     if (out_version) *out_version = host->system_info.library_version;
+}
+
+int libretro_host_get_sample_rate(LibretroHost* host)
+{
+    if (!host || !host->game_loaded)
+        return 0;
+    int rate = (int)host->av_info.timing.sample_rate;
+    return rate > 0 ? rate : 0;
+}
+
+int libretro_host_read_audio(LibretroHost* host, int16_t* buffer, int max_frames)
+{
+    size_t avail, to_copy, i;
+    if (!host || !host->audio_ring_buf || !buffer || max_frames <= 0)
+        return 0;
+
+    avail = audio_ring_available();
+    to_copy = (size_t)(max_frames * 2); /* stereo samples */
+    if (to_copy > avail) to_copy = avail;
+
+    for (i = 0; i < to_copy; i++) {
+        buffer[i] = host->audio_ring_buf[host->audio_ring_read];
+        host->audio_ring_read = (host->audio_ring_read + 1) % host->audio_ring_size;
+    }
+
+    return (int)(to_copy / 2); /* return frames */
 }

@@ -14,6 +14,7 @@
 #include "Devices/sithConsole.h"
 #include "Platform/wuRegistry.h"
 #include "Main/jkQuakeConsole.h"
+#include "Platform/Common/AACoreManager.h"
 
 #include "jk.h"
 
@@ -1077,7 +1078,8 @@ void Window_SdlUpdate()
             case SDL_CONTROLLERBUTTONUP:
                 if (bIsGamepad) {
                     //stdPlatform_Printf("gpad button %d, %d\n", event.cbutton.button, event.cbutton.state);
-                    if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START || event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+                    if ((event.cbutton.button == SDL_CONTROLLER_BUTTON_START || event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
+                        && !AACoreManager_IsActive()) {
                         stdControl_bControllerEscapeKey = (event.cbutton.state == SDL_PRESSED);
                     }
                     else if (jkCutscene_isRendering && event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) { // y

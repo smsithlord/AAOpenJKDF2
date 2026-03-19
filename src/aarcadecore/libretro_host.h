@@ -91,6 +91,21 @@ void libretro_host_get_system_info(LibretroHost* host,
                                     const char** out_name,
                                     const char** out_version);
 
+/**
+ * Get the audio sample rate requested by the loaded core
+ * @return sample rate in Hz, or 0 if no game loaded
+ */
+int libretro_host_get_sample_rate(LibretroHost* host);
+
+/**
+ * Read audio samples from the ring buffer
+ * @param host The libretro host instance
+ * @param buffer Output buffer for interleaved stereo int16_t samples
+ * @param max_frames Maximum frames to read (1 frame = L+R = 2 samples)
+ * @return Number of frames actually written
+ */
+int libretro_host_read_audio(LibretroHost* host, int16_t* buffer, int max_frames);
+
 #ifdef __cplusplus
 }
 #endif

@@ -139,6 +139,80 @@ The `stdEmbeddedRes_Load()` function:
 - Copy DLLs from `build_msvc/` to the directory containing the exe
 - Or run from `build_msvc/` directory
 
+## AArcade Core DLL (`aarcadecore.dll`)
+
+All embedded content rendering (Libretro emulation, future Steamworks web browser, etc.) is implemented in a standalone DLL (`aarcadecore.dll`) that communicates with the game engine through a clean C interface. This makes the DLL portable to other game engines.
+
+See **LLM-AARCADECORE-README.md** for full DLL architecture and implementation details.
+
+### Host-Side Integration
+- `src/Platform/Common/AACoreManager.h/.c` — Loads `aarcadecore.dll` via `SDL_LoadObject`, provides host callbacks, owns the engine texture callback and SDL audio device
+- `src/Win95/Window.c` — START/BACK gamepad buttons suppressed when `AACoreManager_IsActive()` returns true
+- `src/Main/Main.c` — `AACoreManager_Init()` / `AACoreManager_Shutdown()` at startup/shutdown
+- `src/Main/jkGame.c` — `AACoreManager_Update()` called per frame
+
+### Gamepad Button Mapping (SNES physical position)
+- Xbox A (bottom) -> SNES B, Xbox B (right) -> SNES A
+- Xbox X (left) -> SNES Y, Xbox Y (top) -> SNES X
+
+## Spawning 3DO Objects at Runtime
+
+### Key Files
+- `src/Main/jkSpawn.c` / `.h` — Handles H key press to spawn a 3DO at a raycast hit point
+
+### How It Works
+
+**Input detection:**
+- `stdControl_ReadKey(DIK_H, &hDown)` checks the H key state each frame
+- Debounced to trigger only on key-down edge
+
+**Aim direction (matching weapon fire):**
+```c
+rdMatrix34 aimMatrix;
+_memcpy(&aimMatrix, &player->lookOrientation, sizeof(aimMatrix));
+rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
+lookDir = aimMatrix.lvec;
+```
+This is the same pattern used by `sithWeapon_Fire` — combines the thing's orientation with the player's eye pitch/yaw/roll.
+
+**Raycasting:**
+- `sithCollision_SearchRadiusForThings()` casts a ray from the player position along the aim direction
+- `sithCollision_NextSearchResult()` returns the first hit with `hitNorm` (surface normal) and `distance`
+- `searchResult->surface->parent_sector` gives the correct sector for spawning
+- `sithCollision_SearchClose()` must be called when done
+
+**Orientation (constrained look-at):**
+The spawned object's bottom rests against the surface and it faces the player:
+- `uvec` = surface normal (model's "up" axis aligns to surface)
+- `lvec` = player direction projected onto surface plane, then negated (model faces player)
+- `rvec` = cross(lvec, uvec)
+- A small offset along the normal (0.025 units) prevents the model from sinking into the surface
+
+**Spawning with existing templates:**
+- `sithTemplate_GetEntryByName("slcompmoniter")` retrieves a fully-configured template already loaded in the level
+- `sithThing_Create(template, &hitPos, &orient, sector, NULL)` creates the instance
+- Using level templates is preferred over building templates programmatically, as they have all rendering/collision data pre-configured
+
+### Key APIs for Spawning Things
+| Function | File | Purpose |
+|----------|------|---------|
+| `sithTemplate_GetEntryByName()` | `src/World/sithTemplate.h` | Look up a template by name |
+| `sithThing_Create()` | `src/World/sithThing.h` | Spawn a thing from a template at a position/orientation/sector |
+| `sithCollision_SearchRadiusForThings()` | `src/Engine/sithCollision.h` | Raycast for surfaces/things |
+| `sithCollision_NextSearchResult()` | `src/Engine/sithCollision.h` | Get next collision hit |
+| `sithCollision_SearchClose()` | `src/Engine/sithCollision.h` | End collision search |
+| `rdMatrix_BuildFromLook34()` | `src/Primitives/rdMatrix.h` | Build rotation matrix from a direction |
+| `rdMatrix_PreRotate34()` | `src/Primitives/rdMatrix.h` | Apply euler rotation to a matrix |
+| `sithModel_LoadEntry()` | `src/World/sithModel.h` | Load a .3do model (prepends `3do\` automatically) |
+
+### rdMatrix34 Layout
+```
+rvec = right vector (X axis)
+lvec = forward/look vector (Y axis) — the direction the model faces
+uvec = up vector (Z axis)
+scale = position/translation
+```
+
 ## Notes for Next Time
 
 ### Code Organization

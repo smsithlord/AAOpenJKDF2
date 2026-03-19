@@ -202,6 +202,34 @@ file(GLOB TEST_SRCS ${PROJECT_SOURCE_DIR}/src/Tests/*.c)
 list(REMOVE_ITEM ENGINE_SOURCE_FILES ${TEST_SRCS})
 list(REMOVE_ITEM ENGINE_SOURCE_FILES ${PROJECT_SOURCE_DIR}/src/main.c)
 
+# Remove aarcadecore DLL sources from engine build (glob picks up src/*/*.c)
+file(GLOB AARCADECORE_DLL_SRCS ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c)
+list(REMOVE_ITEM ENGINE_SOURCE_FILES ${AARCADECORE_DLL_SRCS})
+
+# Remove files that moved into aarcadecore.dll (keep AACoreManager which is the host-side loader)
+file(GLOB AARCADECORE_MOVED_SRCS
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/EmbeddedInstance.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/EmbeddedInstanceManager.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/LibretroInstance.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/LibretroManager.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/SteamworksWebBrowserInstance.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/SteamworksWebBrowserManager.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/libretro_host.c
+    ${PROJECT_SOURCE_DIR}/src/Platform/Common/libretro_integration.c
+)
+list(REMOVE_ITEM ENGINE_SOURCE_FILES ${AARCADECORE_MOVED_SRCS})
+
+# aarcadecore DLL
+file(GLOB AARCADECORE_SOURCES ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c)
+add_library(aarcadecore SHARED ${AARCADECORE_SOURCES})
+target_include_directories(aarcadecore PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/aarcadecore
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}
+)
+target_link_libraries(aarcadecore PRIVATE SDL::SDL version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32)
+target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
+
 # Remove multiplayer menus from compilation
 file(GLOB MULTIPLAYER_MENU_SRCS 
     ${PROJECT_SOURCE_DIR}/src/Gui/jkGUIMultiplayer.c
