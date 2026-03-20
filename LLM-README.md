@@ -123,6 +123,9 @@ The `stdEmbeddedRes_Load()` function:
 - zlib 1.2.13
 - libpng 1.6.39
 
+## Dependencies (Bundled in DLL)
+- SQLite 3 (amalgamation — `src/aarcadecore/sqlite3.c/.h`) — library database for the Library Browser
+
 ## Troubleshooting
 
 ### "Failed to read file" errors

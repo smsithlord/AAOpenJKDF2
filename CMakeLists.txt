@@ -243,6 +243,15 @@ target_link_libraries(aarcadecore PRIVATE
 )
 target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
 
+# Auto-copy aarcadecore UI files to the output directory after build
+add_custom_command(TARGET aarcadecore POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aarcadecore>/aarcadecore/ui"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${PROJECT_SOURCE_DIR}/src/aarcadecore/ui"
+        "$<TARGET_FILE_DIR:aarcadecore>/aarcadecore/ui"
+    COMMENT "Copying aarcadecore UI files to output directory"
+)
+
 # Remove multiplayer menus from compilation
 file(GLOB MULTIPLAYER_MENU_SRCS 
     ${PROJECT_SOURCE_DIR}/src/Gui/jkGUIMultiplayer.c

@@ -25,7 +25,7 @@ using namespace ultralight;
 #define UL_DEFAULT_HEIGHT 1080
 
 /* Per-instance state */
-struct UltralightData : public LoadListener {
+struct UltralightData : public LoadListener, public ViewListener {
     RefPtr<Renderer> renderer;
     RefPtr<View> view;
     const char* htmlPath;
@@ -34,9 +34,9 @@ struct UltralightData : public LoadListener {
     int lastMouseX;
     int lastMouseY;
 
-    /* LoadListener overrides */
-    void OnDOMReady(ultralight::View* caller, uint64_t frame_id,
-                    bool is_main_frame, const String& url) override;
+    /* ViewListener override — fires before any page scripts run */
+    void OnWindowObjectReady(ultralight::View* caller, uint64_t frame_id,
+                             bool is_main_frame, const String& url) override;
 };
 
 /* Global pointer for JS callback access */
@@ -52,6 +52,7 @@ static UltralightData* g_currentULData = nullptr;
 /* Forward declarations for command handlers */
 void UltralightManager_RequestEngineMenu(void);
 void UltralightManager_RequestStartLibretro(void);
+void UltralightManager_OpenLibraryBrowser(void);
 
 /* Helper: extract UTF-8 string from JSValue */
 static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
@@ -66,81 +67,251 @@ static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
     return result;
 }
 
-/* aacore.call("command") — async, fire-and-forget */
-static JSValueRef js_call(JSContextRef ctx, JSObjectRef function,
-    JSObjectRef thisObject, size_t argumentCount,
-    const JSValueRef arguments[], JSValueRef* exception)
-{
-    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+/* Macro for JSC callback signature */
+#define AAPI_CALLBACK(name) static JSValueRef name(JSContextRef ctx, JSObjectRef function, \
+    JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
 
-    std::string cmd = jsValueToString(ctx, arguments[0]);
-    if (g_host.host_printf) g_host.host_printf("UL: call('%s')\n", cmd.c_str());
+/* ========================================================================
+ * aapi.manager.* callbacks — host/engine communication
+ * ======================================================================== */
 
-    if (cmd == "closeMenu") {
-        if (g_currentULData) g_currentULData->closeRequested = true;
-    } else if (cmd == "openEngineMenu") {
-        UltralightManager_RequestEngineMenu();
-    } else if (cmd == "startLibretro") {
-        UltralightManager_RequestStartLibretro();
-    } else {
-        if (g_host.host_printf) g_host.host_printf("UL: unknown command '%s'\n", cmd.c_str());
-        return JSValueMakeBoolean(ctx, false);
-    }
-
+AAPI_CALLBACK(js_manager_closeMenu) {
+    if (g_currentULData) g_currentULData->closeRequested = true;
     return JSValueMakeBoolean(ctx, true);
 }
-
-/* aacore.callSync("command") — sync, returns a value */
-static JSValueRef js_callSync(JSContextRef ctx, JSObjectRef function,
-    JSObjectRef thisObject, size_t argumentCount,
-    const JSValueRef arguments[], JSValueRef* exception)
-{
-    if (argumentCount < 1) return JSValueMakeNull(ctx);
-
-    std::string cmd = jsValueToString(ctx, arguments[0]);
-
-    if (cmd == "getVersion") {
-        JSStringRef str = JSStringCreateWithUTF8CString("AArcadeCore 1.0");
-        JSValueRef result = JSValueMakeString(ctx, str);
-        JSStringRelease(str);
-        return result;
-    }
-
-    if (g_host.host_printf) g_host.host_printf("UL: unknown sync command '%s'\n", cmd.c_str());
-    return JSValueMakeNull(ctx);
+AAPI_CALLBACK(js_manager_openEngineMenu) {
+    UltralightManager_RequestEngineMenu();
+    return JSValueMakeBoolean(ctx, true);
+}
+AAPI_CALLBACK(js_manager_startLibretro) {
+    UltralightManager_RequestStartLibretro();
+    return JSValueMakeBoolean(ctx, true);
+}
+AAPI_CALLBACK(js_manager_openLibraryBrowser) {
+    UltralightManager_OpenLibraryBrowser();
+    return JSValueMakeBoolean(ctx, true);
+}
+AAPI_CALLBACK(js_manager_getVersion) {
+    JSStringRef str = JSStringCreateWithUTF8CString("AArcadeCore 1.0");
+    JSValueRef result = JSValueMakeString(ctx, str);
+    JSStringRelease(str);
+    return result;
 }
 
-void UltralightData::OnDOMReady(ultralight::View* caller, uint64_t frame_id,
-                                 bool is_main_frame, const String& url)
+/* ========================================================================
+ * aapi JS bridge — typed library database access
+ * ======================================================================== */
+
+#include "SQLiteLibrary.h"
+extern SQLiteLibrary g_library;
+
+/* Helper: create a JS string property on an object */
+static void jsSetProp(JSContextRef ctx, JSObjectRef obj, const char* name, const std::string& value)
+{
+    JSStringRef key = JSStringCreateWithUTF8CString(name);
+    JSStringRef val = JSStringCreateWithUTF8CString(value.c_str());
+    JSObjectSetProperty(ctx, obj, key, JSValueMakeString(ctx, val), 0, nullptr);
+    JSStringRelease(val);
+    JSStringRelease(key);
+}
+
+static void jsSetInt(JSContextRef ctx, JSObjectRef obj, const char* name, int value)
+{
+    JSStringRef key = JSStringCreateWithUTF8CString(name);
+    JSObjectSetProperty(ctx, obj, key, JSValueMakeNumber(ctx, (double)value), 0, nullptr);
+    JSStringRelease(key);
+}
+
+/* Convert typed structs to JS objects */
+static JSObjectRef itemToJS(JSContextRef ctx, const Arcade::Item& item) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", item.id);
+    jsSetProp(ctx, o, "app", item.app);
+    jsSetProp(ctx, o, "description", item.description);
+    jsSetProp(ctx, o, "file", item.file);
+    jsSetProp(ctx, o, "marquee", item.marquee);
+    jsSetProp(ctx, o, "screen", item.screen);
+    jsSetProp(ctx, o, "title", item.title);
+    jsSetProp(ctx, o, "type", item.type);
+    return o;
+}
+
+static JSObjectRef typeToJS(JSContextRef ctx, const Arcade::Type& t) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", t.id);
+    jsSetProp(ctx, o, "title", t.title);
+    jsSetInt(ctx, o, "priority", t.priority);
+    return o;
+}
+
+static JSObjectRef modelToJS(JSContextRef ctx, const Arcade::Model& m) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", m.id);
+    jsSetProp(ctx, o, "title", m.title);
+    jsSetProp(ctx, o, "screen", m.screen);
+    return o;
+}
+
+static JSObjectRef appToJS(JSContextRef ctx, const Arcade::App& a) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", a.id);
+    jsSetProp(ctx, o, "title", a.title);
+    jsSetProp(ctx, o, "type", a.type);
+    jsSetProp(ctx, o, "screen", a.screen);
+    return o;
+}
+
+static JSObjectRef mapToJS(JSContextRef ctx, const Arcade::Map& m) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", m.id);
+    jsSetProp(ctx, o, "title", m.title);
+    return o;
+}
+
+static JSObjectRef platformToJS(JSContextRef ctx, const Arcade::Platform& p) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", p.id);
+    jsSetProp(ctx, o, "title", p.title);
+    return o;
+}
+
+static JSObjectRef instanceToJS(JSContextRef ctx, const Arcade::Instance& inst) {
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetProp(ctx, o, "id", inst.id);
+    return o;
+}
+
+/* Template: convert vector to JS array */
+template<typename T, typename ConvFn>
+static JSObjectRef vectorToJSArray(JSContextRef ctx, const std::vector<T>& vec, ConvFn conv) {
+    JSValueRef* vals = new JSValueRef[vec.size()];
+    for (size_t i = 0; i < vec.size(); i++)
+        vals[i] = conv(ctx, vec[i]);
+    JSObjectRef arr = JSObjectMakeArray(ctx, vec.size(), vec.empty() ? nullptr : vals, nullptr);
+    delete[] vals;
+    return arr;
+}
+
+/* Parse (offset, limit) arguments */
+static void parseOffsetLimit(JSContextRef ctx, size_t argc, const JSValueRef args[], int& offset, int& limit) {
+    offset = (argc > 0) ? (int)JSValueToNumber(ctx, args[0], nullptr) : 0;
+    limit  = (argc > 1) ? (int)JSValueToNumber(ctx, args[1], nullptr) : 50;
+}
+
+/* Parse (query, limit) arguments */
+static std::string parseQueryLimit(JSContextRef ctx, size_t argc, const JSValueRef args[], int& limit) {
+    std::string query = (argc > 0) ? jsValueToString(ctx, args[0]) : "";
+    limit = (argc > 1) ? (int)JSValueToNumber(ctx, args[1], nullptr) : 50;
+    return query;
+}
+
+/* --- aapi.library.* callback implementations --- */
+
+AAPI_CALLBACK(js_aapi_getItemsTyped) {
+    int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
+    return vectorToJSArray(ctx, g_library.getItems(offset, limit), itemToJS);
+}
+AAPI_CALLBACK(js_aapi_searchItemsTyped) {
+    int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
+    return vectorToJSArray(ctx, g_library.searchItems(q, limit), itemToJS);
+}
+AAPI_CALLBACK(js_aapi_getTypesTyped) {
+    return vectorToJSArray(ctx, g_library.getTypes(), typeToJS);
+}
+AAPI_CALLBACK(js_aapi_getModelsTyped) {
+    int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
+    return vectorToJSArray(ctx, g_library.getModels(offset, limit), modelToJS);
+}
+AAPI_CALLBACK(js_aapi_searchModelsTyped) {
+    int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
+    return vectorToJSArray(ctx, g_library.searchModels(q, limit), modelToJS);
+}
+AAPI_CALLBACK(js_aapi_getAppsTyped) {
+    int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
+    return vectorToJSArray(ctx, g_library.getApps(offset, limit), appToJS);
+}
+AAPI_CALLBACK(js_aapi_searchAppsTyped) {
+    int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
+    return vectorToJSArray(ctx, g_library.searchApps(q, limit), appToJS);
+}
+AAPI_CALLBACK(js_aapi_getMapsTyped) {
+    int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
+    return vectorToJSArray(ctx, g_library.getMaps(offset, limit), mapToJS);
+}
+AAPI_CALLBACK(js_aapi_searchMapsTyped) {
+    int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
+    return vectorToJSArray(ctx, g_library.searchMaps(q, limit), mapToJS);
+}
+AAPI_CALLBACK(js_aapi_getPlatformsTyped) {
+    return vectorToJSArray(ctx, g_library.getPlatforms(), platformToJS);
+}
+AAPI_CALLBACK(js_aapi_getInstancesTyped) {
+    int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
+    return vectorToJSArray(ctx, g_library.getInstances(offset, limit), instanceToJS);
+}
+AAPI_CALLBACK(js_aapi_searchInstancesTyped) {
+    int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
+    return vectorToJSArray(ctx, g_library.searchInstances(q, limit), instanceToJS);
+}
+
+/* Helper to register a method on a JS object */
+static void addJSMethod(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectCallAsFunctionCallback fn) {
+    JSStringRef methodName = JSStringCreateWithUTF8CString(name);
+    JSObjectRef methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, fn);
+    JSObjectSetProperty(ctx, obj, methodName, methodFunc, 0, nullptr);
+    JSStringRelease(methodName);
+}
+
+void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t frame_id,
+                                          bool is_main_frame, const String& url)
 {
     if (!is_main_frame) return;
 
-    if (g_host.host_printf) g_host.host_printf("UL: OnDOMReady, setting up JS bridge\n");
+    if (g_host.host_printf) g_host.host_printf("UL: OnWindowObjectReady, setting up JS bridge\n");
 
     auto scoped_context = caller->LockJSContext();
     JSContextRef ctx = (*scoped_context);
 
-    /* Create aacore namespace with two generic methods: call() and callSync() */
     JSObjectRef globalObj = JSContextGetGlobalObject(ctx);
-    JSObjectRef aacoreObj = JSObjectMake(ctx, nullptr, nullptr);
 
-    JSStringRef methodName;
-    JSObjectRef methodFunc;
+    /* Create unified aapi bridge with namespaces */
+    JSObjectRef aapiObj = JSObjectMake(ctx, nullptr, nullptr);
 
-    methodName = JSStringCreateWithUTF8CString("call");
-    methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, js_call);
-    JSObjectSetProperty(ctx, aacoreObj, methodName, methodFunc, 0, nullptr);
-    JSStringRelease(methodName);
+    /* aapi.manager — host/engine communication */
+    JSObjectRef managerObj = JSObjectMake(ctx, nullptr, nullptr);
+    addJSMethod(ctx, managerObj, "closeMenu", js_manager_closeMenu);
+    addJSMethod(ctx, managerObj, "openEngineMenu", js_manager_openEngineMenu);
+    addJSMethod(ctx, managerObj, "startLibretro", js_manager_startLibretro);
+    addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
+    addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
 
-    methodName = JSStringCreateWithUTF8CString("callSync");
-    methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, js_callSync);
-    JSObjectSetProperty(ctx, aacoreObj, methodName, methodFunc, 0, nullptr);
-    JSStringRelease(methodName);
+    JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
+    JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);
+    JSStringRelease(managerName);
 
-    /* Attach aacore to global window */
-    JSStringRef nsName = JSStringCreateWithUTF8CString("aacore");
-    JSObjectSetProperty(ctx, globalObj, nsName, aacoreObj, 0, nullptr);
-    JSStringRelease(nsName);
+    /* aapi.library — database queries */
+    JSObjectRef libraryObj = JSObjectMake(ctx, nullptr, nullptr);
+    addJSMethod(ctx, libraryObj, "getItems", js_aapi_getItemsTyped);
+    addJSMethod(ctx, libraryObj, "searchItems", js_aapi_searchItemsTyped);
+    addJSMethod(ctx, libraryObj, "getTypes", js_aapi_getTypesTyped);
+    addJSMethod(ctx, libraryObj, "getModels", js_aapi_getModelsTyped);
+    addJSMethod(ctx, libraryObj, "searchModels", js_aapi_searchModelsTyped);
+    addJSMethod(ctx, libraryObj, "getApps", js_aapi_getAppsTyped);
+    addJSMethod(ctx, libraryObj, "searchApps", js_aapi_searchAppsTyped);
+    addJSMethod(ctx, libraryObj, "getMaps", js_aapi_getMapsTyped);
+    addJSMethod(ctx, libraryObj, "searchMaps", js_aapi_searchMapsTyped);
+    addJSMethod(ctx, libraryObj, "getPlatforms", js_aapi_getPlatformsTyped);
+    addJSMethod(ctx, libraryObj, "getInstances", js_aapi_getInstancesTyped);
+    addJSMethod(ctx, libraryObj, "searchInstances", js_aapi_searchInstancesTyped);
+
+    JSStringRef libraryName = JSStringCreateWithUTF8CString("library");
+    JSObjectSetProperty(ctx, aapiObj, libraryName, libraryObj, 0, nullptr);
+    JSStringRelease(libraryName);
+
+    /* Attach aapi to global window */
+    JSStringRef aapiName = JSStringCreateWithUTF8CString("aapi");
+    JSObjectSetProperty(ctx, globalObj, aapiName, aapiObj, 0, nullptr);
+    JSStringRelease(aapiName);
 }
 
 /* ========================================================================
@@ -177,7 +348,8 @@ static bool ul_init(EmbeddedInstance* inst)
         return false;
     }
 
-    /* Set load listener for JS bridge setup */
+    /* Set view listener for JS bridge setup (OnWindowObjectReady fires before scripts) */
+    data->view->set_view_listener(data);
     data->view->set_load_listener(data);
     g_currentULData = data;
 

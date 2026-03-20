@@ -186,12 +186,24 @@ The main menu is a fullscreen Ultralight HUD overlay toggled by pressing Escape.
    - Uploads to a GL texture
    - Draws a fullscreen quad via `std3D_DrawUITexturedQuad()` (engine's shader-based UI system)
 
-### JS Bridge (C++ ↔ JavaScript):
-- In `OnDOMReady`, Ultralight creates a `window.aacore` object with two generic methods
-- `aacore.call("command")` — fire-and-forget (async)
-- `aacore.callSync("command")` — returns a value (sync)
-- Available commands: `closeMenu`, `openEngineMenu`, `startLibretro`
-- Uses JavaScriptCore C API: `JSObjectMakeFunctionWithCallback()`, `JSContextGetGlobalObject()`
+### JS Bridge — Unified `aapi` Object (C++ ↔ JavaScript):
+- In `OnWindowObjectReady` (fires before page scripts), Ultralight creates a `window.aapi` object with namespaces
+- **`aapi.manager.*`** — host/engine communication:
+  - `aapi.manager.closeMenu()`, `openEngineMenu()`, `startLibretro()`, `openLibraryBrowser()`, `getVersion()`
+- **`aapi.library.*`** — SQLite database queries:
+  - `aapi.library.getItems(offset, limit)`, `searchItems(query, limit)`
+  - `getTypes()`, `getModels()`, `searchModels()`, `getApps()`, `searchApps()`
+  - `getMaps()`, `searchMaps()`, `getPlatforms()`, `getInstances()`, `searchInstances()`
+- Uses JavaScriptCore C API with direct function callbacks per method (no string dispatch)
+- Bridge is set up via `ViewListener::OnWindowObjectReady` so it's available before `DOMContentLoaded`
+
+### Library Browser:
+- `library.html` / `library.js` / `style.css` — ported from aarcade-core project
+- Opened via `aapi.manager.openLibraryBrowser()` from main menu
+- Queries library database through `aapi.library.*` methods
+- SQLite database (`library.db`) opened at DLL init via `SQLiteLibrary` class
+- `ArcadeTypes.h` defines data structs (Item, Type, Model, App, Map, Platform, Instance)
+- Images not yet implemented (placeholder shown)
 
 ### Dynamic texture hooks:
 - Currently **disabled** — `rdDynamicTexture_Register` call is commented out

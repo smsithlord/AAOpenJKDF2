@@ -8,10 +8,14 @@
 #include "aarcadecore_api.h"
 #include "aarcadecore_internal.h"
 #include "libretro_host.h"
+#include "SQLiteLibrary.h"
 #include <string.h>
 
 /* Global host callbacks */
 AACoreHostCallbacks g_host = {0};
+
+/* Global library database */
+SQLiteLibrary g_library;
 
 /* The active instance renders to in-game 3DO screens and receives
  * input when not in menu mode. NULL = no active screen content. */
@@ -116,6 +120,9 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     /* Initialize the HUD overlay (always alive, starts with blank.html) */
     UltralightManager_Init();
 
+    /* Open the library database */
+    g_library.open("G:/Documents Sym Links/GitHub/aarcade-core/x64/Release/library.db");
+
     /* Tasks are created on demand, not at startup */
     g_taskCount = 0;
     g_activeInstance = NULL;
@@ -131,6 +138,7 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     if (g_host.host_printf)
         g_host.host_printf("AACore: Shutting down...\n");
 
+    g_library.close();
     LibretroManager_Shutdown();
     SteamworksWebBrowserManager_Shutdown();
     UltralightManager_Shutdown();

@@ -1,19 +1,25 @@
 /*
  * mainMenu.js — JS bridge for the AArcade Core main menu
  *
- * The C++ side exposes an `aacore` object on the global window with:
- *   aacore.call("command")      — fire-and-forget (async)
- *   aacore.callSync("command")  — returns a value (sync)
+ * Uses the unified aapi bridge:
+ *   aapi.manager.closeMenu()
+ *   aapi.manager.openEngineMenu()
+ *   aapi.manager.startLibretro()
+ *   aapi.manager.openLibraryBrowser()
  */
 
 function onCloseMenu() {
-    if (window.aacore) aacore.call("closeMenu");
+    if (window.aapi) aapi.manager.closeMenu();
 }
 
 function onEngineMenu() {
-    if (window.aacore) aacore.call("openEngineMenu");
+    if (window.aapi) aapi.manager.openEngineMenu();
+}
+
+function onLibraryBrowser() {
+    if (window.aapi) aapi.manager.openLibraryBrowser();
 }
 
 function onTestLibretro() {
-    if (window.aacore) aacore.call("startLibretro");
+    if (window.aapi) aapi.manager.startLibretro();
 }

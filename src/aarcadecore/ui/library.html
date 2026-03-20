@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade Core - Library Browser</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="breadcrumbs">
+        <a href="welcome.html">Home</a>
+        <span class="separator">/</span>
+        <span class="current">Library Browser</span>
+    </nav>
+
+    <header class="header">
+        <div class="header-content">
+            <h1>🎮 Arcade Core Library</h1>
+            <p class="subtitle">Browse your database entries</p>
+            <p class="subtitle"><a href="image-test.html" style="color: #fff; text-decoration: underline;">Image Cache Test</a></p>
+        </div>
+    </header>
+
+    <nav class="controls">
+        <div class="control-group">
+            <label for="entryType">Entry Type:</label>
+            <select id="entryType" class="type-selector">
+                <option value="items">Items</option>
+                <option value="apps">Apps</option>
+                <option value="instances">Instances</option>
+                <option value="maps">Maps</option>
+                <option value="models">Models</option>
+                <option value="platforms">Platforms</option>
+                <option value="types">Types</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="pageSize">Page Size:</label>
+            <select id="pageSize" class="page-size-selector">
+                <option value="12">12</option>
+                <option value="24" selected>24</option>
+                <option value="48">48</option>
+                <option value="96">96</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <button id="loadBtn" class="load-btn">Load Entries</button>
+            <button id="loadMoreBtn" class="load-more-btn" style="display: none;">Load More</button>
+        </div>
+
+        <div class="control-group">
+            <input type="text" id="searchBox" class="search-box" placeholder="Search entries...">
+        </div>
+    </nav>
+
+    <div class="status-bar">
+        <span id="statusText">Ready to load entries</span>
+        <span id="entryCount"></span>
+    </div>
+
+    <main class="library-grid" id="libraryGrid">
+        <!-- Entry cards will be dynamically inserted here -->
+    </main>
+
+    <div class="loading-indicator" id="loadingIndicator" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading entries...</p>
+    </div>
+
+    <div class="error-message" id="errorMessage" style="display: none;">
+        <p>Failed to load entries. Please try again.</p>
+    </div>
+
+    <!-- Entry Detail Modal -->
+    <div class="modal-overlay" id="modalOverlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Entry Details</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Detailed entry information will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="arcadeHud.js"></script>
+    <script src="library.js"></script>
+</body>
+</html>
