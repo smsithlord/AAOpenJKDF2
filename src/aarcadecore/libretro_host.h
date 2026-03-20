@@ -106,6 +106,13 @@ int libretro_host_get_sample_rate(LibretroHost* host);
  */
 int libretro_host_read_audio(LibretroHost* host, int16_t* buffer, int max_frames);
 
+/**
+ * Set keyboard state for raw mode (RETRO_DEVICE_KEYBOARD)
+ * @param retrok_id RETROK_* key code (0-511)
+ * @param pressed 1 for pressed, 0 for released
+ */
+void libretro_host_set_key_state(LibretroHost* host, unsigned retrok_id, int pressed);
+
 #ifdef __cplusplus
 }
 #endif

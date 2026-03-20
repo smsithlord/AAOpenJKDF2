@@ -53,8 +53,8 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
         g_host.host_printf("AACore: Initializing (API v%d)...\n", AARCADECORE_API_VERSION);
 
     /* TODO: For now, only run one instance at a time. Swap these to test the other. */
-    //LibretroManager_Init();
-    SteamworksWebBrowserManager_Init();
+    LibretroManager_Init();
+    //SteamworksWebBrowserManager_Init();
     //UltralightManager_Init();
 
     if (g_host.host_printf)
@@ -68,16 +68,16 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     if (g_host.host_printf)
         g_host.host_printf("AACore: Shutting down...\n");
 
-    //LibretroManager_Shutdown();
-    SteamworksWebBrowserManager_Shutdown();
+    LibretroManager_Shutdown();
+    //SteamworksWebBrowserManager_Shutdown();
     //UltralightManager_Shutdown();
     memset(&g_host, 0, sizeof(g_host));
 }
 
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
-    //LibretroManager_Update();
-    SteamworksWebBrowserManager_Update();
+    LibretroManager_Update();
+    //SteamworksWebBrowserManager_Update();
     //UltralightManager_Update();
 }
 

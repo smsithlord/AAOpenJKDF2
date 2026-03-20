@@ -153,19 +153,57 @@ The ring buffer is lock-free (single producer/single consumer) since the Libretr
 
 ## How Input Works
 
-1. **Host** provides `get_key_state(int key_index)` callback at init
-2. **DLL's LibretroInstance** calls `g_host.get_key_state(AACORE_KEY_JOY1_B1)` etc. each frame
-3. Key indices match OpenJKDF2's `KEY_JOY1_*` defines (0x100+ range)
-4. Builds a 16-bit RETRO_DEVICE_JOYPAD mask and passes to `libretro_host_set_input()`
+### Keyboard Input (event-based)
+The host forwards SDL keyboard events to the DLL via three exports:
+- `aarcadecore_key_down(vk_code, modifiers)` — from SDL_KEYDOWN
+- `aarcadecore_key_up(vk_code, modifiers)` — from SDL_KEYUP
+- `aarcadecore_key_char(unicode_char, modifiers)` — synthesized from SDL_KEYDOWN for printable chars
 
-Button mapping uses physical position (not name) for SNES compatibility:
+**Modifier bitmask:** `AACORE_MOD_ALT=1, AACORE_MOD_CTRL=2, AACORE_MOD_SHIFT=4`
+
+Each instance type handles these differently:
+- **Steamworks**: Calls `ISteamHTMLSurface::KeyDown/KeyUp/KeyChar`
+- **Ultralight**: Constructs `KeyEvent` and calls `View::FireKeyEvent`
+- **Libretro**: Two modes (see below)
+
+### Libretro Input Modes
+
+The LibretroInstance has two keyboard input modes (`inputMode` field):
+
+**Emulated mode (default):** Maps keyboard keys to RETRO_DEVICE_JOYPAD buttons:
+
+| Key | SNES Button |
+|-----|-------------|
+| W / Up Arrow | D-pad Up |
+| S / Down Arrow | D-pad Down |
+| A / Left Arrow | D-pad Left |
+| D / Right Arrow | D-pad Right |
+| Enter | Start |
+| Shift | Select |
+| J | B (action/jump) |
+| K | A |
+| U | Y |
+| I | X |
+| Q | L shoulder |
+| E | R shoulder |
+
+Emulated keyboard and physical gamepad inputs are OR'd together.
+
+**Raw mode:** Converts VK codes to RETROK_* codes and sets them in a keyboard state array. The Libretro core queries these via `input_state_callback` with `device=RETRO_DEVICE_KEYBOARD`.
+
+### Gamepad Input (polling-based)
+1. **Host** provides `get_key_state(int key_index)` callback at init
+2. **DLL's LibretroInstance** polls `g_host.get_key_state(AACORE_KEY_JOY1_B1)` etc. each frame
+3. Builds a 16-bit RETRO_DEVICE_JOYPAD mask and passes to `libretro_host_set_input()`
+
+**Gamepad button mapping** uses physical position (not name) for SNES compatibility:
 - Xbox A (bottom) → SNES B, Xbox B (right) → SNES A
 - Xbox X (left) → SNES Y, Xbox Y (top) → SNES X
 
 ## Host-Side Integration (`src/Platform/Common/AACoreManager.c`)
 
 The host-side manager handles:
-1. **DLL loading**: `SDL_LoadObject("aarcadecore.dll")` + symbol lookup for all 9 exports
+1. **DLL loading**: `SDL_LoadObject("aarcadecore.dll")` + symbol lookup for all 12 exports
 2. **API version check**: Compares DLL's version with host's `AARCADECORE_API_VERSION`
 3. **Host callbacks**: Provides `host_printf` (wraps `stdPlatform_Printf`), `host_get_key_state` (reads `stdControl_aKeyInfo[]`)
 4. **Texture registration**: Calls `rdDynamicTexture_Register()` with its own callback that bridges to `aarcadecore_render_texture()`

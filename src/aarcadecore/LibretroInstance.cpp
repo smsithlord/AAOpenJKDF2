@@ -5,6 +5,9 @@
 #include "aarcadecore_internal.h"
 #include "libretro_host.h"
 #include "../../libretro_examples/libretro.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +17,12 @@ typedef struct LibretroInstanceData {
     const char* core_path;
     const char* game_path;
     uint32_t frame_counter;
+    int inputMode;         /* 0=emulated, 1=raw */
+    int16_t emulatedJoypad; /* joypad mask from keyboard in emulated mode */
 } LibretroInstanceData;
+
+#define LIBRETRO_INPUT_EMULATED 0
+#define LIBRETRO_INPUT_RAW      1
 
 /* ========================================================================
  * Input — uses host callback to read key state
@@ -112,6 +120,8 @@ static void libretro_inst_update(EmbeddedInstance* inst)
     if (!data->host) return;
 
     int16_t joypad_buttons = libretro_build_joypad_state();
+    /* OR physical gamepad with emulated keyboard joypad */
+    joypad_buttons |= data->emulatedJoypad;
     libretro_host_set_input(data->host, 0, joypad_buttons);
     libretro_host_run_frame(data->host);
 
@@ -186,13 +196,106 @@ static void libretro_inst_render(EmbeddedInstance* inst,
     }
 }
 
+/* ========================================================================
+ * Keyboard input — emulated and raw modes
+ * ======================================================================== */
+
+/* Map Windows VK code to RETROK_* for raw mode */
+static unsigned vk_to_retrok(int vk)
+{
+    if (vk >= 'A' && vk <= 'Z') return 'a' + (vk - 'A'); /* RETROK_a..z = 97..122 */
+    if (vk >= '0' && vk <= '9') return '0' + (vk - '0'); /* RETROK_0..9 = 48..57 */
+    if (vk >= VK_F1 && vk <= VK_F12) return 282 + (vk - VK_F1); /* RETROK_F1=282 */
+    switch (vk) {
+        case VK_RETURN:  return 13;   /* RETROK_RETURN */
+        case VK_ESCAPE:  return 27;   /* RETROK_ESCAPE */
+        case VK_SPACE:   return 32;   /* RETROK_SPACE */
+        case VK_BACK:    return 8;    /* RETROK_BACKSPACE */
+        case VK_TAB:     return 9;    /* RETROK_TAB */
+        case VK_DELETE:  return 127;  /* RETROK_DELETE */
+        case VK_UP:      return 273;  /* RETROK_UP */
+        case VK_DOWN:    return 274;  /* RETROK_DOWN */
+        case VK_RIGHT:   return 275;  /* RETROK_RIGHT */
+        case VK_LEFT:    return 276;  /* RETROK_LEFT */
+        case VK_INSERT:  return 277;
+        case VK_HOME:    return 278;
+        case VK_END:     return 279;
+        case VK_PRIOR:   return 280;  /* Page Up */
+        case VK_NEXT:    return 281;  /* Page Down */
+        case VK_SHIFT:   return 304;  /* RETROK_LSHIFT */
+        case VK_CONTROL: return 306;  /* RETROK_LCTRL */
+        case VK_MENU:    return 308;  /* RETROK_LALT */
+        default:         return 0;    /* RETROK_UNKNOWN */
+    }
+}
+
+/* Map VK code to RETRO_DEVICE_ID_JOYPAD_* bit for emulated mode.
+ * Returns -1 if no mapping. */
+static int vk_to_emulated_joypad(int vk)
+{
+    switch (vk) {
+        case 'W': case VK_UP:    return RETRO_DEVICE_ID_JOYPAD_UP;
+        case 'S': case VK_DOWN:  return RETRO_DEVICE_ID_JOYPAD_DOWN;
+        case 'A': case VK_LEFT:  return RETRO_DEVICE_ID_JOYPAD_LEFT;
+        case 'D': case VK_RIGHT: return RETRO_DEVICE_ID_JOYPAD_RIGHT;
+        case VK_RETURN:          return RETRO_DEVICE_ID_JOYPAD_START;
+        case VK_SHIFT:           return RETRO_DEVICE_ID_JOYPAD_SELECT;
+        case 'J':                return RETRO_DEVICE_ID_JOYPAD_B;
+        case 'K':                return RETRO_DEVICE_ID_JOYPAD_A;
+        case 'U':                return RETRO_DEVICE_ID_JOYPAD_Y;
+        case 'I':                return RETRO_DEVICE_ID_JOYPAD_X;
+        case 'Q':                return RETRO_DEVICE_ID_JOYPAD_L;
+        case 'E':                return RETRO_DEVICE_ID_JOYPAD_R;
+        default:                 return -1;
+    }
+}
+
+static void libretro_inst_key_down(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
+    if (!data->host) return;
+
+    if (data->inputMode == LIBRETRO_INPUT_EMULATED) {
+        int bit = vk_to_emulated_joypad(vk_code);
+        if (bit >= 0)
+            data->emulatedJoypad |= (1 << bit);
+    } else {
+        unsigned retrok = vk_to_retrok(vk_code);
+        if (retrok)
+            libretro_host_set_key_state(data->host, retrok, 1);
+    }
+}
+
+static void libretro_inst_key_up(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
+    if (!data->host) return;
+
+    if (data->inputMode == LIBRETRO_INPUT_EMULATED) {
+        int bit = vk_to_emulated_joypad(vk_code);
+        if (bit >= 0)
+            data->emulatedJoypad &= ~(1 << bit);
+    } else {
+        unsigned retrok = vk_to_retrok(vk_code);
+        if (retrok)
+            libretro_host_set_key_state(data->host, retrok, 0);
+    }
+}
+
+static void libretro_inst_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int modifiers)
+{
+    /* Not used for Libretro — keyboard input uses key_down/key_up */
+}
+
 static const EmbeddedInstanceVtable g_libretroVtable = {
     libretro_inst_init,
     libretro_inst_shutdown,
     libretro_inst_update,
     libretro_inst_is_active,
     libretro_inst_render,
-    NULL, NULL, NULL  /* no keyboard — Libretro uses gamepad */
+    libretro_inst_key_down,
+    libretro_inst_key_up,
+    libretro_inst_key_char
 };
 
 /* ========================================================================

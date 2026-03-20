@@ -78,6 +78,9 @@ struct LibretroHost {
     /* Input state - 16-bit RETRO_DEVICE_JOYPAD button mask per port */
     int16_t input_state[2];
 
+    /* Keyboard state - indexed by RETROK_* id, 1=pressed 0=released */
+    uint8_t keyboard_state[512];
+
     /* Audio state — ring buffer collects samples from core, host pulls them */
     int16_t* audio_ring_buf;
     size_t audio_ring_size;   /* capacity in int16_t samples (L+R interleaved) */
@@ -223,6 +226,8 @@ static int16_t host_input_state_callback(unsigned port, unsigned device,
     if (!g_current_host || port > 1) return 0;
     if (device == RETRO_DEVICE_JOYPAD && index == 0)
         return (g_current_host->input_state[port] >> id) & 1;
+    if (device == RETRO_DEVICE_KEYBOARD && id < 512)
+        return g_current_host->keyboard_state[id] ? 1 : 0;
     return 0;
 }
 
@@ -540,4 +545,10 @@ int libretro_host_read_audio(LibretroHost* host, int16_t* buffer, int max_frames
     }
 
     return (int)(to_copy / 2); /* return frames */
+}
+
+void libretro_host_set_key_state(LibretroHost* host, unsigned retrok_id, int pressed)
+{
+    if (host && retrok_id < 512)
+        host->keyboard_state[retrok_id] = pressed ? 1 : 0;
 }
