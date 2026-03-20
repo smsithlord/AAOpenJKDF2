@@ -26,6 +26,9 @@ static aarcadecore_get_material_name_t g_fn_get_material_name = NULL;
 static aarcadecore_render_texture_t    g_fn_render_texture = NULL;
 static aarcadecore_get_audio_sample_rate_t g_fn_get_audio_sample_rate = NULL;
 static aarcadecore_get_audio_samples_t     g_fn_get_audio_samples = NULL;
+static aarcadecore_key_down_t              g_fn_key_down = NULL;
+static aarcadecore_key_up_t                g_fn_key_up = NULL;
+static aarcadecore_key_char_t              g_fn_key_char = NULL;
 
 /* SDL audio device for playing DLL audio */
 static SDL_AudioDeviceID g_audio_dev = 0;
@@ -122,6 +125,9 @@ void AACoreManager_Init(void)
     LOAD_FN(render_texture)
     LOAD_FN(get_audio_sample_rate)
     LOAD_FN(get_audio_samples)
+    LOAD_FN(key_down)
+    LOAD_FN(key_up)
+    LOAD_FN(key_char)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -203,6 +209,9 @@ void AACoreManager_Shutdown(void)
     g_fn_render_texture = NULL;
     g_fn_get_audio_sample_rate = NULL;
     g_fn_get_audio_samples = NULL;
+    g_fn_key_down = NULL;
+    g_fn_key_up = NULL;
+    g_fn_key_char = NULL;
 
     stdPlatform_Printf("AACoreManager: Shutdown complete\n");
 }
@@ -218,4 +227,22 @@ bool AACoreManager_IsActive(void)
     if (g_fn_is_active)
         return g_fn_is_active();
     return false;
+}
+
+void AACoreManager_KeyDown(int vk_code, int modifiers)
+{
+    if (g_fn_key_down)
+        g_fn_key_down(vk_code, modifiers);
+}
+
+void AACoreManager_KeyUp(int vk_code, int modifiers)
+{
+    if (g_fn_key_up)
+        g_fn_key_up(vk_code, modifiers);
+}
+
+void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers)
+{
+    if (g_fn_key_char)
+        g_fn_key_char(unicode_char, modifiers);
 }

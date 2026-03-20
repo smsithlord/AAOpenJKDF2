@@ -41,6 +41,30 @@
         .status span {
             color: #4fc3f7;
         }
+        .test-input {
+            margin-top: 32px;
+        }
+        .test-input label {
+            display: block;
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .test-input input {
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 20px;
+            padding: 12px 20px;
+            width: 320px;
+            outline: none;
+            text-align: center;
+        }
+        .test-input input:focus {
+            border-color: #0f9d58;
+            box-shadow: 0 0 12px rgba(15, 157, 88, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -50,6 +74,13 @@
         <div class="status">
             Engine: <span>OpenJKDF2</span> | Renderer: <span>Ultralight 1.4</span>
         </div>
+        <div class="test-input">
+            <label>Test Input</label>
+            <input type="text" id="testInput" placeholder="Type here..." autofocus>
+        </div>
     </div>
+    <script>
+        document.getElementById('testInput').focus();
+    </script>
 </body>
 </html>

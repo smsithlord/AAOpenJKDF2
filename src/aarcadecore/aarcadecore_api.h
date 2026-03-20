@@ -74,6 +74,22 @@ AARCADECORE_EXPORT int aarcadecore_get_audio_sample_rate(void);
  * Returns number of frames actually written. */
 AARCADECORE_EXPORT int aarcadecore_get_audio_samples(int16_t* buffer, int max_frames);
 
+/* Keyboard input modifier bitmask */
+#define AACORE_MOD_ALT   (1 << 0)
+#define AACORE_MOD_CTRL  (1 << 1)
+#define AACORE_MOD_SHIFT (1 << 2)
+
+/* Forward keyboard events to the active embedded instance.
+ * vk_code: Windows virtual key code (VK_*)
+ * modifiers: bitmask of AACORE_MOD_* */
+AARCADECORE_EXPORT void aarcadecore_key_down(int vk_code, int modifiers);
+AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers);
+
+/* Forward a text character to the active embedded instance.
+ * unicode_char: UTF-32 codepoint
+ * modifiers: bitmask of AACORE_MOD_* */
+AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modifiers);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -86,6 +102,9 @@ typedef const char* (*aarcadecore_get_material_name_t)(void);
 typedef void  (*aarcadecore_render_texture_t)(void* pixelData, int width, int height, int is16bit, int bpp);
 typedef int   (*aarcadecore_get_audio_sample_rate_t)(void);
 typedef int   (*aarcadecore_get_audio_samples_t)(int16_t* buffer, int max_frames);
+typedef void  (*aarcadecore_key_down_t)(int vk_code, int modifiers);
+typedef void  (*aarcadecore_key_up_t)(int vk_code, int modifiers);
+typedef void  (*aarcadecore_key_char_t)(unsigned int unicode_char, int modifiers);
 
 #ifdef __cplusplus
 }

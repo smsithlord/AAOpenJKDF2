@@ -225,12 +225,42 @@ static void swb_render(EmbeddedInstance* inst,
     }
 }
 
+static void swb_key_down(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface)
+        surface->KeyDown(data->browserHandle, (uint32)vk_code, (ISteamHTMLSurface::EHTMLKeyModifiers)modifiers, false);
+}
+
+static void swb_key_up(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface)
+        surface->KeyUp(data->browserHandle, (uint32)vk_code, (ISteamHTMLSurface::EHTMLKeyModifiers)modifiers);
+}
+
+static void swb_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int modifiers)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface)
+        surface->KeyChar(data->browserHandle, (uint32)unicode_char, (ISteamHTMLSurface::EHTMLKeyModifiers)modifiers);
+}
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
     swb_update,
     swb_is_active,
-    swb_render
+    swb_render,
+    swb_key_down,
+    swb_key_up,
+    swb_key_char
 };
 
 /* ========================================================================

@@ -19,6 +19,11 @@ void AACoreManager_Update(void);
 /* Check if any embedded instance is active */
 bool AACoreManager_IsActive(void);
 
+/* Forward keyboard events to the DLL */
+void AACoreManager_KeyDown(int vk_code, int modifiers);
+void AACoreManager_KeyUp(int vk_code, int modifiers);
+void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers);
+
 #ifdef __cplusplus
 }
 #endif

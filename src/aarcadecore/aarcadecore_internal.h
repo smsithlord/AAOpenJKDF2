@@ -27,6 +27,9 @@ typedef bool (*EmbeddedInstance_IsActiveFn)(EmbeddedInstance* inst);
 typedef void (*EmbeddedInstance_RenderFn)(
     EmbeddedInstance* inst, void* pixelData,
     int width, int height, int is16bit, int bpp);
+typedef void (*EmbeddedInstance_KeyDownFn)(EmbeddedInstance* inst, int vk_code, int modifiers);
+typedef void (*EmbeddedInstance_KeyUpFn)(EmbeddedInstance* inst, int vk_code, int modifiers);
+typedef void (*EmbeddedInstance_KeyCharFn)(EmbeddedInstance* inst, unsigned int unicode_char, int modifiers);
 
 typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_InitFn     init;
@@ -34,6 +37,9 @@ typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_UpdateFn   update;
     EmbeddedInstance_IsActiveFn is_active;
     EmbeddedInstance_RenderFn   render;
+    EmbeddedInstance_KeyDownFn  key_down;
+    EmbeddedInstance_KeyUpFn    key_up;
+    EmbeddedInstance_KeyCharFn  key_char;
 } EmbeddedInstanceVtable;
 
 struct EmbeddedInstance {

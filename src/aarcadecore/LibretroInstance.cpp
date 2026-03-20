@@ -191,7 +191,8 @@ static const EmbeddedInstanceVtable g_libretroVtable = {
     libretro_inst_shutdown,
     libretro_inst_update,
     libretro_inst_is_active,
-    libretro_inst_render
+    libretro_inst_render,
+    NULL, NULL, NULL  /* no keyboard — Libretro uses gamepad */
 };
 
 /* ========================================================================

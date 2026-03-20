@@ -54,8 +54,8 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
 
     /* TODO: For now, only run one instance at a time. Swap these to test the other. */
     //LibretroManager_Init();
-    //SteamworksWebBrowserManager_Init();
-    UltralightManager_Init();
+    SteamworksWebBrowserManager_Init();
+    //UltralightManager_Init();
 
     if (g_host.host_printf)
         g_host.host_printf("AACore: Ready\n");
@@ -69,16 +69,16 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
         g_host.host_printf("AACore: Shutting down...\n");
 
     //LibretroManager_Shutdown();
-    //SteamworksWebBrowserManager_Shutdown();
-    UltralightManager_Shutdown();
+    SteamworksWebBrowserManager_Shutdown();
+    //UltralightManager_Shutdown();
     memset(&g_host, 0, sizeof(g_host));
 }
 
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
     //LibretroManager_Update();
-    //SteamworksWebBrowserManager_Update();
-    UltralightManager_Update();
+    SteamworksWebBrowserManager_Update();
+    //UltralightManager_Update();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
@@ -159,4 +159,40 @@ AARCADECORE_EXPORT int aarcadecore_get_audio_samples(int16_t* buffer, int max_fr
 {
     LibretroHost* host = get_active_libretro_host();
     return host ? libretro_host_read_audio(host, buffer, max_frames) : 0;
+}
+
+/* Helper: get the first active embedded instance */
+static EmbeddedInstance* get_active_instance(void)
+{
+    EmbeddedInstance* ul = UltralightManager_GetActive();
+    if (ul && ul->vtable->is_active(ul)) return ul;
+
+    EmbeddedInstance* swb = SteamworksWebBrowserManager_GetActive();
+    if (swb && swb->vtable->is_active(swb)) return swb;
+
+    EmbeddedInstance* lr = LibretroManager_GetActive();
+    if (lr && lr->vtable->is_active(lr)) return lr;
+
+    return NULL;
+}
+
+AARCADECORE_EXPORT void aarcadecore_key_down(int vk_code, int modifiers)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->key_down)
+        inst->vtable->key_down(inst, vk_code, modifiers);
+}
+
+AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->key_up)
+        inst->vtable->key_up(inst, vk_code, modifiers);
+}
+
+AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modifiers)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->key_char)
+        inst->vtable->key_char(inst, unicode_char, modifiers);
 }

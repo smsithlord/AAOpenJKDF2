@@ -58,8 +58,9 @@ static bool ul_init(EmbeddedInstance* inst)
         return false;
     }
 
-    /* Load the HTML file */
+    /* Load the HTML file and give the view keyboard focus */
     data->view->LoadURL(data->htmlPath);
+    data->view->Focus();
     data->initialized = true;
 
     if (g_host.host_printf) g_host.host_printf("Ultralight: Initialized, loading %s\n", data->htmlPath);
@@ -144,12 +145,82 @@ static void ul_render(EmbeddedInstance* inst,
     }
 }
 
+static void ul_key_down(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+
+    if (g_host.host_printf) g_host.host_printf("UL: key_down vk=0x%X mod=%d\n", vk_code, modifiers);
+
+    KeyEvent evt;
+    evt.type = KeyEvent::kType_RawKeyDown;
+    evt.virtual_key_code = vk_code;
+    evt.native_key_code = vk_code;
+    evt.modifiers = 0;
+    if (modifiers & AACORE_MOD_ALT)   evt.modifiers |= KeyEvent::kMod_AltKey;
+    if (modifiers & AACORE_MOD_CTRL)  evt.modifiers |= KeyEvent::kMod_CtrlKey;
+    if (modifiers & AACORE_MOD_SHIFT) evt.modifiers |= KeyEvent::kMod_ShiftKey;
+    data->view->FireKeyEvent(evt);
+}
+
+static void ul_key_up(EmbeddedInstance* inst, int vk_code, int modifiers)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+
+    KeyEvent evt;
+    evt.type = KeyEvent::kType_KeyUp;
+    evt.virtual_key_code = vk_code;
+    evt.native_key_code = vk_code;
+    evt.modifiers = 0;
+    if (modifiers & AACORE_MOD_ALT)   evt.modifiers |= KeyEvent::kMod_AltKey;
+    if (modifiers & AACORE_MOD_CTRL)  evt.modifiers |= KeyEvent::kMod_CtrlKey;
+    if (modifiers & AACORE_MOD_SHIFT) evt.modifiers |= KeyEvent::kMod_ShiftKey;
+    data->view->FireKeyEvent(evt);
+}
+
+static void ul_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int modifiers)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+
+    if (g_host.host_printf) g_host.host_printf("UL: key_char U+%04X ('%c') mod=%d\n",
+        unicode_char, (unicode_char >= 32 && unicode_char < 127) ? (char)unicode_char : '?', modifiers);
+
+    KeyEvent evt;
+    evt.type = KeyEvent::kType_Char;
+    evt.virtual_key_code = 0;
+    evt.native_key_code = 0;
+    evt.modifiers = 0;
+    if (modifiers & AACORE_MOD_ALT)   evt.modifiers |= KeyEvent::kMod_AltKey;
+    if (modifiers & AACORE_MOD_CTRL)  evt.modifiers |= KeyEvent::kMod_CtrlKey;
+    if (modifiers & AACORE_MOD_SHIFT) evt.modifiers |= KeyEvent::kMod_ShiftKey;
+
+    /* Convert unicode codepoint to UTF-16 string */
+    unsigned short buf[3] = {0};
+    size_t len = 1;
+    if (unicode_char <= 0xFFFF) {
+        buf[0] = (unsigned short)unicode_char;
+    } else {
+        unicode_char -= 0x10000;
+        buf[0] = (unsigned short)(0xD800 + (unicode_char >> 10));
+        buf[1] = (unsigned short)(0xDC00 + (unicode_char & 0x3FF));
+        len = 2;
+    }
+    evt.text = String16(buf, len);
+    evt.unmodified_text = evt.text;
+    data->view->FireKeyEvent(evt);
+}
+
 static const EmbeddedInstanceVtable g_ulVtable = {
     ul_init,
     ul_shutdown,
     ul_update,
     ul_is_active,
-    ul_render
+    ul_render,
+    ul_key_down,
+    ul_key_up,
+    ul_key_char
 };
 
 /* ========================================================================

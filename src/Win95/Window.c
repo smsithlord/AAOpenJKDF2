@@ -760,6 +760,61 @@ void Window_UpdateHeadless()
     last_jkQuakeConsole_bOpen = jkQuakeConsole_bOpen;
 }
 
+/* Convert SDL keycode to Windows VK_* code for aarcadecore DLL */
+static int Window_SDLKeyToVK(SDL_Keycode key)
+{
+    if (key >= SDLK_a && key <= SDLK_z) return 'A' + (key - SDLK_a);
+    if (key >= SDLK_0 && key <= SDLK_9) return '0' + (key - SDLK_0);
+    if (key >= SDLK_F1 && key <= SDLK_F12) return VK_F1 + (key - SDLK_F1);
+
+    switch (key) {
+        case SDLK_RETURN:    return VK_RETURN;
+        case SDLK_ESCAPE:    return VK_ESCAPE;
+        case SDLK_BACKSPACE: return VK_BACK;
+        case SDLK_TAB:       return VK_TAB;
+        case SDLK_SPACE:     return VK_SPACE;
+        case SDLK_DELETE:    return VK_DELETE;
+        case SDLK_INSERT:    return VK_INSERT;
+        case SDLK_HOME:      return VK_HOME;
+        case SDLK_END:       return VK_END;
+        case SDLK_PAGEUP:    return VK_PRIOR;
+        case SDLK_PAGEDOWN:  return VK_NEXT;
+        case SDLK_LEFT:      return VK_LEFT;
+        case SDLK_RIGHT:     return VK_RIGHT;
+        case SDLK_UP:        return VK_UP;
+        case SDLK_DOWN:      return VK_DOWN;
+        case SDLK_LSHIFT:
+        case SDLK_RSHIFT:    return VK_SHIFT;
+        case SDLK_LCTRL:
+        case SDLK_RCTRL:     return VK_CONTROL;
+        case SDLK_LALT:
+        case SDLK_RALT:      return VK_MENU;
+        case SDLK_CAPSLOCK:  return VK_CAPITAL;
+        case SDLK_MINUS:     return VK_OEM_MINUS;
+        case SDLK_EQUALS:    return VK_OEM_PLUS;
+        case SDLK_LEFTBRACKET:  return VK_OEM_4;
+        case SDLK_RIGHTBRACKET: return VK_OEM_6;
+        case SDLK_BACKSLASH: return VK_OEM_5;
+        case SDLK_SEMICOLON: return VK_OEM_1;
+        case SDLK_QUOTE:     return VK_OEM_7;
+        case SDLK_COMMA:     return VK_OEM_COMMA;
+        case SDLK_PERIOD:    return VK_OEM_PERIOD;
+        case SDLK_SLASH:     return VK_OEM_2;
+        case SDLK_BACKQUOTE: return VK_OEM_3;
+        default:             return 0;
+    }
+}
+
+static int Window_GetAACoreModifiers(void)
+{
+    int mods = 0;
+    SDL_Keymod sdlMod = SDL_GetModState();
+    if (sdlMod & KMOD_ALT)   mods |= 1; /* AACORE_MOD_ALT */
+    if (sdlMod & KMOD_CTRL)  mods |= 2; /* AACORE_MOD_CTRL */
+    if (sdlMod & KMOD_SHIFT) mods |= 4; /* AACORE_MOD_SHIFT */
+    return mods;
+}
+
 void Window_SdlUpdate()
 {
     if (Main_bHeadless)
@@ -809,13 +864,41 @@ void Window_SdlUpdate()
                 {
                     Window_msg_main_handler(g_hWnd, WM_CHAR, event.text.text[i], 0);
                 }
+                /* Forward text input to aarcadecore DLL (UTF-8 → codepoints) */
+                if (AACoreManager_IsActive()) {
+                    int mods = Window_GetAACoreModifiers();
+                    const unsigned char* p = (const unsigned char*)event.text.text;
+                    while (*p) {
+                        unsigned int cp = 0;
+                        if (*p < 0x80) { cp = *p++; }
+                        else if ((*p & 0xE0) == 0xC0) { cp = (*p++ & 0x1F) << 6; cp |= (*p++ & 0x3F); }
+                        else if ((*p & 0xF0) == 0xE0) { cp = (*p++ & 0x0F) << 12; cp |= (*p++ & 0x3F) << 6; cp |= (*p++ & 0x3F); }
+                        else if ((*p & 0xF8) == 0xF0) { cp = (*p++ & 0x07) << 18; cp |= (*p++ & 0x3F) << 12; cp |= (*p++ & 0x3F) << 6; cp |= (*p++ & 0x3F); }
+                        else { p++; continue; }
+                        AACoreManager_KeyChar(cp, mods);
+                    }
+                }
                 break;
             case SDL_WINDOWEVENT:
                 Window_HandleWindowEvent(&event);
                 break;
             case SDL_KEYDOWN:
-                //stdPlatform_Printf("scancode %d\n", event.key.keysym.scancode);
-                //handleKey(&event.key.keysym, WM_KEYDOWN, 0x1);
+                /* Forward key down to aarcadecore DLL */
+                if (AACoreManager_IsActive()) {
+                    int mods = Window_GetAACoreModifiers();
+                    int vk = Window_SDLKeyToVK(event.key.keysym.sym);
+                    if (vk) AACoreManager_KeyDown(vk, mods);
+
+                    /* Synthesize key_char for printable characters since
+                     * SDL_TEXTINPUT may not fire in relative mouse mode */
+                    SDL_Keycode sym = event.key.keysym.sym;
+                    if (sym >= SDLK_SPACE && sym <= SDLK_z && sym < 128) {
+                        unsigned int ch = (unsigned int)sym;
+                        if (ch >= 'a' && ch <= 'z' && (mods & 4)) /* AACORE_MOD_SHIFT */
+                            ch -= 32; /* uppercase */
+                        AACoreManager_KeyChar(ch, mods);
+                    }
+                }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     Window_msg_main_handler(g_hWnd, WM_KEYFIRST, VK_ESCAPE, event.key.repeat & 0xFFFF);
@@ -902,6 +985,11 @@ void Window_SdlUpdate()
                 //    stdControl_SetSDLKeydown(event.key.keysym.scancode, 1, event.key.timestamp);
                 break;
             case SDL_KEYUP:
+                /* Forward key up to aarcadecore DLL */
+                if (AACoreManager_IsActive()) {
+                    int vk = Window_SDLKeyToVK(event.key.keysym.sym);
+                    if (vk) AACoreManager_KeyUp(vk, Window_GetAACoreModifiers());
+                }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     Window_msg_main_handler(g_hWnd, WM_KEYUP, VK_ESCAPE, 0);
