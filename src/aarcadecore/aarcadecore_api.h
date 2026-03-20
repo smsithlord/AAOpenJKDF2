@@ -108,6 +108,28 @@ AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void);
 /* Check if the main menu is currently open */
 AARCADECORE_EXPORT bool aarcadecore_is_main_menu_open(void);
 
+/* Check if the DLL wants the host to open the engine's native menu */
+AARCADECORE_EXPORT bool aarcadecore_should_open_engine_menu(void);
+
+/* Clear the engine menu request flag */
+AARCADECORE_EXPORT void aarcadecore_clear_engine_menu_flag(void);
+
+/* Check if the DLL wants the host to start a Libretro instance */
+AARCADECORE_EXPORT bool aarcadecore_should_start_libretro(void);
+AARCADECORE_EXPORT void aarcadecore_clear_start_libretro_flag(void);
+
+/* Start the Libretro manager (called by host after clearing flag) */
+AARCADECORE_EXPORT void aarcadecore_start_libretro(void);
+
+/* Get the number of running tasks (embedded instances, excluding HUD) */
+AARCADECORE_EXPORT int aarcadecore_get_task_count(void);
+
+/* Render a specific task's pixels into a host-provided buffer.
+ * taskIndex: 0-based index into running tasks.
+ * Returns true if pixels were written. */
+AARCADECORE_EXPORT bool aarcadecore_render_task_texture(
+    int taskIndex, void* pixelData, int width, int height, int is16bit, int bpp);
+
 /* Render the overlay (main menu) into a host-provided BGRA pixel buffer.
  * Returns true if pixels were written, false if no overlay is active.
  * The host should draw this as a fullscreen quad. */
@@ -135,6 +157,13 @@ typedef void  (*aarcadecore_mouse_up_t)(int button);
 typedef void  (*aarcadecore_mouse_wheel_t)(int delta);
 typedef void  (*aarcadecore_toggle_main_menu_t)(void);
 typedef bool  (*aarcadecore_is_main_menu_open_t)(void);
+typedef bool  (*aarcadecore_should_open_engine_menu_t)(void);
+typedef void  (*aarcadecore_clear_engine_menu_flag_t)(void);
+typedef bool  (*aarcadecore_should_start_libretro_t)(void);
+typedef void  (*aarcadecore_clear_start_libretro_flag_t)(void);
+typedef void  (*aarcadecore_start_libretro_t)(void);
+typedef int   (*aarcadecore_get_task_count_t)(void);
+typedef bool  (*aarcadecore_render_task_texture_t)(int taskIndex, void* pixelData, int width, int height, int is16bit, int bpp);
 typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int height);
 
 #ifdef __cplusplus

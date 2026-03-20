@@ -16,6 +16,7 @@
 #include "SDL2_helper.h"
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
 /* DLL handle and function pointers */
 static void* g_dll = NULL;
@@ -37,12 +38,39 @@ static aarcadecore_mouse_up_t               g_fn_mouse_up = NULL;
 static aarcadecore_mouse_wheel_t            g_fn_mouse_wheel = NULL;
 static aarcadecore_toggle_main_menu_t       g_fn_toggle_main_menu = NULL;
 static aarcadecore_is_main_menu_open_t     g_fn_is_main_menu_open = NULL;
+static aarcadecore_should_open_engine_menu_t g_fn_should_open_engine_menu = NULL;
+static aarcadecore_clear_engine_menu_flag_t  g_fn_clear_engine_menu_flag = NULL;
+static aarcadecore_should_start_libretro_t   g_fn_should_start_libretro = NULL;
+static aarcadecore_clear_start_libretro_flag_t g_fn_clear_start_libretro_flag = NULL;
+static aarcadecore_start_libretro_t          g_fn_start_libretro = NULL;
+static aarcadecore_get_task_count_t         g_fn_get_task_count = NULL;
+static aarcadecore_render_task_texture_t   g_fn_render_task_texture = NULL;
 static aarcadecore_render_overlay_t        g_fn_render_overlay = NULL;
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
 static int g_cursorY = 0;
 static GLuint g_cursorTexture = 0;
+
+/* Per-task GL textures (host-managed) */
+#define MAX_TASKS 16
+#define TASK_TEX_WIDTH 1024
+#define TASK_TEX_HEIGHT 1024
+static GLuint g_taskTextures[MAX_TASKS] = {0};
+static uint16_t* g_taskPixels = NULL; /* shared pixel buffer for task rendering */
+static int g_taskTexturesReady = 0;
+
+/* Thing-to-task mapping */
+#define MAX_THING_MAPPINGS 64
+typedef struct {
+    void* thing;      /* sithThing* */
+    int taskIndex;
+} ThingTaskMapping;
+static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
+static int g_thingTaskCount = 0;
+
+/* The compscreen material's rdDDrawSurface we need to swap texture_id on */
+static int g_savedTextureId = -1;
 
 /* Fullscreen overlay state */
 static GLuint g_overlayTexture = 0;
@@ -163,6 +191,13 @@ void AACoreManager_Init(void)
     LOAD_FN(mouse_wheel)
     LOAD_FN(toggle_main_menu)
     LOAD_FN(is_main_menu_open)
+    LOAD_FN(should_open_engine_menu)
+    LOAD_FN(clear_engine_menu_flag)
+    LOAD_FN(should_start_libretro)
+    LOAD_FN(clear_start_libretro_flag)
+    LOAD_FN(start_libretro)
+    LOAD_FN(get_task_count)
+    LOAD_FN(render_task_texture)
     LOAD_FN(render_overlay)
     #undef LOAD_FN
 
@@ -188,12 +223,8 @@ void AACoreManager_Init(void)
         return;
     }
 
-    /* Always register the texture callback for compscreen.mat at startup.
-     * This ensures the callback is in place BEFORE the material is loaded,
-     * so rdMaterial_AttachDynamicCallback can find it during level load.
-     * If no instance is active, the callback draws solid green. */
-    rdDynamicTexture_Register("compscreen.mat", aacore_texture_callback, NULL);
-    stdPlatform_Printf("AACoreManager: Registered texture callback for 'compscreen.mat'\n");
+    /* Dynamic texture hooks disabled for now — will re-enable for per-thing rendering later.
+     * rdDynamicTexture_Register("compscreen.mat", aacore_texture_callback, NULL); */
 
     /* Open SDL audio device to play DLL audio */
     {
@@ -256,7 +287,21 @@ void AACoreManager_Shutdown(void)
 
     if (g_cursorTexture) { glDeleteTextures(1, &g_cursorTexture); g_cursorTexture = 0; }
     g_fn_is_main_menu_open = NULL;
+    g_fn_should_open_engine_menu = NULL;
+    g_fn_clear_engine_menu_flag = NULL;
+    g_fn_should_start_libretro = NULL;
+    g_fn_clear_start_libretro_flag = NULL;
+    g_fn_start_libretro = NULL;
+    g_fn_get_task_count = NULL;
+    g_fn_render_task_texture = NULL;
     g_fn_render_overlay = NULL;
+
+    for (int i = 0; i < MAX_TASKS; i++) {
+        if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
+    }
+    if (g_taskPixels) { free(g_taskPixels); g_taskPixels = NULL; }
+    g_taskTexturesReady = 0;
+    g_thingTaskCount = 0;
 
     if (g_overlayTexture) { glDeleteTextures(1, &g_overlayTexture); g_overlayTexture = 0; }
     if (g_overlayPixels) { free(g_overlayPixels); g_overlayPixels = NULL; }
@@ -268,6 +313,35 @@ void AACoreManager_Update(void)
 {
     if (g_fn_update)
         g_fn_update();
+
+    /* Pre-render all task textures — each task gets its own GL texture */
+    if (g_fn_get_task_count && g_fn_render_task_texture) {
+        int count = g_fn_get_task_count();
+        if (count > MAX_TASKS) count = MAX_TASKS;
+
+        if (!g_taskPixels)
+            g_taskPixels = (uint16_t*)malloc(TASK_TEX_WIDTH * TASK_TEX_HEIGHT * 2);
+
+        for (int i = 0; i < count; i++) {
+            /* Fill with green by default */
+            for (int j = 0; j < TASK_TEX_WIDTH * TASK_TEX_HEIGHT; j++)
+                g_taskPixels[j] = (0 << 11) | (63 << 5) | 0;
+
+            g_fn_render_task_texture(i, g_taskPixels, TASK_TEX_WIDTH, TASK_TEX_HEIGHT, 1, 16);
+
+            if (!g_taskTextures[i]) {
+                glGenTextures(1, &g_taskTextures[i]);
+            }
+            glBindTexture(GL_TEXTURE_2D, g_taskTextures[i]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, TASK_TEX_WIDTH, TASK_TEX_HEIGHT, 0,
+                         GL_RGB, GL_UNSIGNED_SHORT_5_6_5_REV, g_taskPixels);
+        }
+        g_taskTexturesReady = count;
+    }
 }
 
 bool AACoreManager_IsActive(void)
@@ -325,10 +399,58 @@ void AACoreManager_MouseWheel(int delta)
         g_fn_mouse_wheel(delta);
 }
 
+void AACoreManager_RegisterThingTask(void* pSithThing, int taskIndex)
+{
+    if (g_thingTaskCount >= MAX_THING_MAPPINGS) return;
+    g_thingTaskMap[g_thingTaskCount].thing = pSithThing;
+    g_thingTaskMap[g_thingTaskCount].taskIndex = taskIndex;
+    g_thingTaskCount++;
+    stdPlatform_Printf("AACoreManager: Registered thing %p → task %d\n", pSithThing, taskIndex);
+}
+
 void AACoreManager_ToggleMainMenu(void)
 {
     if (g_fn_toggle_main_menu)
         g_fn_toggle_main_menu();
+}
+
+bool AACoreManager_IsMainMenuOpen(void)
+{
+    if (g_fn_is_main_menu_open)
+        return g_fn_is_main_menu_open();
+    return false;
+}
+
+bool AACoreManager_ShouldOpenEngineMenu(void)
+{
+    if (g_fn_should_open_engine_menu)
+        return g_fn_should_open_engine_menu();
+    return false;
+}
+
+void AACoreManager_ClearEngineMenuFlag(void)
+{
+    if (g_fn_clear_engine_menu_flag)
+        g_fn_clear_engine_menu_flag();
+}
+
+bool AACoreManager_ShouldStartLibretro(void)
+{
+    if (g_fn_should_start_libretro)
+        return g_fn_should_start_libretro();
+    return false;
+}
+
+void AACoreManager_ClearStartLibretroFlag(void)
+{
+    if (g_fn_clear_start_libretro_flag)
+        g_fn_clear_start_libretro_flag();
+}
+
+void AACoreManager_StartLibretro(void)
+{
+    if (g_fn_start_libretro)
+        g_fn_start_libretro();
 }
 
 void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)

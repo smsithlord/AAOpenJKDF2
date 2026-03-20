@@ -9,6 +9,7 @@
 #include "Engine/sithCollision.h"
 #include "Primitives/rdMatrix.h"
 #include "Primitives/rdVector.h"
+#include "Platform/Common/AACoreManager.h"
 
 static int g_hKeyWasDown = 0;
 
@@ -155,6 +156,8 @@ void jkSpawn_Update(void)
     if (spawned) {
         stdPlatform_Printf("jkSpawn: Spawned at (%.2f, %.2f, %.2f) thingIdx=%d\n",
                           hitPos.x, hitPos.y, hitPos.z, spawned->thingIdx);
+        /* Register this thing to show task 0 (active task) on its compscreen material */
+        AACoreManager_RegisterThingTask(spawned, 0);
     } else {
         stdPlatform_Printf("jkSpawn: Failed to spawn\n");
     }

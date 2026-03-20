@@ -32,9 +32,18 @@ void AACoreManager_MouseWheel(int delta);
 
 /* Main menu */
 void AACoreManager_ToggleMainMenu(void);
+bool AACoreManager_IsMainMenuOpen(void);
+bool AACoreManager_ShouldOpenEngineMenu(void);
+void AACoreManager_ClearEngineMenuFlag(void);
+bool AACoreManager_ShouldStartLibretro(void);
+void AACoreManager_ClearStartLibretroFlag(void);
+void AACoreManager_StartLibretro(void);
 
 /* Draw the fullscreen overlay (call from render path, after 3D scene) */
 void AACoreManager_DrawOverlay(int screenWidth, int screenHeight);
+
+/* Register a spawned thing to show a task on its compscreen material */
+void AACoreManager_RegisterThingTask(void* pSithThing, int taskIndex);
 
 #ifdef __cplusplus
 }

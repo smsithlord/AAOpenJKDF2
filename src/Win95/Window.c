@@ -904,8 +904,9 @@ void Window_SdlUpdate()
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
-                    Window_msg_main_handler(g_hWnd, WM_KEYFIRST, VK_ESCAPE, event.key.repeat & 0xFFFF);
-                    Window_msg_main_handler(g_hWnd, WM_CHAR, VK_ESCAPE, event.key.repeat & 0xFFFF);
+                    /* AArcade intercepts escape — aaMainMenu_Update handles it via SDL.
+                     * Don't let engine open its own escape menu. */
+                    break;
                 }
                 else if (event.key.keysym.sym == SDLK_PAGEUP)
                 {
@@ -996,7 +997,7 @@ void Window_SdlUpdate()
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
-                    Window_msg_main_handler(g_hWnd, WM_KEYUP, VK_ESCAPE, 0);
+                    break; /* AArcade handles escape */
                 }
                 else if (event.key.keysym.sym == SDLK_PAGEUP)
                 {

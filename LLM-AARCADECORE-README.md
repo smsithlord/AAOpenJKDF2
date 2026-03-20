@@ -63,7 +63,18 @@ The DLL exports flat C functions. The host loads them via `SDL_LoadFunction` or 
 |--------|---------|
 | `aarcadecore_toggle_main_menu()` | Toggle the main menu HUD overlay on/off |
 | `aarcadecore_is_main_menu_open()` | Check if the main menu is currently open |
+| `aarcadecore_should_open_engine_menu()` | Check if DLL requests opening the engine's native menu |
+| `aarcadecore_clear_engine_menu_flag()` | Clear the engine menu request flag |
+| `aarcadecore_should_start_libretro()` | Check if DLL requests starting a Libretro instance |
+| `aarcadecore_clear_start_libretro_flag()` | Clear the Libretro start request flag |
+| `aarcadecore_start_libretro()` | Actually start the Libretro instance |
 | `aarcadecore_render_overlay(pixelData, w, h)` | Render the fullscreen overlay (BGRA pixels) |
+
+### Task Management
+| Export | Purpose |
+|--------|---------|
+| `aarcadecore_get_task_count()` | Returns number of running tasks |
+| `aarcadecore_render_task_texture(idx, pixelData, w, h, is16bit, bpp)` | Render a specific task to a pixel buffer |
 
 ### Host Callbacks (`AACoreHostCallbacks`)
 The host provides these to the DLL at init time:
@@ -105,7 +116,7 @@ typedef struct AACoreHostCallbacks {
 | `EMBEDDED_STEAMWORKS_BROWSER` | Working | Steamworks HTML Surface. Loads URLs, renders pages. Requires Steam running + `steam_appid.txt`. |
 | `EMBEDDED_ULTRALIGHT` | Working | Ultralight HTML renderer. Loads local HTML files for UI. CPU rendering mode. |
 
-Only one instance type is active at a time. To switch, edit `aarcadecore.cpp` and uncomment/comment the desired `*Manager_Init/Shutdown/Update` lines.
+Tasks are created on demand (not at startup). The DLL's `aarcadecore_init()` only initializes the Ultralight HUD overlay. Libretro and Steamworks instances are started later via JS bridge commands or host API calls.
 
 ## Build Dependencies (not in git)
 
@@ -160,26 +171,28 @@ The ring buffer is lock-free (single producer/single consumer) since the Libretr
 
 ## How the Main Menu Works
 
-The main menu is a fullscreen Ultralight HUD overlay toggled by pressing G.
+The main menu is a fullscreen Ultralight HUD overlay toggled by pressing Escape.
 
 ### Flow:
-1. **G key** → `aaMainMenu_Update()` in `src/Main/aaMainMenu.c` → `AACoreManager_ToggleMainMenu()`
+1. **Escape key** → `aaMainMenu_Update()` in `src/Main/aaMainMenu.c` → `AACoreManager_ToggleMainMenu()`
 2. **Host** calls `aarcadecore_toggle_main_menu()` DLL export
-3. **DLL** creates/destroys an Ultralight instance loading `aarcadecore/ui/mainMenu.html`
+3. **DLL** swaps the HUD Ultralight instance between `mainMenu.html` and `blank.html`
 4. **Each frame** (in `jkGame_Update`): host calls `AACoreManager_DrawOverlay()` which:
    - Calls `aarcadecore_render_overlay()` to get 1920x1080 BGRA pixels
    - Uploads to a GL texture
    - Draws a fullscreen quad via `std3D_DrawUITexturedQuad()` (engine's shader-based UI system)
 
 ### JS Bridge (C++ ↔ JavaScript):
-- In `OnDOMReady`, Ultralight creates a `window.aacore` object with bound C++ functions
-- Currently exposes: `aacore.closeMenu()` — sets a flag that the DLL checks to auto-close
+- In `OnDOMReady`, Ultralight creates a `window.aacore` object with two generic methods
+- `aacore.call("command")` — fire-and-forget (async)
+- `aacore.callSync("command")` — returns a value (sync)
+- Available commands: `closeMenu`, `openEngineMenu`, `startLibretro`
 - Uses JavaScriptCore C API: `JSObjectMakeFunctionWithCallback()`, `JSContextGetGlobalObject()`
 
-### Texture callback:
-- `compscreen.mat` callback is registered at startup (before any level loads)
-- If no instance is active, in-game screens show solid green
-- When the menu is open, in-game screens also show the menu (via `render_texture` in RGB565)
+### Dynamic texture hooks:
+- Currently **disabled** — `rdDynamicTexture_Register` call is commented out
+- Will be re-enabled for per-thing rendering once a working approach is found
+- In-game compscreen surfaces show their original static texture
 
 ### Transparency:
 - Ultralight view uses `is_transparent = true`
@@ -188,12 +201,17 @@ The main menu is a fullscreen Ultralight HUD overlay toggled by pressing G.
 
 ## Input Mode
 
-When any AArcade instance is active (`AACoreManager_IsActive()` returns true), the engine enters **input mode**:
+Input suppression is based on whether the **main menu is open** (`AACoreManager_IsMainMenuOpen()`), not whether any instance is active. This allows gamepad input to flow to Libretro even when the menu is closed.
 
-- **Keyboard**: Game receives nothing — SDL_KEYDOWN/UP events `break` after forwarding to AArcade. `stdControl_ReadControls` skips keyboard polling.
+When the main menu is open:
+- **Keyboard**: Game receives nothing — `stdControl_ReadControls` skips keyboard polling.
 - **Gamepad**: Game receives nothing — `stdControl_ReadControls` returns before gamepad polling.
-- **Mouse**: Game receives nothing — SDL mouse events forwarded exclusively to AArcade. `SDL_SetRelativeMouseMode(SDL_FALSE)` gives absolute coordinates.
-- **G key / Escape**: Read directly via `SDL_GetKeyboardState` (bypassing suppressed stdControl) to toggle/close the menu.
+- **Mouse**: Game receives nothing — SDL mouse events forwarded exclusively to AArcade.
+- **Escape key**: Read directly via `SDL_GetKeyboardState` (bypassing suppressed stdControl) to toggle the menu. Engine's own escape menu is suppressed in `Window.c`.
+
+When the main menu is closed (but a task like Libretro may be running):
+- **Keyboard/Mouse**: Normal game input
+- **Gamepad**: Normal game input AND Libretro reads gamepad state via `get_key_state` callback (both receive input simultaneously)
 
 ## How Input Works
 
@@ -265,8 +283,10 @@ The host-side manager handles:
 1. **DLL loading**: `SDL_LoadObject("aarcadecore.dll")` + symbol lookup for all 12 exports
 2. **API version check**: Compares DLL's version with host's `AARCADECORE_API_VERSION`
 3. **Host callbacks**: Provides `host_printf` (wraps `stdPlatform_Printf`), `host_get_key_state` (reads `stdControl_aKeyInfo[]`)
-4. **Texture registration**: Calls `rdDynamicTexture_Register()` with its own callback that bridges to `aarcadecore_render_texture()`
+4. **Texture registration**: Dynamic texture hooks currently disabled (will re-enable for per-thing rendering)
 5. **Audio device**: Opens SDL audio device at DLL's sample rate, callback pulls via `aarcadecore_get_audio_samples()`
+6. **Task textures**: Pre-renders per-task GL textures each frame (forward-looking infrastructure for per-thing rendering)
+7. **Thing-task mapping**: `RegisterThingTask()` maps spawned sithThings to task indices
 
 ## Build Configuration
 

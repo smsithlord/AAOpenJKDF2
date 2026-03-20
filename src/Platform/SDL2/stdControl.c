@@ -837,7 +837,7 @@ void stdControl_ReadControls()
     stdControl_bDisableKeyboard_last = stdControl_bDisableKeyboard;
     stdControl_bControllerEscapeKey_last = stdControl_bControllerEscapeKey;
 
-    if ( !stdControl_bDisableKeyboard && !AACoreManager_IsActive() )
+    if ( !stdControl_bDisableKeyboard && !AACoreManager_IsMainMenuOpen() )
     {
         const Uint8 *state = SDL_GetKeyboardState(NULL);
         for (int i = 0; i < 256; i++)
@@ -852,8 +852,9 @@ void stdControl_ReadControls()
         // stdControl_SetKeydown(keyNum, keyVal, timestamp)
     }
 
-    /* Skip gamepad polling when AArcade input mode is active */
-    if (AACoreManager_IsActive())
+    /* Skip gamepad polling only when main menu is open (not when active instance is running,
+     * since Libretro reads gamepad state via get_key_state callback) */
+    if (AACoreManager_IsMainMenuOpen())
         return;
 
     // HACK: ehh

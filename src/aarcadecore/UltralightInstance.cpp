@@ -16,6 +16,7 @@
 #endif
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <stdint.h>
 
 using namespace ultralight;
@@ -42,18 +43,71 @@ struct UltralightData : public LoadListener {
 static UltralightData* g_currentULData = nullptr;
 
 /* ========================================================================
- * JS Bridge: aacore.closeMenu()
+ * JS Bridge: generic command dispatcher
+ *
+ * JS calls:  aacore.call("commandName")      — fire-and-forget (async)
+ *            aacore.callSync("commandName")   — returns a value (sync)
  * ======================================================================== */
 
-static JSValueRef js_closeMenu(JSContextRef ctx, JSObjectRef function,
+/* Forward declarations for command handlers */
+void UltralightManager_RequestEngineMenu(void);
+void UltralightManager_RequestStartLibretro(void);
+
+/* Helper: extract UTF-8 string from JSValue */
+static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
+{
+    JSStringRef jsStr = JSValueToStringCopy(ctx, val, nullptr);
+    if (!jsStr) return "";
+    size_t maxLen = JSStringGetMaximumUTF8CStringSize(jsStr);
+    std::string result(maxLen, '\0');
+    size_t len = JSStringGetUTF8CString(jsStr, &result[0], maxLen);
+    JSStringRelease(jsStr);
+    result.resize(len > 0 ? len - 1 : 0); /* remove null terminator */
+    return result;
+}
+
+/* aacore.call("command") — async, fire-and-forget */
+static JSValueRef js_call(JSContextRef ctx, JSObjectRef function,
     JSObjectRef thisObject, size_t argumentCount,
     const JSValueRef arguments[], JSValueRef* exception)
 {
-    if (g_currentULData) {
-        g_currentULData->closeRequested = true;
-        if (g_host.host_printf) g_host.host_printf("UL: closeMenu() called from JS\n");
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+
+    std::string cmd = jsValueToString(ctx, arguments[0]);
+    if (g_host.host_printf) g_host.host_printf("UL: call('%s')\n", cmd.c_str());
+
+    if (cmd == "closeMenu") {
+        if (g_currentULData) g_currentULData->closeRequested = true;
+    } else if (cmd == "openEngineMenu") {
+        UltralightManager_RequestEngineMenu();
+    } else if (cmd == "startLibretro") {
+        UltralightManager_RequestStartLibretro();
+    } else {
+        if (g_host.host_printf) g_host.host_printf("UL: unknown command '%s'\n", cmd.c_str());
+        return JSValueMakeBoolean(ctx, false);
     }
+
     return JSValueMakeBoolean(ctx, true);
+}
+
+/* aacore.callSync("command") — sync, returns a value */
+static JSValueRef js_callSync(JSContextRef ctx, JSObjectRef function,
+    JSObjectRef thisObject, size_t argumentCount,
+    const JSValueRef arguments[], JSValueRef* exception)
+{
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+
+    std::string cmd = jsValueToString(ctx, arguments[0]);
+
+    if (cmd == "getVersion") {
+        JSStringRef str = JSStringCreateWithUTF8CString("AArcadeCore 1.0");
+        JSValueRef result = JSValueMakeString(ctx, str);
+        JSStringRelease(str);
+        return result;
+    }
+
+    if (g_host.host_printf) g_host.host_printf("UL: unknown sync command '%s'\n", cmd.c_str());
+    return JSValueMakeNull(ctx);
 }
 
 void UltralightData::OnDOMReady(ultralight::View* caller, uint64_t frame_id,
@@ -66,13 +120,20 @@ void UltralightData::OnDOMReady(ultralight::View* caller, uint64_t frame_id,
     auto scoped_context = caller->LockJSContext();
     JSContextRef ctx = (*scoped_context);
 
-    /* Create aacore namespace object */
+    /* Create aacore namespace with two generic methods: call() and callSync() */
     JSObjectRef globalObj = JSContextGetGlobalObject(ctx);
     JSObjectRef aacoreObj = JSObjectMake(ctx, nullptr, nullptr);
 
-    /* Register closeMenu function */
-    JSStringRef methodName = JSStringCreateWithUTF8CString("closeMenu");
-    JSObjectRef methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, js_closeMenu);
+    JSStringRef methodName;
+    JSObjectRef methodFunc;
+
+    methodName = JSStringCreateWithUTF8CString("call");
+    methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, js_call);
+    JSObjectSetProperty(ctx, aacoreObj, methodName, methodFunc, 0, nullptr);
+    JSStringRelease(methodName);
+
+    methodName = JSStringCreateWithUTF8CString("callSync");
+    methodFunc = JSObjectMakeFunctionWithCallback(ctx, methodName, js_callSync);
     JSObjectSetProperty(ctx, aacoreObj, methodName, methodFunc, 0, nullptr);
     JSStringRelease(methodName);
 
@@ -387,4 +448,15 @@ bool UltralightInstance_IsCloseRequested(EmbeddedInstance* inst)
 {
     if (!inst || !inst->user_data) return false;
     return ((UltralightData*)inst->user_data)->closeRequested;
+}
+
+void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url)
+{
+    if (!inst || !inst->user_data) return;
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    data->closeRequested = false;
+    data->view->LoadURL(url);
+    data->view->Focus();
+    if (g_host.host_printf) g_host.host_printf("UL: Loading %s\n", url);
 }

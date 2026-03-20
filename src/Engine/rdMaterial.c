@@ -74,43 +74,16 @@ void rdMaterial_RegisterDynamicTexture(const char* matName, rdDynamicTextureCall
 
 void rdMaterial_UpdateDynamicTexture(rdMaterial* material, rdTexture* texture, int mipLevel)
 {
-    // DEBUG: Only print for compscreen.mat (print once per call for debugging)
-#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
-    static int compscreenDebugOnce = 0;
-    int isCompscreen = material && _strstr(material->mat_full_fpath, "compscreen");
-    if (isCompscreen && !compscreenDebugOnce++) {
-        jk_printf("OpenJKDF2: UpdateDynamicTexture for COMPSCREEN: material=%p texture=%p mipLevel=%d\n",
-                  material, texture, mipLevel);
-        jk_printf("  material->dynamicCallback=%p\n", material->dynamicCallback);
-        jk_printf("  texture->num_mipmaps=%d\n", texture ? texture->num_mipmaps : -1);
-    }
-#endif
-
     if (!material || !texture || !material->dynamicCallback)
         return;
 
-    // Get the texture buffer for this mip level
-    if (mipLevel < 0 || mipLevel >= (int)texture->num_mipmaps) {
-#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
-        if (isCompscreen && compscreenDebugOnce == 1) {
-            jk_printf("  EARLY RETURN: mipLevel check failed (mipLevel=%d, num_mipmaps=%d)\n",
-                      mipLevel, texture->num_mipmaps);
-        }
-#endif
+    if (mipLevel < 0 || mipLevel >= (int)texture->num_mipmaps)
         return;
-    }
 
     stdVBuffer* vbuf = texture->texture_struct[mipLevel];
-    if (!vbuf) {
-#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
-        if (isCompscreen && compscreenDebugOnce == 1) {
-            jk_printf("  EARLY RETURN: vbuf is NULL\n");
-        }
-#endif
+    if (!vbuf)
         return;
-    }
 
-    // Get pixel data - use sdlSurface->pixels for SDL2, or surface_lock_alloc for other platforms
     void* pixelData = NULL;
 #ifdef SDL2_RENDER
     if (vbuf->sdlSurface && vbuf->sdlSurface->pixels) {
@@ -120,27 +93,12 @@ void rdMaterial_UpdateDynamicTexture(rdMaterial* material, rdTexture* texture, i
     pixelData = vbuf->surface_lock_alloc;
 #endif
 
-    if (!pixelData) {
-#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
-        if (isCompscreen && compscreenDebugOnce == 1) {
-            jk_printf("  EARLY RETURN: pixelData is NULL (sdlSurface=%p, pixels=%p)\n",
-                      vbuf->sdlSurface, vbuf->sdlSurface ? vbuf->sdlSurface->pixels : NULL);
-        }
-#endif
+    if (!pixelData)
         return;
-    }
 
     int width = 1 << (texture->width_bitcnt - mipLevel);
     int height = (texture->height_minus_1 >> mipLevel) + 1;
 
-#if defined(SDL2_RENDER) || defined(RDMATERIAL_LRU_LOAD_UNLOAD)
-    if (isCompscreen && compscreenDebugOnce == 1) {
-        jk_printf("  SUCCESS: Invoking callback! (mip %d, %dx%d, vbuf=%p, pixels=%p)\n",
-                  mipLevel, width, height, vbuf, pixelData);
-    }
-#endif
-
-    // Invoke the callback to modify pixel data
     material->dynamicCallback(
         material,
         texture,
