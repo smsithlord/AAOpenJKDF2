@@ -199,6 +199,34 @@ AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modi
         inst->vtable->key_char(inst, unicode_char, modifiers);
 }
 
+AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->mouse_move)
+        inst->vtable->mouse_move(inst, x, y);
+}
+
+AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->mouse_down)
+        inst->vtable->mouse_down(inst, button);
+}
+
+AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->mouse_up)
+        inst->vtable->mouse_up(inst, button);
+}
+
+AARCADECORE_EXPORT void aarcadecore_mouse_wheel(int delta)
+{
+    EmbeddedInstance* inst = get_active_instance();
+    if (inst && inst->vtable->mouse_wheel)
+        inst->vtable->mouse_wheel(inst, delta);
+}
+
 AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void)
 {
     UltralightManager_ToggleMainMenu();

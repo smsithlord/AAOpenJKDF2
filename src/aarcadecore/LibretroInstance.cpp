@@ -295,7 +295,8 @@ static const EmbeddedInstanceVtable g_libretroVtable = {
     libretro_inst_render,
     libretro_inst_key_down,
     libretro_inst_key_up,
-    libretro_inst_key_char
+    libretro_inst_key_char,
+    NULL, NULL, NULL, NULL  /* no mouse */
 };
 
 /* ========================================================================

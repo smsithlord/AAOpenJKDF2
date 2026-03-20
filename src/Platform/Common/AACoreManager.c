@@ -9,6 +9,7 @@
 #include "../../aarcadecore/aarcadecore_api.h"
 #include "../../Engine/rdDynamicTexture.h"
 #include "../../Platform/std3D.h"
+#include "../../Win95/Window.h"
 #include "../../stdPlatform.h"
 #include "globals.h"
 
@@ -30,9 +31,18 @@ static aarcadecore_get_audio_samples_t     g_fn_get_audio_samples = NULL;
 static aarcadecore_key_down_t              g_fn_key_down = NULL;
 static aarcadecore_key_up_t                g_fn_key_up = NULL;
 static aarcadecore_key_char_t              g_fn_key_char = NULL;
-static aarcadecore_toggle_main_menu_t      g_fn_toggle_main_menu = NULL;
+static aarcadecore_mouse_move_t             g_fn_mouse_move = NULL;
+static aarcadecore_mouse_down_t             g_fn_mouse_down = NULL;
+static aarcadecore_mouse_up_t               g_fn_mouse_up = NULL;
+static aarcadecore_mouse_wheel_t            g_fn_mouse_wheel = NULL;
+static aarcadecore_toggle_main_menu_t       g_fn_toggle_main_menu = NULL;
 static aarcadecore_is_main_menu_open_t     g_fn_is_main_menu_open = NULL;
 static aarcadecore_render_overlay_t        g_fn_render_overlay = NULL;
+
+/* Cursor state (in screen coords) */
+static int g_cursorX = 0;
+static int g_cursorY = 0;
+static GLuint g_cursorTexture = 0;
 
 /* Fullscreen overlay state */
 static GLuint g_overlayTexture = 0;
@@ -147,6 +157,10 @@ void AACoreManager_Init(void)
     LOAD_FN(key_down)
     LOAD_FN(key_up)
     LOAD_FN(key_char)
+    LOAD_FN(mouse_move)
+    LOAD_FN(mouse_down)
+    LOAD_FN(mouse_up)
+    LOAD_FN(mouse_wheel)
     LOAD_FN(toggle_main_menu)
     LOAD_FN(is_main_menu_open)
     LOAD_FN(render_overlay)
@@ -234,7 +248,13 @@ void AACoreManager_Shutdown(void)
     g_fn_key_down = NULL;
     g_fn_key_up = NULL;
     g_fn_key_char = NULL;
+    g_fn_mouse_move = NULL;
+    g_fn_mouse_down = NULL;
+    g_fn_mouse_up = NULL;
+    g_fn_mouse_wheel = NULL;
     g_fn_toggle_main_menu = NULL;
+
+    if (g_cursorTexture) { glDeleteTextures(1, &g_cursorTexture); g_cursorTexture = 0; }
     g_fn_is_main_menu_open = NULL;
     g_fn_render_overlay = NULL;
 
@@ -273,6 +293,36 @@ void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers)
 {
     if (g_fn_key_char)
         g_fn_key_char(unicode_char, modifiers);
+}
+
+void AACoreManager_MouseMove(int x, int y)
+{
+    g_cursorX = x;
+    g_cursorY = y;
+    if (g_fn_mouse_move) {
+        /* Map screen coords to overlay coords */
+        int ox = (g_cursorX * OVERLAY_WIDTH) / (Window_xSize > 0 ? Window_xSize : 1);
+        int oy = (g_cursorY * OVERLAY_HEIGHT) / (Window_ySize > 0 ? Window_ySize : 1);
+        g_fn_mouse_move(ox, oy);
+    }
+}
+
+void AACoreManager_MouseDown(int button)
+{
+    if (g_fn_mouse_down)
+        g_fn_mouse_down(button);
+}
+
+void AACoreManager_MouseUp(int button)
+{
+    if (g_fn_mouse_up)
+        g_fn_mouse_up(button);
+}
+
+void AACoreManager_MouseWheel(int delta)
+{
+    if (g_fn_mouse_wheel)
+        g_fn_mouse_wheel(delta);
 }
 
 void AACoreManager_ToggleMainMenu(void)
@@ -314,4 +364,22 @@ void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
     /* Add fullscreen quad to the engine's UI render list.
      * This gets drawn by std3D_DrawUIRenderList() using the engine's shader pipeline. */
     std3D_DrawUITexturedQuad(g_overlayTexture, 0.0f, 0.0f, (float)screenWidth, (float)screenHeight);
+
+    /* Draw cursor wedge */
+    if (!g_cursorTexture) {
+        uint32_t white = 0xFFFFFFFF;
+        glGenTextures(1, &g_cursorTexture);
+        glBindTexture(GL_TEXTURE_2D, g_cursorTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white);
+    }
+    /* Draw a small wedge/triangle as cursor using a tiny quad */
+    {
+        float cx = (float)g_cursorX;
+        float cy = (float)g_cursorY;
+        float cw = 16.0f;
+        float ch = 20.0f;
+        std3D_DrawUITexturedQuad(g_cursorTexture, cx, cy, cw, ch);
+    }
 }

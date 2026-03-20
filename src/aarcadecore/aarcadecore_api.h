@@ -90,6 +90,18 @@ AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers);
  * modifiers: bitmask of AACORE_MOD_* */
 AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modifiers);
 
+/* Mouse button constants */
+#define AACORE_MOUSE_LEFT   0
+#define AACORE_MOUSE_RIGHT  1
+#define AACORE_MOUSE_MIDDLE 2
+
+/* Forward mouse events to the active embedded instance.
+ * Coordinates are in overlay pixel space (e.g., 0-1920, 0-1080). */
+AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y);
+AARCADECORE_EXPORT void aarcadecore_mouse_down(int button);
+AARCADECORE_EXPORT void aarcadecore_mouse_up(int button);
+AARCADECORE_EXPORT void aarcadecore_mouse_wheel(int delta);
+
 /* Toggle the main menu HUD overlay on/off */
 AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void);
 
@@ -117,6 +129,10 @@ typedef int   (*aarcadecore_get_audio_samples_t)(int16_t* buffer, int max_frames
 typedef void  (*aarcadecore_key_down_t)(int vk_code, int modifiers);
 typedef void  (*aarcadecore_key_up_t)(int vk_code, int modifiers);
 typedef void  (*aarcadecore_key_char_t)(unsigned int unicode_char, int modifiers);
+typedef void  (*aarcadecore_mouse_move_t)(int x, int y);
+typedef void  (*aarcadecore_mouse_down_t)(int button);
+typedef void  (*aarcadecore_mouse_up_t)(int button);
+typedef void  (*aarcadecore_mouse_wheel_t)(int delta);
 typedef void  (*aarcadecore_toggle_main_menu_t)(void);
 typedef bool  (*aarcadecore_is_main_menu_open_t)(void);
 typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int height);

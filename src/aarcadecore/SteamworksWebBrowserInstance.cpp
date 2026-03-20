@@ -252,6 +252,38 @@ static void swb_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int 
         surface->KeyChar(data->browserHandle, (uint32)unicode_char, (ISteamHTMLSurface::EHTMLKeyModifiers)modifiers);
 }
 
+static void swb_mouse_move(EmbeddedInstance* inst, int x, int y)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface) surface->MouseMove(data->browserHandle, x, y);
+}
+
+static void swb_mouse_down(EmbeddedInstance* inst, int button)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface) surface->MouseDown(data->browserHandle, (ISteamHTMLSurface::EHTMLMouseButton)button);
+}
+
+static void swb_mouse_up(EmbeddedInstance* inst, int button)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface) surface->MouseUp(data->browserHandle, (ISteamHTMLSurface::EHTMLMouseButton)button);
+}
+
+static void swb_mouse_wheel(EmbeddedInstance* inst, int delta)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data->browserReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface) surface->MouseWheel(data->browserHandle, delta);
+}
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
@@ -260,7 +292,11 @@ static const EmbeddedInstanceVtable g_swbVtable = {
     swb_render,
     swb_key_down,
     swb_key_up,
-    swb_key_char
+    swb_key_char,
+    swb_mouse_move,
+    swb_mouse_down,
+    swb_mouse_up,
+    swb_mouse_wheel
 };
 
 /* ========================================================================

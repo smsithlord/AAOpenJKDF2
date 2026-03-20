@@ -4,6 +4,7 @@
 #include "Win95/Window.h"
 #include "stdPlatform.h"
 #include "Main/jkQuakeConsole.h"
+#include "Platform/Common/AACoreManager.h"
 
 #include <SDL.h>
 
@@ -836,7 +837,7 @@ void stdControl_ReadControls()
     stdControl_bDisableKeyboard_last = stdControl_bDisableKeyboard;
     stdControl_bControllerEscapeKey_last = stdControl_bControllerEscapeKey;
 
-    if ( !stdControl_bDisableKeyboard )
+    if ( !stdControl_bDisableKeyboard && !AACoreManager_IsActive() )
     {
         const Uint8 *state = SDL_GetKeyboardState(NULL);
         for (int i = 0; i < 256; i++)
@@ -850,6 +851,10 @@ void stdControl_ReadControls()
         }
         // stdControl_SetKeydown(keyNum, keyVal, timestamp)
     }
+
+    /* Skip gamepad polling when AArcade input mode is active */
+    if (AACoreManager_IsActive())
+        return;
 
     // HACK: ehh
     //if ( stdControl_bHasJoysticks )

@@ -860,10 +860,6 @@ void Window_SdlUpdate()
             }
 
             case SDL_TEXTINPUT:
-                for (int i = 0; i < _strlen(event.text.text); i++)
-                {
-                    Window_msg_main_handler(g_hWnd, WM_CHAR, event.text.text[i], 0);
-                }
                 /* Forward text input to aarcadecore DLL (UTF-8 → codepoints) */
                 if (AACoreManager_IsActive()) {
                     int mods = Window_GetAACoreModifiers();
@@ -876,6 +872,12 @@ void Window_SdlUpdate()
                         else if ((*p & 0xF8) == 0xF0) { cp = (*p++ & 0x07) << 18; cp |= (*p++ & 0x3F) << 12; cp |= (*p++ & 0x3F) << 6; cp |= (*p++ & 0x3F); }
                         else { p++; continue; }
                         AACoreManager_KeyChar(cp, mods);
+                    }
+                } else {
+                    /* Game gets text input only when AArcade is not active */
+                    for (int i = 0; i < _strlen(event.text.text); i++)
+                    {
+                        Window_msg_main_handler(g_hWnd, WM_CHAR, event.text.text[i], 0);
                     }
                 }
                 break;
@@ -898,6 +900,7 @@ void Window_SdlUpdate()
                             ch -= 32; /* uppercase */
                         AACoreManager_KeyChar(ch, mods);
                     }
+                    break; /* AArcade consumed the key — don't forward to game */
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
@@ -989,6 +992,7 @@ void Window_SdlUpdate()
                 if (AACoreManager_IsActive()) {
                     int vk = Window_SDLKeyToVK(event.key.keysym.sym);
                     if (vk) AACoreManager_KeyUp(vk, Window_GetAACoreModifiers());
+                    break; /* AArcade consumed the key */
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
@@ -1068,10 +1072,28 @@ void Window_SdlUpdate()
                 stdControl_SetSDLKeydown(event.key.keysym.scancode, 0, event.key.timestamp);
                 break;
             case SDL_MOUSEMOTION:
+                if (AACoreManager_IsActive()) {
+                    AACoreManager_MouseMove(event.motion.x, event.motion.y);
+                    break;
+                }
                 Window_HandleMouseMove(&event.motion);
                 break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
+                /* Forward mouse buttons to AArcade when active */
+                if (AACoreManager_IsActive()) {
+                    int btn = -1;
+                    if (event.button.button == SDL_BUTTON_LEFT) btn = 0;   /* AACORE_MOUSE_LEFT */
+                    else if (event.button.button == SDL_BUTTON_RIGHT) btn = 1;
+                    else if (event.button.button == SDL_BUTTON_MIDDLE) btn = 2;
+                    if (btn >= 0) {
+                        if (event.type == SDL_MOUSEBUTTONDOWN)
+                            AACoreManager_MouseDown(btn);
+                        else
+                            AACoreManager_MouseUp(btn);
+                    }
+                    break;
+                }
 
                 mevent = (SDL_MouseButtonEvent*)&event;
                 left = 0;
@@ -1123,6 +1145,10 @@ void Window_SdlUpdate()
 
                 break;
             case SDL_MOUSEWHEEL:
+                if (AACoreManager_IsActive()) {
+                    AACoreManager_MouseWheel(event.wheel.y * 120);
+                    break;
+                }
                 Window_mouseWheelY = event.wheel.y;
                 Window_mouseWheelX = event.wheel.x;
 
@@ -1314,7 +1340,10 @@ void Window_SdlUpdate()
             SDL_SetRelativeMouseMode(SDL_FALSE);
         }
 
-        if (!jkQuakeConsole_bOpen && SDL_GetWindowFlags(displayWindow) & SDL_WINDOW_MOUSE_FOCUS) {
+        if (AACoreManager_IsActive()) {
+            SDL_SetRelativeMouseMode(SDL_FALSE);
+        }
+        else if (!jkQuakeConsole_bOpen && SDL_GetWindowFlags(displayWindow) & SDL_WINDOW_MOUSE_FOCUS) {
             SDL_SetRelativeMouseMode(SDL_TRUE);
             //SDL_WarpMouseInWindow(displayWindow, 100, 100);
         }

@@ -30,6 +30,10 @@ typedef void (*EmbeddedInstance_RenderFn)(
 typedef void (*EmbeddedInstance_KeyDownFn)(EmbeddedInstance* inst, int vk_code, int modifiers);
 typedef void (*EmbeddedInstance_KeyUpFn)(EmbeddedInstance* inst, int vk_code, int modifiers);
 typedef void (*EmbeddedInstance_KeyCharFn)(EmbeddedInstance* inst, unsigned int unicode_char, int modifiers);
+typedef void (*EmbeddedInstance_MouseMoveFn)(EmbeddedInstance* inst, int x, int y);
+typedef void (*EmbeddedInstance_MouseDownFn)(EmbeddedInstance* inst, int button);
+typedef void (*EmbeddedInstance_MouseUpFn)(EmbeddedInstance* inst, int button);
+typedef void (*EmbeddedInstance_MouseWheelFn)(EmbeddedInstance* inst, int delta);
 
 typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_InitFn     init;
@@ -40,6 +44,10 @@ typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_KeyDownFn  key_down;
     EmbeddedInstance_KeyUpFn    key_up;
     EmbeddedInstance_KeyCharFn  key_char;
+    EmbeddedInstance_MouseMoveFn  mouse_move;
+    EmbeddedInstance_MouseDownFn  mouse_down;
+    EmbeddedInstance_MouseUpFn    mouse_up;
+    EmbeddedInstance_MouseWheelFn mouse_wheel;
 } EmbeddedInstanceVtable;
 
 struct EmbeddedInstance {

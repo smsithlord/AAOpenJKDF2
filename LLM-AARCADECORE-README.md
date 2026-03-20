@@ -186,6 +186,15 @@ The main menu is a fullscreen Ultralight HUD overlay toggled by pressing G.
 - HTML `background: transparent` on html/body
 - GL overlay uses alpha blending via the UI render list
 
+## Input Mode
+
+When any AArcade instance is active (`AACoreManager_IsActive()` returns true), the engine enters **input mode**:
+
+- **Keyboard**: Game receives nothing — SDL_KEYDOWN/UP events `break` after forwarding to AArcade. `stdControl_ReadControls` skips keyboard polling.
+- **Gamepad**: Game receives nothing — `stdControl_ReadControls` returns before gamepad polling.
+- **Mouse**: Game receives nothing — SDL mouse events forwarded exclusively to AArcade. `SDL_SetRelativeMouseMode(SDL_FALSE)` gives absolute coordinates.
+- **G key / Escape**: Read directly via `SDL_GetKeyboardState` (bypassing suppressed stdControl) to toggle/close the menu.
+
 ## How Input Works
 
 ### Keyboard Input (event-based)
@@ -225,6 +234,21 @@ The LibretroInstance has two keyboard input modes (`inputMode` field):
 Emulated keyboard and physical gamepad inputs are OR'd together.
 
 **Raw mode:** Converts VK codes to RETROK_* codes and sets them in a keyboard state array. The Libretro core queries these via `input_state_callback` with `device=RETRO_DEVICE_KEYBOARD`.
+
+### Mouse Input (event-based)
+The host forwards SDL mouse events when AArcade is active:
+- `aarcadecore_mouse_move(x, y)` — from SDL_MOUSEMOTION, coords mapped to overlay space (0-1920, 0-1080)
+- `aarcadecore_mouse_down(button)` / `aarcadecore_mouse_up(button)` — from SDL_MOUSEBUTTONDOWN/UP
+- `aarcadecore_mouse_wheel(delta)` — from SDL_MOUSEWHEEL (delta * 120)
+
+**Button constants:** `AACORE_MOUSE_LEFT=0, AACORE_MOUSE_RIGHT=1, AACORE_MOUSE_MIDDLE=2`
+
+Each instance type handles mouse differently:
+- **Ultralight**: `View::FireMouseEvent(MouseEvent)` — tracks last mouse position for click events
+- **Steamworks**: `ISteamHTMLSurface::MouseMove/MouseDown/MouseUp/MouseWheel`
+- **Libretro**: No mouse support (NULL vtable entries)
+
+**Cursor rendering:** A white rectangle is drawn at the mouse position on top of the overlay using `std3D_DrawUITexturedQuad` with a 1x1 white GL texture.
 
 ### Gamepad Input (polling-based)
 1. **Host** provides `get_key_state(int key_index)` callback at init

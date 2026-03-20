@@ -24,6 +24,12 @@ void AACoreManager_KeyDown(int vk_code, int modifiers);
 void AACoreManager_KeyUp(int vk_code, int modifiers);
 void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers);
 
+/* Mouse input */
+void AACoreManager_MouseMove(int x, int y);
+void AACoreManager_MouseDown(int button);
+void AACoreManager_MouseUp(int button);
+void AACoreManager_MouseWheel(int delta);
+
 /* Main menu */
 void AACoreManager_ToggleMainMenu(void);
 

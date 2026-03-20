@@ -8,6 +8,7 @@
 
 #include "aarcadecore_internal.h"
 #include <Ultralight/Ultralight.h>
+#include <Ultralight/MouseEvent.h>
 #include <AppCore/Platform.h>
 #include <JavaScriptCore/JavaScript.h>
 #ifdef _WIN32
@@ -29,6 +30,8 @@ struct UltralightData : public LoadListener {
     const char* htmlPath;
     bool initialized;
     bool closeRequested;  /* set by JS closeMenu() callback */
+    int lastMouseX;
+    int lastMouseY;
 
     /* LoadListener overrides */
     void OnDOMReady(ultralight::View* caller, uint64_t frame_id,
@@ -289,6 +292,48 @@ static void ul_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int m
     data->view->FireKeyEvent(evt);
 }
 
+static void ul_mouse_move(EmbeddedInstance* inst, int x, int y)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    data->lastMouseX = x;
+    data->lastMouseY = y;
+    MouseEvent evt;
+    evt.type = MouseEvent::kType_MouseMoved;
+    evt.x = x;
+    evt.y = y;
+    evt.button = MouseEvent::kButton_None;
+    data->view->FireMouseEvent(evt);
+}
+
+static void ul_mouse_down(EmbeddedInstance* inst, int button)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    MouseEvent evt;
+    evt.type = MouseEvent::kType_MouseDown;
+    evt.x = data->lastMouseX;
+    evt.y = data->lastMouseY;
+    evt.button = (button == AACORE_MOUSE_RIGHT) ? MouseEvent::kButton_Right :
+                 (button == AACORE_MOUSE_MIDDLE) ? MouseEvent::kButton_Middle :
+                 MouseEvent::kButton_Left;
+    data->view->FireMouseEvent(evt);
+}
+
+static void ul_mouse_up(EmbeddedInstance* inst, int button)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    MouseEvent evt;
+    evt.type = MouseEvent::kType_MouseUp;
+    evt.x = data->lastMouseX;
+    evt.y = data->lastMouseY;
+    evt.button = (button == AACORE_MOUSE_RIGHT) ? MouseEvent::kButton_Right :
+                 (button == AACORE_MOUSE_MIDDLE) ? MouseEvent::kButton_Middle :
+                 MouseEvent::kButton_Left;
+    data->view->FireMouseEvent(evt);
+}
+
 static const EmbeddedInstanceVtable g_ulVtable = {
     ul_init,
     ul_shutdown,
@@ -297,7 +342,11 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_render,
     ul_key_down,
     ul_key_up,
-    ul_key_char
+    ul_key_char,
+    ul_mouse_move,
+    ul_mouse_down,
+    ul_mouse_up,
+    NULL  /* mouse_wheel — not needed for Ultralight currently */
 };
 
 /* ========================================================================
@@ -313,6 +362,8 @@ EmbeddedInstance* UltralightInstance_Create(const char* htmlPath, const char* ma
     data->htmlPath = htmlPath;
     data->initialized = false;
     data->closeRequested = false;
+    data->lastMouseX = 0;
+    data->lastMouseY = 0;
 
     inst->type = EMBEDDED_ULTRALIGHT;
     inst->vtable = &g_ulVtable;
