@@ -13,6 +13,7 @@
 #include "Engine/rdColormap.h"
 #include "Engine/rdroid.h"
 #include "Engine/sithIntersect.h"
+#include "Platform/Common/AACoreManager.h"
 #include "Gameplay/sithTime.h"
 #include "Engine/sithCamera.h"
 #include "Raster/rdCache.h"
@@ -3008,7 +3009,9 @@ int sithRender_RenderThing(sithThing *pThing)
     }
 #endif
 
+    AACoreManager_PreRenderThing(pThing);
     ret = rdThing_Draw(&pThing->rdthing, &pThing->lookOrientation);
+    AACoreManager_PostRenderThing(pThing);
     rdVector_Zero3(&pThing->lookOrientation.scale);
     if (sithRender_weaponRenderHandle && (pThing->thingflags & SITH_TF_RENDERWEAPON)) {
         sithRender_weaponRenderHandle(pThing);

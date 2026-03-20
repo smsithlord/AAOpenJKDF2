@@ -67,25 +67,35 @@ Show different embedded instance content (e.g., Libretro on one screen, Steamwor
 
 **Why it fails:** Even though we flush the rdCache render list between thingIdx groups, `std3D_DrawRenderList()` internally re-batches all triangles sharing the same `rdDDrawSurface*` pointer into one `glDrawElements` call. The `glTexImage2D` called between groups DOES synchronize (GL guarantees pending draws complete before texture modification), so the flush approach should theoretically work — but in practice the symptom persists. The shared `rdDDrawSurface` means std3D's texture cache considers it "the same texture" and may optimize away re-binds or batch boundaries.
 
-## Root Cause
-The OpenJKDF2 render pipeline uses a **deferred render list**:
-1. Things are processed, faces added to `rdCache` render list with material/surface pointers
-2. ALL faces are drawn at once in `rdCache_DrawRenderList()`
-3. The GL texture bound at draw time is whatever `surface->texture_id` points to
+### Approach 6: Direct texture_id overwrite + rdCache_Flush per thing (WORKING)
+**Idea:** Each spawned thing gets its own 256x256 GL texture (solid color). In PreRenderThing, call `rdCache_Flush()` to draw pending faces with the previous texture_id, then directly overwrite the shared `rdDDrawSurface.texture_id` on the original surface to this thing's GL texture. PostRenderThing is a no-op. The next PreRenderThing flush draws the current thing's faces before overwriting again.
 
-Since all things share the same `rdDDrawSurface`, there's no way to have different GL textures per-thing without either:
-- **Separate materials per thing** (different .mat files)
-- **Separate rdDDrawSurface copies per thing** (requires deep engine changes)
-- **Immediate-mode rendering per thing** (flush render list between things — partially worked but unreliable)
+**Implementation:**
+- `AACoreManager_RegisterThingTask()` creates a per-thing GL texture via `glGenTextures` + `glTexImage2D` with a Knuth-hashed color
+- `AACoreManager_PreRenderThing()` (called from `sithRender_RenderThing` before `rdThing_Draw`):
+  1. Checks if this thing is in the tracked mapping
+  2. Calls `rdCache_Flush()` — processes all pending faces with whatever texture_id is currently set
+  3. Overwrites `originalTextures[0].alphaMats[0].texture_id` and `opaqueMats[0].texture_id` with this thing's GL texture
+- End-of-frame `rdCache_Flush()` draws the last tracked thing's faces
 
-## What DOES Work
-- **Single active task on all screens:** The dynamic callback renders the active task, all compscreen surfaces show it
-- **Fullscreen overlay:** Separate from the material system, works perfectly via `std3D_DrawUITexturedQuad`
+**Result:** WORKS. Each spawned compscreen thing shows its own unique color simultaneously. No flickering, no view-angle dependencies.
 
-## Recommended Next Steps
-1. **Per-thingIdx GL texture cloning** — Allocate separate GL textures per thingIdx. In `std3D_AddToTextureCache` or at the rdCache level, maintain a mapping of thingIdx → GL texture ID. Each thingIdx group uploads to its own GL texture, and tris reference the correct one during draw. Avoids shared-texture contention entirely.
-2. **Break std3D batching on thingIdx** — Add `thingIdx` to `rdTri`/`rdNGon` structs. Modify `std3D_DrawRenderList()`'s batch loop (currently breaks on `texture != last_tex || flags != last_flags`) to also break when thingIdx changes on a dynamic-material face. On batch break, re-fire the dynamic callback and re-upload before drawing the next batch.
-3. **Unique materials per thing** — Asset-level solution: each 3DO variant uses a different material name (compscreen1.mat, compscreen2.mat, etc.). Each gets its own `rdDDrawSurface` with its own GL texture. Cleanest but requires asset changes and limits scalability for spawned things.
+**Why it works:** The direct overwrite modifies data AT the original `rdDDrawSurface` address. All compscreen tris point to this same address. At deferred draw time (`SendFaceListToHardware`), the surface's `texture_id` is whatever was last written. The `rdCache_Flush()` between tracked things ensures each thing's faces are drawn before the next overwrite.
+
+**Why previous attempts failed:** Approach 5 tried swapping `material->textures` pointer to cloned rdTextures, expecting faces to reference different `rdDDrawSurface` addresses. But the renderer resolves through `material->textures` at deferred draw time, and the clone approach didn't produce visible changes. The direct overwrite bypasses pointer indirection entirely.
+
+**Trade-offs:** One `rdCache_Flush()` per tracked compscreen thing per frame. For hundreds of things, this adds overhead. Acceptable for now.
+
+## Root Cause (updated)
+The deferred render pipeline stores `rdMaterial*` pointers in proc entries. The actual `rdDDrawSurface` is resolved at draw time via `material->textures[celIdx].alphaMats[mipLevel]`. The surface at that address is shared across all compscreen things.
+
+**Working solution:** Direct `texture_id` overwrite on the shared surface, with `rdCache_Flush()` between tracked things to isolate each thing's draw batch.
+
+## Files Involved
+- `src/Engine/sithRender.c` — PreRenderThing/PostRenderThing hooks around `rdThing_Draw`
+- `src/Platform/Common/AACoreManager.c` — PreRenderThing (flush + overwrite), RegisterThingTask (GL texture creation)
+- `src/Raster/rdCache.c` — `rdCache_Flush()` used to force per-thing batch isolation
+- `src/Main/jkSpawn.c` — calls RegisterThingTask after spawning
 
 ## Files Involved
 - `src/Engine/rdMaterial.c` — `rdMaterial_AddToTextureCache`, `rdMaterial_UpdateDynamicTexture`

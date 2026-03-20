@@ -157,7 +157,7 @@ void jkSpawn_Update(void)
         stdPlatform_Printf("jkSpawn: Spawned at (%.2f, %.2f, %.2f) thingIdx=%d\n",
                           hitPos.x, hitPos.y, hitPos.z, spawned->thingIdx);
         /* Register this thing to show task 0 (active task) on its compscreen material */
-        AACoreManager_RegisterThingTask(spawned, 0);
+        AACoreManager_RegisterThingTask(spawned, spawned->thingIdx, 0);
     } else {
         stdPlatform_Printf("jkSpawn: Failed to spawn\n");
     }

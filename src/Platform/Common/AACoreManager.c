@@ -11,6 +11,8 @@
 #include "../../Platform/std3D.h"
 #include "../../Win95/Window.h"
 #include "../../stdPlatform.h"
+#include "../../World/sithThing.h"
+#include "../../Raster/rdCache.h"
 #include "globals.h"
 
 #include "SDL2_helper.h"
@@ -60,17 +62,23 @@ static GLuint g_taskTextures[MAX_TASKS] = {0};
 static uint16_t* g_taskPixels = NULL; /* shared pixel buffer for task rendering */
 static int g_taskTexturesReady = 0;
 
-/* Thing-to-task mapping */
+/* Thing-to-task mapping — each tracked thing gets a unique GL texture */
 #define MAX_THING_MAPPINGS 64
+#define THING_TEX_SIZE 256
 typedef struct {
-    void* thing;      /* sithThing* */
+    void* thing;           /* sithThing* */
+    int thingIdx;
     int taskIndex;
+    GLuint glTexture;      /* per-thing GL texture (256x256 solid color) */
 } ThingTaskMapping;
 static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
 static int g_thingTaskCount = 0;
 
-/* The compscreen material's rdDDrawSurface we need to swap texture_id on */
-static int g_savedTextureId = -1;
+/* Cached compscreen material and original texture_id for restore */
+static rdMaterial* g_compscreenMaterial = NULL;
+static rdTexture* g_originalTextures = NULL;
+static int g_origAlphaTexId = -1;
+static int g_origOpaqueTexId = -1;
 
 /* Fullscreen overlay state */
 static GLuint g_overlayTexture = 0;
@@ -103,29 +111,63 @@ static int host_get_key_state(int key_index)
 }
 
 /* ========================================================================
- * Engine texture callback — host owns this, calls DLL to fill pixels
+ * Per-thing texture helpers
  * ======================================================================== */
 
-static void aacore_texture_callback(
-    rdMaterial* material, rdTexture* texture, int mipLevel,
-    void* pixelData, int width, int height, rdTexFormat format, void* userData)
+/* Generate a unique RGB565 color from a thingIdx */
+static uint16_t aacore_color_for_thingIdx(int thingIdx)
 {
-    if (mipLevel != 0)
-        return;
+    unsigned int h = (unsigned int)thingIdx;
+    h = (h * 2654435761u) >> 16; /* Knuth multiplicative hash */
+    uint8_t r = ((h >> 0) & 0x1F) | 0x10;
+    uint8_t g = ((h >> 5) & 0x3F) | 0x10;
+    uint8_t b = ((h >> 11) & 0x1F) | 0x10;
+    return (r << 11) | (g << 5) | b;
+}
 
-    /* Try to get pixels from the DLL */
-    if (g_fn_render_texture) {
-        g_fn_render_texture(pixelData, width, height, format.is16bit, format.bpp);
-        return;
-    }
+/* Create a 256x256 GL texture filled with a solid RGB565 color */
+static GLuint aacore_create_solid_texture(uint16_t color)
+{
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
-    /* No instance active — fill with solid green */
-    if (format.is16bit) {
-        uint16_t* dest = (uint16_t*)pixelData;
-        uint16_t green565 = (0 << 11) | (63 << 5) | 0; /* bright green in RGB565 */
-        for (int i = 0; i < width * height; i++)
-            dest[i] = green565;
+    uint16_t* pixels = (uint16_t*)malloc(THING_TEX_SIZE * THING_TEX_SIZE * sizeof(uint16_t));
+    for (int i = 0; i < THING_TEX_SIZE * THING_TEX_SIZE; i++)
+        pixels[i] = color;
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, THING_TEX_SIZE, THING_TEX_SIZE, 0,
+                 GL_RGB, GL_UNSIGNED_SHORT_5_6_5_REV, pixels);
+    free(pixels);
+    return tex;
+}
+
+/* Find the compscreen rdMaterial on a sithThing's model, cache it */
+static rdMaterial* aacore_find_compscreen_material(sithThing* thing)
+{
+    if (g_compscreenMaterial) return g_compscreenMaterial;
+    if (!thing || thing->rdthing.type != RD_THINGTYPE_MODEL || !thing->rdthing.model3)
+        return NULL;
+
+    rdModel3* model = thing->rdthing.model3;
+    for (unsigned int m = 0; m < model->numMaterials; m++) {
+        rdMaterial* mat = model->materials[m];
+        if (!mat || mat->num_textures == 0) continue;
+        if (strstr(mat->mat_full_fpath, "compscreen")) {
+            g_compscreenMaterial = mat;
+            g_originalTextures = mat->textures;
+            g_origAlphaTexId = mat->textures[0].alphaMats[0].texture_id;
+            g_origOpaqueTexId = mat->textures[0].opaqueMats[0].texture_id;
+            stdPlatform_Printf("AACoreManager: Found compscreen material %p (%s, origAlphaTexId=%d, origOpaqueTexId=%d)\n",
+                              mat, mat->mat_full_fpath, g_origAlphaTexId, g_origOpaqueTexId);
+            return mat;
+        }
     }
+    return NULL;
 }
 
 /* ========================================================================
@@ -223,7 +265,7 @@ void AACoreManager_Init(void)
         return;
     }
 
-    /* Dynamic texture hooks disabled for now — will re-enable for per-thing rendering later.
+    /* Dynamic texture callback disabled — using per-thing GL texture swap instead.
      * rdDynamicTexture_Register("compscreen.mat", aacore_texture_callback, NULL); */
 
     /* Open SDL audio device to play DLL audio */
@@ -301,7 +343,23 @@ void AACoreManager_Shutdown(void)
     }
     if (g_taskPixels) { free(g_taskPixels); g_taskPixels = NULL; }
     g_taskTexturesReady = 0;
+
+    /* Restore original texture_id and free per-thing GL textures */
+    if (g_originalTextures && g_origAlphaTexId >= 0) {
+        g_originalTextures[0].alphaMats[0].texture_id = g_origAlphaTexId;
+        g_originalTextures[0].opaqueMats[0].texture_id = g_origOpaqueTexId;
+    }
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].glTexture) {
+            glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+            g_thingTaskMap[i].glTexture = 0;
+        }
+    }
     g_thingTaskCount = 0;
+    g_compscreenMaterial = NULL;
+    g_originalTextures = NULL;
+    g_origAlphaTexId = -1;
+    g_origOpaqueTexId = -1;
 
     if (g_overlayTexture) { glDeleteTextures(1, &g_overlayTexture); g_overlayTexture = 0; }
     if (g_overlayPixels) { free(g_overlayPixels); g_overlayPixels = NULL; }
@@ -399,13 +457,53 @@ void AACoreManager_MouseWheel(int delta)
         g_fn_mouse_wheel(delta);
 }
 
-void AACoreManager_RegisterThingTask(void* pSithThing, int taskIndex)
+void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskIndex)
 {
     if (g_thingTaskCount >= MAX_THING_MAPPINGS) return;
+
+    sithThing* thing = (sithThing*)pSithThing;
+
+    /* Find and cache the compscreen material on first call */
+    rdMaterial* mat = aacore_find_compscreen_material(thing);
+    if (!mat) {
+        stdPlatform_Printf("AACoreManager: WARNING: No compscreen material found on thing %d\n", thingIdx);
+        return;
+    }
+
+    /* Create per-thing GL texture with unique color */
+    uint16_t color = aacore_color_for_thingIdx(thingIdx);
+    GLuint glTex = aacore_create_solid_texture(color);
+
+    /* Store mapping */
     g_thingTaskMap[g_thingTaskCount].thing = pSithThing;
+    g_thingTaskMap[g_thingTaskCount].thingIdx = thingIdx;
     g_thingTaskMap[g_thingTaskCount].taskIndex = taskIndex;
+    g_thingTaskMap[g_thingTaskCount].glTexture = glTex;
     g_thingTaskCount++;
-    stdPlatform_Printf("AACoreManager: Registered thing %p → task %d\n", pSithThing, taskIndex);
+
+    stdPlatform_Printf("AACoreManager: Registered thing %p (thingIdx=%d) task %d, glTex=%u, color=0x%04X\n",
+                      pSithThing, thingIdx, taskIndex, glTex, color);
+}
+
+void AACoreManager_PreRenderThing(void* pSithThing)
+{
+    if (!g_compscreenMaterial || g_thingTaskCount == 0) return;
+
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].thing == pSithThing) {
+            /* Flush pending faces so previous thing's faces draw with previous texture_id */
+            rdCache_Flush();
+            /* Overwrite the shared surface's texture_id to this thing's GL texture */
+            g_originalTextures[0].alphaMats[0].texture_id = g_thingTaskMap[i].glTexture;
+            g_originalTextures[0].opaqueMats[0].texture_id = g_thingTaskMap[i].glTexture;
+            return;
+        }
+    }
+}
+
+void AACoreManager_PostRenderThing(void* pSithThing)
+{
+    /* No-op — next PreRenderThing will flush before overwriting the swap */
 }
 
 void AACoreManager_ToggleMainMenu(void)

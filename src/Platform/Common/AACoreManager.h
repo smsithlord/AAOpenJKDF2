@@ -43,7 +43,11 @@ void AACoreManager_StartLibretro(void);
 void AACoreManager_DrawOverlay(int screenWidth, int screenHeight);
 
 /* Register a spawned thing to show a task on its compscreen material */
-void AACoreManager_RegisterThingTask(void* pSithThing, int taskIndex);
+void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskIndex);
+
+/* Per-thing render hooks — swap cloned texture before/after rdThing_Draw */
+void AACoreManager_PreRenderThing(void* pSithThing);
+void AACoreManager_PostRenderThing(void* pSithThing);
 
 #ifdef __cplusplus
 }

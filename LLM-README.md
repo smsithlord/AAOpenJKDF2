@@ -146,7 +146,8 @@ All embedded content rendering (Libretro emulation, future Steamworks web browse
 See **LLM-AARCADECORE-README.md** for full DLL architecture and implementation details.
 
 ### Host-Side Integration
-- `src/Platform/Common/AACoreManager.h/.c` — Loads `aarcadecore.dll` via `SDL_LoadObject`, provides host callbacks, owns SDL audio device. Dynamic texture hooks disabled for now (will re-enable for per-thing rendering later).
+- `src/Platform/Common/AACoreManager.h/.c` — Loads `aarcadecore.dll` via `SDL_LoadObject`, provides host callbacks, owns SDL audio device. Per-thing texture rendering via `PreRenderThing`/`PostRenderThing` hooks (flush + texture_id swap on shared compscreen surface).
+- `src/Engine/sithRender.c` — `PreRenderThing`/`PostRenderThing` hooks around `rdThing_Draw` in `sithRender_RenderThing`
 - `src/Main/aaMainMenu.c` — Escape key toggles AArcade menu; dispatches engine menu and Libretro start requests from DLL
 - `src/Win95/Window.c` — Escape key intercepted (engine's own escape menu suppressed); START/BACK gamepad buttons suppressed when menu open
 - `src/Platform/SDL2/stdControl.c` — Keyboard suppressed when menu open; gamepad still polled (Libretro needs it via `get_key_state`)

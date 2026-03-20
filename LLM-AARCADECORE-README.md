@@ -148,16 +148,20 @@ struct EmbeddedInstance {
 
 Each concrete type (LibretroInstance, SteamworksWebBrowserInstance) provides its own vtable implementation. The managers create instances and the top-level `aarcadecore.c` delegates to the active instance.
 
-## How Rendering Works
+## How Per-Thing Rendering Works
 
-1. **Host** calls `aarcadecore_get_material_name()` → gets `"compscreen.mat"`
-2. **Host** registers its own `rdDynamicTextureCallback` with the engine for that material
-3. When the engine renders a surface using that material, it calls the host's callback
-4. **Host's callback** calls `aarcadecore_render_texture(pixelData, width, height, is16bit, bpp)`
-5. **DLL** delegates to the active instance's `render` vtable function
-6. **LibretroInstance** reads the current frame from `LibretroHost` and writes scaled pixels
+Each spawned compscreen thing gets its own GL texture. The host swaps `texture_id` on the shared `rdDDrawSurface` before each tracked thing is rendered.
 
-**Why the host owns the callback:** The engine's `rdDynamicTextureCallback` passes engine-specific types (`rdMaterial*`, `rdTexture*`, `rdTexFormat`). The DLL can't know these types. The host bridges between engine types and the DLL's simple `(void* pixelData, int width, int height, int is16bit, int bpp)` signature.
+1. **Spawn** (H key): `AACoreManager_RegisterThingTask()` creates a 256x256 GL texture with a unique color, stores it in the thing-to-task mapping
+2. **PreRenderThing**: Called from `sithRender_RenderThing` before `rdThing_Draw`. If this thing is tracked:
+   - `rdCache_Flush()` — draws pending faces with the previous thing's texture_id
+   - Overwrites `alphaMats[0].texture_id` and `opaqueMats[0].texture_id` on the shared compscreen surface with this thing's GL texture
+3. **rdThing_Draw**: Faces added to deferred render list. They reference the shared surface, which now has this thing's texture_id.
+4. **End-of-frame `rdCache_Flush()`**: Draws the last tracked thing's faces
+
+**Why direct overwrite works:** All compscreen tris point to the same `rdDDrawSurface` address. The deferred renderer reads `texture_id` from that address at draw time. By overwriting the value and flushing between things, each thing's faces draw with the correct GL texture.
+
+**Dynamic texture callback** (`rdDynamicTexture_Register`) is currently disabled — the texture_id swap approach doesn't need it.
 
 ## How Audio Works
 
