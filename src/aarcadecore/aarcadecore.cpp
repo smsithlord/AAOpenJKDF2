@@ -21,6 +21,11 @@ void SteamworksWebBrowserManager_Shutdown(void);
 void SteamworksWebBrowserManager_Update(void);
 EmbeddedInstance* SteamworksWebBrowserManager_GetActive(void);
 
+void UltralightManager_Init(void);
+void UltralightManager_Shutdown(void);
+void UltralightManager_Update(void);
+EmbeddedInstance* UltralightManager_GetActive(void);
+
 /* ========================================================================
  * Exported functions
  * ======================================================================== */
@@ -47,8 +52,10 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     if (g_host.host_printf)
         g_host.host_printf("AACore: Initializing (API v%d)...\n", AARCADECORE_API_VERSION);
 
-    LibretroManager_Init();
-    SteamworksWebBrowserManager_Init();
+    /* TODO: For now, only run one instance at a time. Swap these to test the other. */
+    //LibretroManager_Init();
+    //SteamworksWebBrowserManager_Init();
+    UltralightManager_Init();
 
     if (g_host.host_printf)
         g_host.host_printf("AACore: Ready\n");
@@ -61,25 +68,31 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     if (g_host.host_printf)
         g_host.host_printf("AACore: Shutting down...\n");
 
-    LibretroManager_Shutdown();
-    SteamworksWebBrowserManager_Shutdown();
+    //LibretroManager_Shutdown();
+    //SteamworksWebBrowserManager_Shutdown();
+    UltralightManager_Shutdown();
     memset(&g_host, 0, sizeof(g_host));
 }
 
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
-    LibretroManager_Update();
-    SteamworksWebBrowserManager_Update();
+    //LibretroManager_Update();
+    //SteamworksWebBrowserManager_Update();
+    UltralightManager_Update();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
 {
-    EmbeddedInstance* lr = LibretroManager_GetActive();
-    if (lr && lr->vtable->is_active(lr))
+    EmbeddedInstance* ul = UltralightManager_GetActive();
+    if (ul && ul->vtable->is_active(ul))
         return true;
 
     EmbeddedInstance* swb = SteamworksWebBrowserManager_GetActive();
     if (swb && swb->vtable->is_active(swb))
+        return true;
+
+    EmbeddedInstance* lr = LibretroManager_GetActive();
+    if (lr && lr->vtable->is_active(lr))
         return true;
 
     return false;
@@ -87,13 +100,18 @@ AARCADECORE_EXPORT bool aarcadecore_is_active(void)
 
 AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void)
 {
-    EmbeddedInstance* lr = LibretroManager_GetActive();
-    if (lr && lr->target_material)
-        return lr->target_material;
+    /* Return material from whichever instance is active */
+    EmbeddedInstance* ul = UltralightManager_GetActive();
+    if (ul && ul->target_material)
+        return ul->target_material;
 
     EmbeddedInstance* swb = SteamworksWebBrowserManager_GetActive();
     if (swb && swb->target_material)
         return swb->target_material;
+
+    EmbeddedInstance* lr = LibretroManager_GetActive();
+    if (lr && lr->target_material)
+        return lr->target_material;
 
     return NULL;
 }
@@ -101,15 +119,22 @@ AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void)
 AARCADECORE_EXPORT void aarcadecore_render_texture(
     void* pixelData, int width, int height, int is16bit, int bpp)
 {
-    EmbeddedInstance* lr = LibretroManager_GetActive();
-    if (lr && lr->vtable->is_active(lr) && lr->vtable->render) {
-        lr->vtable->render(lr, pixelData, width, height, is16bit, bpp);
+    /* Render from whichever instance is active */
+    EmbeddedInstance* ul = UltralightManager_GetActive();
+    if (ul && ul->vtable->is_active(ul) && ul->vtable->render) {
+        ul->vtable->render(ul, pixelData, width, height, is16bit, bpp);
         return;
     }
 
     EmbeddedInstance* swb = SteamworksWebBrowserManager_GetActive();
     if (swb && swb->vtable->is_active(swb) && swb->vtable->render) {
         swb->vtable->render(swb, pixelData, width, height, is16bit, bpp);
+        return;
+    }
+
+    EmbeddedInstance* lr = LibretroManager_GetActive();
+    if (lr && lr->vtable->is_active(lr) && lr->vtable->render) {
+        lr->vtable->render(lr, pixelData, width, height, is16bit, bpp);
     }
 }
 

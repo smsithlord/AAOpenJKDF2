@@ -219,15 +219,28 @@ file(GLOB AARCADECORE_MOVED_SRCS
 )
 list(REMOVE_ITEM ENGINE_SOURCE_FILES ${AARCADECORE_MOVED_SRCS})
 
-# aarcadecore DLL
-file(GLOB AARCADECORE_SOURCES ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c)
+# aarcadecore DLL (C++ for Steamworks callback support)
+file(GLOB AARCADECORE_SOURCES
+    ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c
+    ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.cpp
+)
 add_library(aarcadecore SHARED ${AARCADECORE_SOURCES})
 target_include_directories(aarcadecore PRIVATE
     ${PROJECT_SOURCE_DIR}/src/aarcadecore
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/public/steam
+    ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/include
 )
-target_link_libraries(aarcadecore PRIVATE SDL::SDL version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32)
+target_link_libraries(aarcadecore PRIVATE
+    SDL::SDL
+    ${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/redistributable_bin/win64/steam_api64.lib
+    ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/Ultralight.lib
+    ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/UltralightCore.lib
+    ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/AppCore.lib
+    ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/WebCore.lib
+    version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32
+)
 target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
 
 # Remove multiplayer menus from compilation

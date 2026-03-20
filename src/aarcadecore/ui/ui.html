@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AArcade Core UI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+        }
+        h1 {
+            font-size: 48px;
+            color: #0f9d58;
+            margin-bottom: 16px;
+            text-shadow: 0 0 20px rgba(15, 157, 88, 0.5);
+        }
+        p {
+            font-size: 18px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+        .status {
+            margin-top: 24px;
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            display: inline-block;
+        }
+        .status span {
+            color: #4fc3f7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AArcade Core</h1>
+        <p>Ultralight UI Renderer Active</p>
+        <div class="status">
+            Engine: <span>OpenJKDF2</span> | Renderer: <span>Ultralight 1.4</span>
+        </div>
+    </div>
+</body>
+</html>

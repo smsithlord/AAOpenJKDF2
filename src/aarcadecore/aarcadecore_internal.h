@@ -9,14 +9,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* Note: No extern "C" here — all DLL internals are C++ */
 
 typedef enum {
     EMBEDDED_NONE = 0,
     EMBEDDED_LIBRETRO,
-    EMBEDDED_STEAMWORKS_BROWSER
+    EMBEDDED_STEAMWORKS_BROWSER,
+    EMBEDDED_ULTRALIGHT
 } EmbeddedInstanceType;
 
 typedef struct EmbeddedInstance EmbeddedInstance;
@@ -46,9 +45,5 @@ struct EmbeddedInstance {
 
 /* Global host callbacks (set during aarcadecore_init) */
 extern AACoreHostCallbacks g_host;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* AARCADECORE_INTERNAL_H */

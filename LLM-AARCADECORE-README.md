@@ -77,17 +77,47 @@ typedef struct AACoreHostCallbacks {
 |------|---------|
 | `aarcadecore_api.h` | Public API — shared between DLL and host. No engine deps. |
 | `aarcadecore_internal.h` | Internal types: EmbeddedInstance base struct + vtable |
-| `aarcadecore.c` | DLL entry point: exports, global host callbacks, delegates to managers |
-| `EmbeddedInstance.c` | Base helpers (currently minimal) |
-| `LibretroInstance.c` | EmbeddedInstance implementation for Libretro cores |
-| `LibretroManager.c` | Creates/manages the active LibretroInstance |
-| `SteamworksWebBrowserInstance.c` | Stub EmbeddedInstance for future web browser |
-| `SteamworksWebBrowserManager.c` | Stub manager for future web browser |
-| `libretro_host.c` / `.h` | Low-level Libretro core loading, audio ring buffer, video frame buffer |
+| `aarcadecore.cpp` | DLL entry point: exports, global host callbacks, delegates to managers |
+| `EmbeddedInstance.cpp` | Base helpers (currently minimal) |
+| `LibretroInstance.cpp` | EmbeddedInstance implementation for Libretro cores |
+| `LibretroManager.cpp` | Creates/manages the active LibretroInstance |
+| `SteamworksWebBrowserInstance.cpp` | Steamworks HTML Surface browser — loads URLs, renders BGRA to textures |
+| `SteamworksWebBrowserManager.cpp` | Creates/manages the active Steamworks browser instance |
+| `UltralightInstance.cpp` | Ultralight HTML renderer — loads local HTML files, CPU rendering to textures |
+| `UltralightManager.cpp` | Creates/manages the active Ultralight instance |
+| `libretro_host.cpp` / `.h` | Low-level Libretro core loading, audio ring buffer, video frame buffer |
+| `ui/ui.html` | Test HTML page for the Ultralight renderer |
+
+**Note:** All DLL source files are C++ (`.cpp`). The public API (`aarcadecore_api.h`) uses `extern "C"` so any C host can load the DLL.
+
+## Embedded Instance Types
+
+| Type | Status | Description |
+|------|--------|-------------|
+| `EMBEDDED_LIBRETRO` | Working | Runs Libretro emulator cores (e.g., bsnes for SNES). Full video, audio, and gamepad input. |
+| `EMBEDDED_STEAMWORKS_BROWSER` | Working | Steamworks HTML Surface. Loads URLs, renders pages. Requires Steam running + `steam_appid.txt`. |
+| `EMBEDDED_ULTRALIGHT` | Working | Ultralight HTML renderer. Loads local HTML files for UI. CPU rendering mode. |
+
+Only one instance type is active at a time. To switch, edit `aarcadecore.cpp` and uncomment/comment the desired `*Manager_Init/Shutdown/Update` lines.
+
+## Build Dependencies (not in git)
+
+| SDK | Path | Purpose |
+|-----|------|---------|
+| Steamworks SDK 1.64 | `steamworks_sdk_164/` | Headers + `steam_api64.lib` for Steamworks browser |
+| Ultralight SDK 1.4.0 | `ultralight-free-sdk-1.4.0-win-x64/` | Headers + libs + DLLs for HTML rendering |
+
+Both SDKs must be present on disk for building but are excluded from git via `.gitignore`.
+
+**Runtime DLLs needed in the game directory:**
+- `steam_api64.dll` (from Steamworks SDK)
+- `Ultralight.dll`, `UltralightCore.dll`, `AppCore.dll`, `WebCore.dll` (from Ultralight SDK)
+- `resources/` folder (from Ultralight SDK — contains ICU data, CA certs, etc.)
+- `steam_appid.txt` containing `480` (for Steamworks testing)
 
 ## Internal Architecture: EmbeddedInstance
 
-The DLL uses a vtable-based "inheritance" pattern in C:
+The DLL uses a vtable-based "inheritance" pattern in C++:
 
 ```c
 struct EmbeddedInstance {
