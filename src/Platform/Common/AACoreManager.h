@@ -24,6 +24,12 @@ void AACoreManager_KeyDown(int vk_code, int modifiers);
 void AACoreManager_KeyUp(int vk_code, int modifiers);
 void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers);
 
+/* Main menu */
+void AACoreManager_ToggleMainMenu(void);
+
+/* Draw the fullscreen overlay (call from render path, after 3D scene) */
+void AACoreManager_DrawOverlay(int screenWidth, int screenHeight);
+
 #ifdef __cplusplus
 }
 #endif

@@ -25,6 +25,8 @@ void UltralightManager_Init(void);
 void UltralightManager_Shutdown(void);
 void UltralightManager_Update(void);
 EmbeddedInstance* UltralightManager_GetActive(void);
+void UltralightManager_ToggleMainMenu(void);
+bool UltralightManager_IsMainMenuOpen(void);
 
 /* ========================================================================
  * Exported functions
@@ -52,10 +54,10 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     if (g_host.host_printf)
         g_host.host_printf("AACore: Initializing (API v%d)...\n", AARCADECORE_API_VERSION);
 
-    /* TODO: For now, only run one instance at a time. Swap these to test the other. */
-    LibretroManager_Init();
+    /* Initialize managers (no instances created until requested) */
+    //LibretroManager_Init();
     //SteamworksWebBrowserManager_Init();
-    //UltralightManager_Init();
+    UltralightManager_Init();
 
     if (g_host.host_printf)
         g_host.host_printf("AACore: Ready\n");
@@ -68,17 +70,17 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     if (g_host.host_printf)
         g_host.host_printf("AACore: Shutting down...\n");
 
-    LibretroManager_Shutdown();
+    //LibretroManager_Shutdown();
     //SteamworksWebBrowserManager_Shutdown();
-    //UltralightManager_Shutdown();
+    UltralightManager_Shutdown();
     memset(&g_host, 0, sizeof(g_host));
 }
 
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
-    LibretroManager_Update();
+    //LibretroManager_Update();
     //SteamworksWebBrowserManager_Update();
-    //UltralightManager_Update();
+    UltralightManager_Update();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
@@ -195,4 +197,25 @@ AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modi
     EmbeddedInstance* inst = get_active_instance();
     if (inst && inst->vtable->key_char)
         inst->vtable->key_char(inst, unicode_char, modifiers);
+}
+
+AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void)
+{
+    UltralightManager_ToggleMainMenu();
+}
+
+AARCADECORE_EXPORT bool aarcadecore_is_main_menu_open(void)
+{
+    return UltralightManager_IsMainMenuOpen();
+}
+
+AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, int height)
+{
+    EmbeddedInstance* ul = UltralightManager_GetActive();
+    if (!ul || !ul->vtable->is_active(ul) || !ul->vtable->render)
+        return false;
+
+    /* Render as 32-bit BGRA (is16bit=0 signals BGRA mode to the instance) */
+    ul->vtable->render(ul, pixelData, width, height, 0, 32);
+    return true;
 }

@@ -1704,6 +1704,49 @@ void std3D_DrawUIBitmapRGBA(stdBitmap* pBmp, int mipIdx, flex_t dstX, flex_t dst
     GL_tmpUITrisAmt += 2;
 }
 
+void std3D_DrawUITexturedQuad(uint32_t glTexId, float x, float y, float w, float h)
+{
+    if (GL_tmpUIVerticesAmt + 4 > STD3D_MAX_UI_VERTICES) return;
+    if (GL_tmpUITrisAmt + 2 > STD3D_MAX_UI_TRIS) return;
+
+    uint32_t color = 0xFFFFFFFF; /* white, full alpha */
+    int base = (int)GL_tmpUIVerticesAmt;
+    int i;
+
+    float verts[4][4] = {
+        {x,   y,   0.0f, 0.0f},
+        {x,   y+h, 0.0f, 1.0f},
+        {x+w, y+h, 1.0f, 1.0f},
+        {x+w, y,   1.0f, 0.0f}
+    };
+
+    for (i = 0; i < 4; i++) {
+        GL_tmpUIVertices[base+i].x = verts[i][0];
+        GL_tmpUIVertices[base+i].y = verts[i][1];
+        GL_tmpUIVertices[base+i].z = 0.0f;
+        GL_tmpUIVertices[base+i].tu = verts[i][2];
+        GL_tmpUIVertices[base+i].tv = verts[i][3];
+        *(uint32_t*)&GL_tmpUIVertices[base+i].nx = 0;
+        *(uint32_t*)&GL_tmpUIVertices[base+i].nz = 0;
+        GL_tmpUIVertices[base+i].color = color;
+    }
+
+    GL_tmpUITris[GL_tmpUITrisAmt+0].v1 = GL_tmpUIVerticesAmt+1;
+    GL_tmpUITris[GL_tmpUITrisAmt+0].v2 = GL_tmpUIVerticesAmt+0;
+    GL_tmpUITris[GL_tmpUITrisAmt+0].v3 = GL_tmpUIVerticesAmt+2;
+    GL_tmpUITris[GL_tmpUITrisAmt+0].flags = 1; /* alpha blend */
+    GL_tmpUITris[GL_tmpUITrisAmt+0].texture = glTexId;
+
+    GL_tmpUITris[GL_tmpUITrisAmt+1].v1 = GL_tmpUIVerticesAmt+0;
+    GL_tmpUITris[GL_tmpUITrisAmt+1].v2 = GL_tmpUIVerticesAmt+3;
+    GL_tmpUITris[GL_tmpUITrisAmt+1].v3 = GL_tmpUIVerticesAmt+2;
+    GL_tmpUITris[GL_tmpUITrisAmt+1].flags = 1;
+    GL_tmpUITris[GL_tmpUITrisAmt+1].texture = glTexId;
+
+    GL_tmpUIVerticesAmt += 4;
+    GL_tmpUITrisAmt += 2;
+}
+
 void std3D_DrawUIBitmap(stdBitmap* pBmp, int mipIdx, flex_t dstX, flex_t dstY, rdRect* srcRect, flex_t scale, int bAlphaOverwrite)
 {
     std3D_DrawUIBitmapRGBA(pBmp, mipIdx, dstX, dstY, srcRect, scale, scale, bAlphaOverwrite, 0xFF, 0xFF, 0xFF, 0xFF);

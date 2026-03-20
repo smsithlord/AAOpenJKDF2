@@ -8,6 +8,7 @@
 #include "AACoreManager.h"
 #include "../../aarcadecore/aarcadecore_api.h"
 #include "../../Engine/rdDynamicTexture.h"
+#include "../../Platform/std3D.h"
 #include "../../stdPlatform.h"
 #include "globals.h"
 
@@ -29,6 +30,15 @@ static aarcadecore_get_audio_samples_t     g_fn_get_audio_samples = NULL;
 static aarcadecore_key_down_t              g_fn_key_down = NULL;
 static aarcadecore_key_up_t                g_fn_key_up = NULL;
 static aarcadecore_key_char_t              g_fn_key_char = NULL;
+static aarcadecore_toggle_main_menu_t      g_fn_toggle_main_menu = NULL;
+static aarcadecore_is_main_menu_open_t     g_fn_is_main_menu_open = NULL;
+static aarcadecore_render_overlay_t        g_fn_render_overlay = NULL;
+
+/* Fullscreen overlay state */
+static GLuint g_overlayTexture = 0;
+static uint32_t* g_overlayPixels = NULL;
+#define OVERLAY_WIDTH  1920
+#define OVERLAY_HEIGHT 1080
 
 /* SDL audio device for playing DLL audio */
 static SDL_AudioDeviceID g_audio_dev = 0;
@@ -64,10 +74,20 @@ static void aacore_texture_callback(
 {
     if (mipLevel != 0)
         return;
-    if (!g_fn_render_texture)
-        return;
 
-    g_fn_render_texture(pixelData, width, height, format.is16bit, format.bpp);
+    /* Try to get pixels from the DLL */
+    if (g_fn_render_texture) {
+        g_fn_render_texture(pixelData, width, height, format.is16bit, format.bpp);
+        return;
+    }
+
+    /* No instance active — fill with solid green */
+    if (format.is16bit) {
+        uint16_t* dest = (uint16_t*)pixelData;
+        uint16_t green565 = (0 << 11) | (63 << 5) | 0; /* bright green in RGB565 */
+        for (int i = 0; i < width * height; i++)
+            dest[i] = green565;
+    }
 }
 
 /* ========================================================================
@@ -98,7 +118,6 @@ void AACoreManager_Init(void)
 {
     int api_version;
     AACoreHostCallbacks callbacks;
-    const char* material_name;
 
     stdPlatform_Printf("AACoreManager: Loading aarcadecore.dll...\n");
 
@@ -128,6 +147,9 @@ void AACoreManager_Init(void)
     LOAD_FN(key_down)
     LOAD_FN(key_up)
     LOAD_FN(key_char)
+    LOAD_FN(toggle_main_menu)
+    LOAD_FN(is_main_menu_open)
+    LOAD_FN(render_overlay)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -152,12 +174,12 @@ void AACoreManager_Init(void)
         return;
     }
 
-    /* Register the host-owned texture callback for the DLL's target material */
-    material_name = g_fn_get_material_name();
-    if (material_name) {
-        rdDynamicTexture_Register(material_name, aacore_texture_callback, NULL);
-        stdPlatform_Printf("AACoreManager: Registered texture callback for '%s'\n", material_name);
-    }
+    /* Always register the texture callback for compscreen.mat at startup.
+     * This ensures the callback is in place BEFORE the material is loaded,
+     * so rdMaterial_AttachDynamicCallback can find it during level load.
+     * If no instance is active, the callback draws solid green. */
+    rdDynamicTexture_Register("compscreen.mat", aacore_texture_callback, NULL);
+    stdPlatform_Printf("AACoreManager: Registered texture callback for 'compscreen.mat'\n");
 
     /* Open SDL audio device to play DLL audio */
     {
@@ -212,6 +234,12 @@ void AACoreManager_Shutdown(void)
     g_fn_key_down = NULL;
     g_fn_key_up = NULL;
     g_fn_key_char = NULL;
+    g_fn_toggle_main_menu = NULL;
+    g_fn_is_main_menu_open = NULL;
+    g_fn_render_overlay = NULL;
+
+    if (g_overlayTexture) { glDeleteTextures(1, &g_overlayTexture); g_overlayTexture = 0; }
+    if (g_overlayPixels) { free(g_overlayPixels); g_overlayPixels = NULL; }
 
     stdPlatform_Printf("AACoreManager: Shutdown complete\n");
 }
@@ -245,4 +273,45 @@ void AACoreManager_KeyChar(unsigned int unicode_char, int modifiers)
 {
     if (g_fn_key_char)
         g_fn_key_char(unicode_char, modifiers);
+}
+
+void AACoreManager_ToggleMainMenu(void)
+{
+    if (g_fn_toggle_main_menu)
+        g_fn_toggle_main_menu();
+}
+
+void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
+{
+    if (!g_fn_is_main_menu_open || !g_fn_is_main_menu_open())
+        return;
+    if (!g_fn_render_overlay)
+        return;
+
+    /* Allocate pixel buffer on first use */
+    if (!g_overlayPixels) {
+        g_overlayPixels = (uint32_t*)malloc(OVERLAY_WIDTH * OVERLAY_HEIGHT * 4);
+        if (!g_overlayPixels) return;
+    }
+
+    /* Get pixels from DLL */
+    if (!g_fn_render_overlay(g_overlayPixels, OVERLAY_WIDTH, OVERLAY_HEIGHT))
+        return;
+
+    /* Create GL texture on first use */
+    if (!g_overlayTexture)
+        glGenTextures(1, &g_overlayTexture);
+
+    /* Upload BGRA pixels to GL texture */
+    glBindTexture(GL_TEXTURE_2D, g_overlayTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, OVERLAY_WIDTH, OVERLAY_HEIGHT, 0,
+                 GL_BGRA, GL_UNSIGNED_BYTE, g_overlayPixels);
+
+    /* Add fullscreen quad to the engine's UI render list.
+     * This gets drawn by std3D_DrawUIRenderList() using the engine's shader pipeline. */
+    std3D_DrawUITexturedQuad(g_overlayTexture, 0.0f, 0.0f, (float)screenWidth, (float)screenHeight);
 }

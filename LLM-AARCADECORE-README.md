@@ -35,7 +35,7 @@ AACoreManager                             aarcadecore_init(callbacks)
 
 ## Public API (`src/aarcadecore/aarcadecore_api.h`)
 
-The DLL exports 9 flat C functions. The host loads them via `SDL_LoadFunction` or `GetProcAddress`.
+The DLL exports flat C functions. The host loads them via `SDL_LoadFunction` or `GetProcAddress`.
 
 ### Lifecycle
 | Export | Purpose |
@@ -57,6 +57,13 @@ The DLL exports 9 flat C functions. The host loads them via `SDL_LoadFunction` o
 |--------|---------|
 | `aarcadecore_get_audio_sample_rate()` | Returns sample rate in Hz (e.g., 32040 for SNES) |
 | `aarcadecore_get_audio_samples(buffer, max_frames)` | Pull interleaved stereo int16_t PCM samples |
+
+### Main Menu / Overlay
+| Export | Purpose |
+|--------|---------|
+| `aarcadecore_toggle_main_menu()` | Toggle the main menu HUD overlay on/off |
+| `aarcadecore_is_main_menu_open()` | Check if the main menu is currently open |
+| `aarcadecore_render_overlay(pixelData, w, h)` | Render the fullscreen overlay (BGRA pixels) |
 
 ### Host Callbacks (`AACoreHostCallbacks`)
 The host provides these to the DLL at init time:
@@ -150,6 +157,34 @@ Each concrete type (LibretroInstance, SteamworksWebBrowserInstance) provides its
 5. **Host** plays the audio through SDL
 
 The ring buffer is lock-free (single producer/single consumer) since the Libretro core writes on the game thread and the SDL audio callback reads on the audio thread.
+
+## How the Main Menu Works
+
+The main menu is a fullscreen Ultralight HUD overlay toggled by pressing G.
+
+### Flow:
+1. **G key** → `aaMainMenu_Update()` in `src/Main/aaMainMenu.c` → `AACoreManager_ToggleMainMenu()`
+2. **Host** calls `aarcadecore_toggle_main_menu()` DLL export
+3. **DLL** creates/destroys an Ultralight instance loading `aarcadecore/ui/mainMenu.html`
+4. **Each frame** (in `jkGame_Update`): host calls `AACoreManager_DrawOverlay()` which:
+   - Calls `aarcadecore_render_overlay()` to get 1920x1080 BGRA pixels
+   - Uploads to a GL texture
+   - Draws a fullscreen quad via `std3D_DrawUITexturedQuad()` (engine's shader-based UI system)
+
+### JS Bridge (C++ ↔ JavaScript):
+- In `OnDOMReady`, Ultralight creates a `window.aacore` object with bound C++ functions
+- Currently exposes: `aacore.closeMenu()` — sets a flag that the DLL checks to auto-close
+- Uses JavaScriptCore C API: `JSObjectMakeFunctionWithCallback()`, `JSContextGetGlobalObject()`
+
+### Texture callback:
+- `compscreen.mat` callback is registered at startup (before any level loads)
+- If no instance is active, in-game screens show solid green
+- When the menu is open, in-game screens also show the menu (via `render_texture` in RGB565)
+
+### Transparency:
+- Ultralight view uses `is_transparent = true`
+- HTML `background: transparent` on html/body
+- GL overlay uses alpha blending via the UI render list
 
 ## How Input Works
 

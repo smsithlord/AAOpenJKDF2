@@ -90,6 +90,18 @@ AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers);
  * modifiers: bitmask of AACORE_MOD_* */
 AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modifiers);
 
+/* Toggle the main menu HUD overlay on/off */
+AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void);
+
+/* Check if the main menu is currently open */
+AARCADECORE_EXPORT bool aarcadecore_is_main_menu_open(void);
+
+/* Render the overlay (main menu) into a host-provided BGRA pixel buffer.
+ * Returns true if pixels were written, false if no overlay is active.
+ * The host should draw this as a fullscreen quad. */
+AARCADECORE_EXPORT bool aarcadecore_render_overlay(
+    void* pixelData, int width, int height);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -105,6 +117,9 @@ typedef int   (*aarcadecore_get_audio_samples_t)(int16_t* buffer, int max_frames
 typedef void  (*aarcadecore_key_down_t)(int vk_code, int modifiers);
 typedef void  (*aarcadecore_key_up_t)(int vk_code, int modifiers);
 typedef void  (*aarcadecore_key_char_t)(unsigned int unicode_char, int modifiers);
+typedef void  (*aarcadecore_toggle_main_menu_t)(void);
+typedef bool  (*aarcadecore_is_main_menu_open_t)(void);
+typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int height);
 
 #ifdef __cplusplus
 }

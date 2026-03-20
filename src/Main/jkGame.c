@@ -25,7 +25,9 @@
 #include "stdPlatform.h"
 #include "jk.h"
 #include "Platform/Common/AACoreManager.h"
+#include "Win95/Window.h"
 #include "Main/jkSpawn.h"
+#include "Main/aaMainMenu.h"
 
 #if defined(TARGET_TWL)
 #include <nds.h>
@@ -147,8 +149,9 @@ int jkGame_Update()
     // Update aarcadecore.dll (Libretro, web browser, etc.)
     AACoreManager_Update();
 
-    // Check for 3DO spawn key
+    // Check for 3DO spawn key and main menu hotkey
     jkSpawn_Update();
+    aaMainMenu_Update();
 
     // HACK HACK HACK: Adjust zNear depending on if we're using the scope/camera views
 #if defined(SDL2_RENDER) || defined(TARGET_TWL)
@@ -318,6 +321,9 @@ int jkGame_Update()
 #endif
 
 #if defined(SDL2_RENDER) || defined(TARGET_TWL)
+    /* Draw AArcade Core fullscreen overlay (main menu HUD) */
+    AACoreManager_DrawOverlay(Window_xSize, Window_ySize);
+
     std3D_DrawMenu();
     rdFinishFrame();
 #endif
