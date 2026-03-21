@@ -524,9 +524,28 @@ AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx)
     g_instanceManager.objectUsed(thingIdx);
 }
 
+AARCADECORE_EXPORT bool aarcadecore_has_pending_destroy(void)
+{
+    return g_instanceManager.hasPendingDestroy();
+}
+
+AARCADECORE_EXPORT int aarcadecore_pop_pending_destroy(void)
+{
+    return g_instanceManager.popPendingDestroy();
+}
+
 AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
 {
     g_instanceManager.setAimedThing(thingIdx);
+}
+
+void UltralightManager_OpenBuildContextMenu(void);
+AARCADECORE_EXPORT void aarcadecore_toggle_build_context_menu(void)
+{
+    if (UltralightManager_IsMainMenuOpen())
+        UltralightManager_ToggleMainMenu(); /* close current menu */
+    else
+        UltralightManager_OpenBuildContextMenu();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void)

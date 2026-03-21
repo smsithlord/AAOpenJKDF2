@@ -146,6 +146,37 @@ AAPI_CALLBACK(js_manager_deactivateInstance) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+AAPI_CALLBACK(js_manager_getAimedObjectInfo) {
+    const SpawnedObject* obj = g_instanceManager.getAimedObject();
+    if (!obj) return JSValueMakeNull(ctx);
+
+    Arcade::Item item = g_library.getItemById(obj->itemId);
+    JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+    jsSetPropStr(ctx, o, "itemId", obj->itemId);
+    jsSetPropStr(ctx, o, "objectKey", obj->objectKey);
+    jsSetPropStr(ctx, o, "url", obj->url);
+    jsSetPropStr(ctx, o, "title", item.title);
+
+    JSStringRef tk = JSStringCreateWithUTF8CString("thingIdx");
+    JSObjectSetProperty(ctx, o, tk, JSValueMakeNumber(ctx, obj->thingIdx), 0, nullptr);
+    JSStringRelease(tk);
+
+    return o;
+}
+
+AAPI_CALLBACK(js_manager_destroyAimedObject) {
+    int thingIdx = g_instanceManager.getAimedThingIdx();
+    if (thingIdx < 0) return JSValueMakeBoolean(ctx, false);
+    g_instanceManager.destroyObject(thingIdx);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+void UltralightManager_OpenBuildContextMenu(void);
+AAPI_CALLBACK(js_manager_openBuildContextMenu) {
+    UltralightManager_OpenBuildContextMenu();
+    return JSValueMakeBoolean(ctx, true);
+}
+
 AAPI_CALLBACK(js_manager_spawnItemObject) {
     if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
     std::string itemId = jsValueToString(ctx, arguments[0]);
@@ -486,6 +517,9 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
     addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);
     addJSMethod(ctx, managerObj, "deactivateInstance", js_manager_deactivateInstance);
+    addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
+    addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);
+    addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);

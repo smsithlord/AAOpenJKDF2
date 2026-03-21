@@ -67,6 +67,9 @@ static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = 
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
 static aarcadecore_set_aimed_thing_t g_fn_set_aimed_thing = NULL;
+static aarcadecore_has_pending_destroy_t g_fn_has_pending_destroy = NULL;
+static aarcadecore_pop_pending_destroy_t g_fn_pop_pending_destroy = NULL;
+static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
 
@@ -294,6 +297,9 @@ void AACoreManager_Init(void)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
     LOAD_FN(set_aimed_thing)
+    LOAD_FN(has_pending_destroy)
+    LOAD_FN(pop_pending_destroy)
+    LOAD_FN(toggle_build_context_menu)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
     #undef LOAD_FN
@@ -406,6 +412,9 @@ void AACoreManager_Shutdown(void)
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
     g_fn_set_aimed_thing = NULL;
+    g_fn_has_pending_destroy = NULL;
+    g_fn_pop_pending_destroy = NULL;
+    g_fn_toggle_build_context_menu = NULL;
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
 
@@ -668,6 +677,40 @@ void AACoreManager_Update(void)
         }
     }
 
+    /* Process pending destroy requests from the DLL */
+    while (g_fn_has_pending_destroy && g_fn_has_pending_destroy()) {
+        int destroyIdx = g_fn_pop_pending_destroy();
+        if (destroyIdx >= 0) {
+            /* Unregister from thing-task map and free GL textures */
+            for (int i = 0; i < g_thingTaskCount; i++) {
+                if (g_thingTaskMap[i].thingIdx == destroyIdx) {
+                    if (g_thingTaskMap[i].glTexture)
+                        glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+                    if (g_thingTaskMap[i].marqueeGlTexture)
+                        glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+                    /* Shift remaining entries down */
+                    for (int j = i; j < g_thingTaskCount - 1; j++)
+                        g_thingTaskMap[j] = g_thingTaskMap[j + 1];
+                    g_thingTaskCount--;
+                    break;
+                }
+            }
+
+            /* Clear aimed-at if this was the aimed thing */
+            if (g_aimedAtThingIdx == destroyIdx)
+                g_aimedAtThingIdx = -1;
+
+            /* Destroy the sithThing in the engine */
+            if (sithWorld_pCurrentWorld && destroyIdx < (int)sithWorld_pCurrentWorld->numThingsLoaded) {
+                sithThing* thing = &sithWorld_pCurrentWorld->things[destroyIdx];
+                if (thing->type != SITH_THING_FREE) {
+                    sithThing_Destroy(thing);
+                    stdPlatform_Printf("AACoreManager: Destroyed sithThing %d\n", destroyIdx);
+                }
+            }
+        }
+    }
+
     /* Poll for screen images that have been cached by the ImageLoader */
     if (g_fn_load_thing_screen_pixels && g_fn_free_pixels) {
         for (int i = 0; i < g_thingTaskCount; i++) {
@@ -832,6 +875,12 @@ void AACoreManager_ObjectUsed(int thingIdx)
 {
     if (g_fn_object_used)
         g_fn_object_used(thingIdx);
+}
+
+void AACoreManager_ToggleBuildContextMenu(void)
+{
+    if (g_fn_toggle_build_context_menu)
+        g_fn_toggle_build_context_menu();
 }
 
 bool AACoreManager_IsFullscreenActive(void)

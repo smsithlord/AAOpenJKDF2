@@ -1,0 +1,268 @@
+/* arcadeHud.css — Shared UI framework styles for AArcade menus */
+
+/* Base page styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+    background: transparent;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Window container */
+.aa-window-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.aa-window {
+    background: rgba(20, 20, 40, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+    min-width: 380px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+}
+
+/* Title bar */
+.aa-titlebar {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: default;
+    flex-shrink: 0;
+}
+
+.aa-titlebar.aa-draggable {
+    cursor: grab;
+}
+
+.aa-titlebar.aa-draggable:active {
+    cursor: grabbing;
+}
+
+.aa-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0f9d58;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aa-titlebar-buttons {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 16px;
+}
+
+.aa-titlebar-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #999;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1;
+}
+
+.aa-titlebar-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.aa-titlebar-btn.aa-btn-close:hover {
+    background: rgba(200, 50, 50, 0.25);
+    border-color: rgba(200, 50, 50, 0.5);
+    color: #ff8888;
+}
+
+/* Content area */
+.aa-content {
+    padding: 20px 24px;
+    overflow-y: auto;
+    max-height: 70vh;
+    user-select: text;
+}
+
+/* Footer row */
+.aa-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+/* Help text flyout */
+.aa-helptext {
+    background: rgba(15, 15, 30, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #999;
+    font-size: 12px;
+    padding: 8px 14px;
+    margin-top: 6px;
+    max-width: 400px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.aa-helptext.aa-visible {
+    opacity: 1;
+}
+
+/* Standard button */
+.aa-btn {
+    display: block;
+    width: 100%;
+    padding: 14px 24px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+}
+
+.aa-btn:hover {
+    background: rgba(15, 157, 88, 0.2);
+    border-color: #0f9d58;
+    color: #fff;
+}
+
+.aa-btn:active {
+    transform: scale(0.98);
+}
+
+.aa-btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Button variants */
+.aa-btn-danger {
+    background: rgba(200, 50, 50, 0.1);
+    border-color: rgba(200, 50, 50, 0.25);
+}
+
+.aa-btn-danger:hover {
+    background: rgba(200, 50, 50, 0.3);
+    border-color: rgba(200, 50, 50, 0.6);
+    color: #ff8888;
+}
+
+.aa-btn-muted {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #888;
+    font-size: 13px;
+}
+
+.aa-btn-muted:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ccc;
+}
+
+/* Footer buttons are inline, not full-width */
+.aa-footer .aa-btn {
+    display: inline-block;
+    width: auto;
+    margin-bottom: 0;
+    padding: 8px 20px;
+    font-size: 13px;
+}
+
+/* Subtitle */
+.aa-subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 16px;
+}
+
+/* Object info (for build context menu etc.) */
+.aa-object-title {
+    font-size: 18px;
+    color: #fff;
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+.aa-object-info {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 16px;
+    word-break: break-all;
+    max-width: 400px;
+}
+
+/* Task list items */
+.aa-task-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+}
+
+.aa-task-item .aa-task-info {
+    flex: 1;
+}
+
+.aa-task-item .aa-task-title {
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.aa-task-item .aa-task-url {
+    font-size: 11px;
+    color: #666;
+    word-break: break-all;
+}
+
+.aa-task-item .aa-task-close {
+    background: rgba(200, 50, 50, 0.15);
+    border: 1px solid rgba(200, 50, 50, 0.25);
+    border-radius: 4px;
+    color: #cc6666;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    margin-left: 10px;
+    transition: all 0.15s;
+}
+
+.aa-task-item .aa-task-close:hover {
+    background: rgba(200, 50, 50, 0.3);
+    border-color: rgba(200, 50, 50, 0.5);
+    color: #ff8888;
+}
+
+.aa-empty-message {
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+    padding: 20px 0;
+}

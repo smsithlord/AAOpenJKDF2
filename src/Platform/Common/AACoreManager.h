@@ -52,6 +52,9 @@ void AACoreManager_OnMapUnloaded(void);
 /* Notify DLL that player "used" (activated) an AArcade object */
 void AACoreManager_ObjectUsed(int thingIdx);
 
+/* Build context menu */
+void AACoreManager_ToggleBuildContextMenu(void);
+
 /* Fullscreen overlay mode for embedded instances */
 bool AACoreManager_IsFullscreenActive(void);
 void AACoreManager_ExitFullscreen(void);

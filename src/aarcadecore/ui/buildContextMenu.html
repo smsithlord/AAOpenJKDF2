@@ -2,17 +2,17 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AArcade - Task Menu</title>
+    <title>AArcade - Build</title>
     <link rel="stylesheet" href="arcadeHud.css">
     <script src="arcadeHud.js"></script>
-    <script src="taskMenu.js"></script>
+    <script src="buildContextMenu.js"></script>
 </head>
 <body>
     <script>
         if (window.arcadeHud) {
-            initTaskMenu();
+            initBuildContextMenu();
         } else {
-            window.addEventListener('load', function() { setTimeout(initTaskMenu, 50); });
+            window.addEventListener('load', function() { setTimeout(initBuildContextMenu, 50); });
         }
     </script>
 </body>

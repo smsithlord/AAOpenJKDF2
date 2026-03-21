@@ -9,6 +9,7 @@
 #include <SDL.h>
 
 static int g_escKeyWasDown = 0;
+static int g_hKeyWasDown = 0;
 
 void aaMainMenu_Update(void)
 {
@@ -23,6 +24,14 @@ void aaMainMenu_Update(void)
             AACoreManager_ToggleMainMenu();
     }
     g_escKeyWasDown = escDown;
+
+    /* H key toggles the build context menu */
+    int hDown = keys[SDL_SCANCODE_H];
+    if (hDown && !g_hKeyWasDown) {
+        if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+            AACoreManager_ToggleBuildContextMenu();
+    }
+    g_hKeyWasDown = hDown;
 
     /* Check if DLL requested opening the engine menu */
     if (AACoreManager_ShouldOpenEngineMenu()) {

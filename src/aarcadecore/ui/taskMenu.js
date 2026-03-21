@@ -1,49 +1,52 @@
-/*
- * taskMenu.js — Task Menu for managing active embedded instances
- */
+/* taskMenu.js — Task Menu for managing active embedded instances */
+
+var taskListEl = null;
+
+function initTaskMenu() {
+    var content = arcadeHud.ui.createWindow({
+        title: 'Active Tasks',
+        showBack: true,
+        showClose: true,
+        onBack: function() { if (window.aapi && aapi.manager) aapi.manager.openMainMenu(); },
+        onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); }
+    });
+
+    taskListEl = document.createElement('div');
+    content.appendChild(taskListEl);
+    refreshList();
+}
 
 function refreshList() {
-    var listEl = document.getElementById('taskList');
-    var subtitleEl = document.getElementById('subtitle');
+    if (!taskListEl) return;
 
     if (!window.aapi || !aapi.manager || !aapi.manager.getActiveInstances) {
-        listEl.innerHTML = '<div class="empty-msg">API not available</div>';
+        taskListEl.innerHTML = '<div class="aa-empty-message">API not available</div>';
         return;
     }
 
     var instances = aapi.manager.getActiveInstances();
     if (!instances || instances.length === 0) {
-        listEl.innerHTML = '<div class="empty-msg">No active instances</div>';
-        subtitleEl.textContent = '0 Active Instances';
+        taskListEl.innerHTML = '<div class="aa-empty-message">No active instances</div>';
         return;
     }
-
-    subtitleEl.textContent = instances.length + ' Active Instance' + (instances.length !== 1 ? 's' : '');
 
     var html = '';
     for (var i = 0; i < instances.length; i++) {
         var inst = instances[i];
-        var displayTitle = inst.title || inst.url || inst.itemId;
-        html += '<div class="task-item">';
-        html += '  <div class="task-info">';
-        html += '    <div class="task-item-id">' + (inst.title ? inst.title : inst.itemId) + '</div>';
-        html += '    <div class="task-url" title="' + inst.url + '">' + inst.url + '</div>';
+        html += '<div class="aa-task-item">';
+        html += '  <div class="aa-task-info">';
+        html += '    <div class="aa-task-title">' + arcadeHud.ui.escapeHtml(inst.title || inst.itemId) + '</div>';
+        html += '    <div class="aa-task-url">' + arcadeHud.ui.escapeHtml(inst.url || '') + '</div>';
         html += '  </div>';
-        html += '  <button class="close-btn" onclick="onDeactivate(\'' + inst.itemId + '\')">Close</button>';
+        html += '  <button class="aa-task-close" onclick="onDeactivate(\'' + arcadeHud.ui.escapeHtml(inst.itemId) + '\')">Close</button>';
         html += '</div>';
     }
-    listEl.innerHTML = html;
+    taskListEl.innerHTML = html;
 }
 
 function onDeactivate(itemId) {
     if (window.aapi && aapi.manager && aapi.manager.deactivateInstance) {
         aapi.manager.deactivateInstance(itemId);
         refreshList();
-    }
-}
-
-function onBack() {
-    if (window.aapi && aapi.manager) {
-        aapi.manager.openMainMenu();
     }
 }

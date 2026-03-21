@@ -26,7 +26,7 @@
 #include "jk.h"
 #include "Platform/Common/AACoreManager.h"
 #include "Win95/Window.h"
-#include "Main/jkSpawn.h"
+// jkSpawn.h removed — H-key spawn replaced by Build Context Menu
 #include "Main/aaMainMenu.h"
 
 #if defined(TARGET_TWL)
@@ -148,8 +148,7 @@ int jkGame_Update()
 
     // AACoreManager_Update() is now called from Window_SdlUpdate (runs every frame including menus)
 
-    // Check for 3DO spawn key and main menu hotkey
-    jkSpawn_Update();
+    // Check for main menu and build context menu hotkeys
     aaMainMenu_Update();
 
     // HACK HACK HACK: Adjust zNear depending on if we're using the scope/camera views

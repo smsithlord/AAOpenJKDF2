@@ -10,6 +10,7 @@ void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
 #define UL_MAINMENU_HTML     "file:///aarcadecore/ui/mainMenu.html"
 #define UL_LIBRARY_HTML      "file:///aarcadecore/ui/library.html"
 #define UL_TASKMENU_HTML     "file:///aarcadecore/ui/taskMenu.html"
+#define UL_BUILDMENU_HTML    "file:///aarcadecore/ui/buildContextMenu.html"
 #define UL_HUD_MATERIAL      "DynScreen.mat"
 
 /* The HUD instance is always alive */
@@ -109,6 +110,14 @@ void UltralightManager_OpenTaskMenu(void)
     if (!g_hudInstance) return;
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening task menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TASKMENU_HTML);
+    g_mainMenuOpen = true;
+}
+
+void UltralightManager_OpenBuildContextMenu(void)
+{
+    if (!g_hudInstance) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening build context menu\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_BUILDMENU_HTML);
     g_mainMenuOpen = true;
 }
 

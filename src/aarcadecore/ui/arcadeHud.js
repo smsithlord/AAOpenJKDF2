@@ -279,6 +279,179 @@ const arcadeHud = (function() {
         }
     }
 
+    /* ========================================================================
+     * UI Window Framework
+     * ======================================================================== */
+
+    var uiState = {
+        windowEl: null,
+        helptextEl: null,
+        wrapperEl: null,
+        isDragging: false,
+        dragOffsetX: 0,
+        dragOffsetY: 0,
+        hasMoved: false
+    };
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    /**
+     * Create a window with title bar, content area, optional footer, and help text flyout.
+     * @param {Object} options
+     * @param {string} options.title - Window title
+     * @param {boolean} [options.showBack] - Show back button
+     * @param {boolean} [options.showClose] - Show close button
+     * @param {Function} [options.onBack] - Back button callback
+     * @param {Function} [options.onClose] - Close button callback
+     * @param {Array} [options.footerButtons] - [{label, className, onClick}]
+     * @returns {HTMLElement} The content container to populate
+     */
+    function createWindow(options) {
+        options = options || {};
+
+        // Wrapper holds window + helptext flyout
+        var wrapper = document.createElement('div');
+        wrapper.className = 'aa-window-wrapper';
+
+        // Window
+        var win = document.createElement('div');
+        win.className = 'aa-window';
+
+        // Title bar
+        var titlebar = document.createElement('div');
+        titlebar.className = 'aa-titlebar aa-draggable';
+
+        var title = document.createElement('div');
+        title.className = 'aa-title';
+        title.textContent = options.title || '';
+        titlebar.appendChild(title);
+
+        var buttons = document.createElement('div');
+        buttons.className = 'aa-titlebar-buttons';
+
+        if (options.showBack && options.onBack) {
+            var backBtn = document.createElement('button');
+            backBtn.className = 'aa-titlebar-btn';
+            backBtn.textContent = 'Back';
+            backBtn.addEventListener('click', function(e) { e.stopPropagation(); options.onBack(); });
+            buttons.appendChild(backBtn);
+        }
+
+        if (options.showClose && options.onClose) {
+            var closeBtn = document.createElement('button');
+            closeBtn.className = 'aa-titlebar-btn aa-btn-close';
+            closeBtn.textContent = '\u2715';
+            closeBtn.addEventListener('click', function(e) { e.stopPropagation(); options.onClose(); });
+            buttons.appendChild(closeBtn);
+        }
+
+        titlebar.appendChild(buttons);
+        win.appendChild(titlebar);
+
+        // Content area
+        var content = document.createElement('div');
+        content.className = 'aa-content';
+        win.appendChild(content);
+
+        // Optional footer
+        if (options.footerButtons && options.footerButtons.length > 0) {
+            var footer = document.createElement('div');
+            footer.className = 'aa-footer';
+            for (var i = 0; i < options.footerButtons.length; i++) {
+                var fb = options.footerButtons[i];
+                var fbtn = document.createElement('button');
+                fbtn.className = 'aa-btn ' + (fb.className || '');
+                fbtn.textContent = fb.label;
+                if (fb.onClick) fbtn.addEventListener('click', fb.onClick);
+                footer.appendChild(fbtn);
+            }
+            win.appendChild(footer);
+        }
+
+        wrapper.appendChild(win);
+
+        // Help text flyout
+        var helptext = document.createElement('div');
+        helptext.className = 'aa-helptext';
+        wrapper.appendChild(helptext);
+
+        // Store references
+        uiState.windowEl = win;
+        uiState.helptextEl = helptext;
+        uiState.wrapperEl = wrapper;
+        uiState.hasMoved = false;
+
+        // Append to body
+        document.body.appendChild(wrapper);
+
+        // Set up dragging
+        setupDrag(titlebar, wrapper);
+
+        // Set up help text hover
+        setupHelpText(helptext);
+
+        return content;
+    }
+
+    function setupDrag(titlebar, wrapper) {
+        titlebar.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'BUTTON') return;
+            e.preventDefault();
+
+            // On first drag, switch from flex-centered to absolute positioning
+            if (!uiState.hasMoved) {
+                var rect = wrapper.getBoundingClientRect();
+                wrapper.style.position = 'absolute';
+                wrapper.style.left = rect.left + 'px';
+                wrapper.style.top = rect.top + 'px';
+                // Remove flex centering from body
+                document.body.style.justifyContent = 'flex-start';
+                document.body.style.alignItems = 'flex-start';
+                uiState.hasMoved = true;
+            }
+
+            uiState.isDragging = true;
+            uiState.dragOffsetX = e.clientX - wrapper.offsetLeft;
+            uiState.dragOffsetY = e.clientY - wrapper.offsetTop;
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!uiState.isDragging) return;
+            wrapper.style.left = (e.clientX - uiState.dragOffsetX) + 'px';
+            wrapper.style.top = (e.clientY - uiState.dragOffsetY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            uiState.isDragging = false;
+        });
+    }
+
+    function setupHelpText(helptextEl) {
+        document.addEventListener('mouseover', function(e) {
+            var el = e.target;
+            while (el && el !== document.body) {
+                var text = el.getAttribute('helpText');
+                if (text) {
+                    helptextEl.textContent = text;
+                    helptextEl.classList.add('aa-visible');
+                    return;
+                }
+                el = el.parentElement;
+            }
+            helptextEl.classList.remove('aa-visible');
+        });
+
+        document.addEventListener('mouseout', function(e) {
+            if (!e.relatedTarget || e.relatedTarget === document.documentElement) {
+                helptextEl.classList.remove('aa-visible');
+            }
+        });
+    }
+
     // Public API
     return {
         initialize: initialize,
@@ -291,6 +464,12 @@ const arcadeHud = (function() {
 
         // Database
         getSupportedEntryTypes: getSupportedEntryTypes,
+
+        // UI framework
+        ui: {
+            createWindow: createWindow,
+            escapeHtml: escapeHtml
+        },
 
         // Direct access to aapi (for advanced usage)
         get aapi() {

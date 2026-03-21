@@ -161,6 +161,13 @@ AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
 /* Selector ray — notify DLL which AArcade thing the player is aiming at (-1 = none) */
 AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx);
 
+/* Destroy pipeline — DLL cleans up state, host polls to destroy sithThing */
+AARCADECORE_EXPORT bool aarcadecore_has_pending_destroy(void);
+AARCADECORE_EXPORT int  aarcadecore_pop_pending_destroy(void);
+
+/* Toggle the build context menu overlay */
+AARCADECORE_EXPORT void aarcadecore_toggle_build_context_menu(void);
+
 /* Check if an embedded instance is being displayed fullscreen in the overlay */
 AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void);
 
@@ -211,6 +218,9 @@ typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pi
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 typedef void  (*aarcadecore_set_aimed_thing_t)(int thingIdx);
+typedef bool  (*aarcadecore_has_pending_destroy_t)(void);
+typedef int   (*aarcadecore_pop_pending_destroy_t)(void);
+typedef void  (*aarcadecore_toggle_build_context_menu_t)(void);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);
 

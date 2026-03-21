@@ -89,6 +89,11 @@ public:
     int getAimedThingIdx() const { return aimedThingIdx_; }
     const SpawnedObject* getAimedObject() const;
 
+    /* Destroy an object — cleans up DLL state, queues thingIdx for host to destroy */
+    void destroyObject(int thingIdx);
+    bool hasPendingDestroy() const;
+    int popPendingDestroy();
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
@@ -107,6 +112,7 @@ private:
     std::string currentMapId_;
 
     std::queue<SpawnRequest> pendingSpawns_;
+    std::queue<int> pendingDestroys_;
     SpawnRequest lastPopped_;
 
     void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);

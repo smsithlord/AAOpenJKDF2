@@ -399,3 +399,26 @@ To use `aarcadecore.dll` in a different game engine:
 8. In your audio callback, call `aarcadecore_get_audio_samples(buffer, frames)`
 9. Call `aarcadecore_update()` every frame
 10. Call `aarcadecore_shutdown()` on exit
+
+## Recent Features (since instance persistence)
+
+### AAOJK_ObjectUsed COG Verb
+Custom COG verb registered in `sithCog_StartupEnhanced()` (before the `Main_bEnhancedCogVerbs` guard). When a player "uses" an AArcade template object, the COG calls `AAOJK_ObjectUsed(GetSenderRef())` which flows through `AACoreManager_ObjectUsed(thingIdx)` → `aarcadecore_object_used(thingIdx)` → `InstanceManager::objectUsed()`. This selects the object and activates its embedded instance (e.g. starts SWB video). Only one selected object at a time.
+
+### Fullscreen Overlay Mode
+Using an already-active object enters fullscreen overlay mode where the SWB renders to the fullscreen overlay (1920x1080 BGRA) instead of just the sithThing screen. `g_fullscreenInstance` pointer controls rendering, input routing, and `is_active()`/`is_main_menu_open()` responses. Escape exits fullscreen. Mouse coords scale from overlay space to SWB native resolution (1280x720) via `get_width`/`get_height` vtable entries.
+
+### Selector Ray
+Per-frame raycast from player aim direction in `AACoreManager_Update()`. Uses `sithCollision_SearchRadiusForThings` with `flags=0` to find things. Iterates results to find the first AArcade thing (matched against `g_thingTaskMap`). Notifies DLL via `aarcadecore_set_aimed_thing(thingIdx)` only on change. `InstanceManager::setAimedThing()` tracks the aimed object and prints title.
+
+### Build Context Menu
+H key opens a Build Context Menu overlay via `aarcadecore_toggle_build_context_menu()`. Uses the JS bridge `aapi.manager.getAimedObjectInfo()` to query the aimed object. Shows "Move Object" and "Destroy Object" buttons when aiming at an object, or "No object aimed at" otherwise.
+
+### Destroy Pipeline
+`aapi.manager.destroyAimedObject()` triggers `InstanceManager::destroyObject(thingIdx)` which: clears selection/aim/fullscreen, deactivates embedded instance, deletes from SQLite via `deleteInstanceObject()`, removes from objects vector, and queues thingIdx. Host polls `has_pending_destroy()`/`pop_pending_destroy()`, unregisters thing-task mapping (frees GL textures), and calls `sithThing_Destroy()`.
+
+### UI Window Framework
+See `LLM-UI-README.md` for full documentation. `arcadeHud.ui.createWindow(options)` creates a draggable window with title bar, content area, optional footer, and help text flyout. All menus (mainMenu, taskMenu, buildContextMenu) are refactored to use this shared framework. Styles in `arcadeHud.css`, logic in `arcadeHud.js`.
+
+### API Version
+Bumped to 3. New exports: `object_used`, `set_aimed_thing`, `toggle_build_context_menu`, `is_fullscreen_active`, `exit_fullscreen`, `has_pending_destroy`, `pop_pending_destroy`.

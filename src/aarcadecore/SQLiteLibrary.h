@@ -53,6 +53,7 @@ public:
     std::string createInstance(const std::string& title, const std::string& mapId);
     std::vector<Arcade::InstanceObject> getInstanceObjects(const std::string& instanceId);
     void saveInstanceObject(const Arcade::InstanceObject& obj);
+    void deleteInstanceObject(const std::string& instanceId, const std::string& objectKey);
 
 private:
     sqlite3* db_;

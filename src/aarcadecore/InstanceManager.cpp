@@ -502,6 +502,72 @@ const SpawnedObject* InstanceManager::getAimedObject() const
     return nullptr;
 }
 
+/* --- Destroy --- */
+
+void InstanceManager::destroyObject(int thingIdx)
+{
+    if (thingIdx < 0) return;
+
+    /* Find the object */
+    int objIdx = -1;
+    for (int i = 0; i < (int)objects_.size(); i++) {
+        if (objects_[i].thingIdx == thingIdx) { objIdx = i; break; }
+    }
+    if (objIdx < 0) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: destroyObject — thingIdx=%d not found\n", thingIdx);
+        return;
+    }
+
+    const SpawnedObject& obj = objects_[objIdx];
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Destroying object #%d (thingIdx=%d, item=%s, key=%s)\n",
+                          objIdx, thingIdx, obj.itemId.c_str(), obj.objectKey.c_str());
+
+    /* Clear aimed-at if this is the aimed object */
+    if (aimedThingIdx_ == thingIdx) aimedThingIdx_ = -1;
+
+    /* Exit fullscreen if this object's instance is fullscreen */
+    if (aarcadecore_getFullscreenInstance()) {
+        const EmbeddedItemInstance* inst = getItemInstance(obj.itemId);
+        if (inst && inst->browser == aarcadecore_getFullscreenInstance())
+            aarcadecore_setFullscreenInstance(NULL);
+    }
+
+    /* Deselect if this is the selected object */
+    if (selectedObjectIndex_ == objIdx)
+        selectedObjectIndex_ = -1;
+
+    /* Deactivate embedded instance if active */
+    deactivateInstance(obj.itemId);
+
+    /* Delete from database */
+    if (!currentInstanceId_.empty())
+        g_library.deleteInstanceObject(currentInstanceId_, obj.objectKey);
+
+    /* Queue thingIdx for host to destroy the sithThing */
+    pendingDestroys_.push(thingIdx);
+
+    /* Remove from objects_ vector */
+    objects_.erase(objects_.begin() + objIdx);
+
+    /* Fix selectedObjectIndex_ after erasure */
+    if (selectedObjectIndex_ > objIdx)
+        selectedObjectIndex_--;
+}
+
+bool InstanceManager::hasPendingDestroy() const
+{
+    return !pendingDestroys_.empty();
+}
+
+int InstanceManager::popPendingDestroy()
+{
+    int idx = pendingDestroys_.front();
+    pendingDestroys_.pop();
+    return idx;
+}
+
 const SpawnedObject* InstanceManager::getSelectedObject() const
 {
     return getSpawned(selectedObjectIndex_);
