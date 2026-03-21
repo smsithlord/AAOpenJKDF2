@@ -2,7 +2,7 @@
  * Libretro Host Implementation for OpenJKDF2
  *
  * Loads and runs Libretro cores (emulators) within the game,
- * displaying output on dynamic textures like compscreen.mat
+ * displaying output on dynamic textures like DynScreen.mat
  */
 
 #include "libretro_host.h"

@@ -433,9 +433,9 @@ int Main_Startup(const char *cmdline)
 
         std3D_Startup(); // Added
 
-        // Register dynamic texture callback for compscreen.mat
+        // Register dynamic texture callback for DynScreen.mat
         // Uncomment the line below to enable the example callback
-        //rdDynamicTexture_Register("compscreen.mat", rdDynamicTexture_ExampleCallback, NULL);
+        //rdDynamicTexture_Register("DynScreen.mat", rdDynamicTexture_ExampleCallback, NULL);
 
         // Load and initialize aarcadecore.dll
         AACoreManager_Init();

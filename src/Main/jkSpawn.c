@@ -39,9 +39,9 @@ void jkSpawn_Update(void)
         return;
 
     /* Look up the template from the level's template list */
-    tmpl = sithTemplate_GetEntryByName("slcompmoniter");
+    tmpl = sithTemplate_GetEntryByName("dyn_videosign");
     if (!tmpl) {
-        stdPlatform_Printf("jkSpawn: Template 'slcompmoniter' not found in level\n");
+        stdPlatform_Printf("jkSpawn: Template 'dyn_videosign' not found in level\n");
         return;
     }
 

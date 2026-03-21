@@ -4,7 +4,7 @@
 
 #define LIBRETRO_CORE_PATH "bsnes_libretro.dll"
 #define LIBRETRO_GAME_PATH "testgame.zip"
-#define LIBRETRO_MATERIAL  "compscreen.mat"
+#define LIBRETRO_MATERIAL  "DynScreen.mat"
 
 static EmbeddedInstance* g_activeInstance = NULL;
 

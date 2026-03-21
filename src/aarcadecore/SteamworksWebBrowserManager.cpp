@@ -5,7 +5,7 @@ EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const cha
 void SteamworksWebBrowserInstance_Destroy(EmbeddedInstance* inst);
 
 #define SWB_DEFAULT_URL      "https://google.com/"
-#define SWB_DEFAULT_MATERIAL "compscreen.mat"
+#define SWB_DEFAULT_MATERIAL "DynScreen.mat"
 
 static EmbeddedInstance* g_activeInstance = NULL;
 

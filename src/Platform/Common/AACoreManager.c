@@ -83,8 +83,8 @@ typedef struct {
 static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
 static int g_thingTaskCount = 0;
 
-/* Cached compscreen material and original texture_id for restore */
-static rdMaterial* g_compscreenMaterial = NULL;
+/* Cached dynscreen material and original texture_id for restore */
+static rdMaterial* g_dynscreenMaterial = NULL;
 static rdTexture* g_originalTextures = NULL;
 static int g_origAlphaTexId = -1;
 static int g_origOpaqueTexId = -1;
@@ -155,10 +155,10 @@ static GLuint aacore_create_solid_texture(uint16_t color)
     return tex;
 }
 
-/* Find the compscreen rdMaterial on a sithThing's model, cache it */
-static rdMaterial* aacore_find_compscreen_material(sithThing* thing)
+/* Find the dynscreen rdMaterial on a sithThing's model, cache it */
+static rdMaterial* aacore_find_dynscreen_material(sithThing* thing)
 {
-    if (g_compscreenMaterial) return g_compscreenMaterial;
+    if (g_dynscreenMaterial) return g_dynscreenMaterial;
     if (!thing || thing->rdthing.type != RD_THINGTYPE_MODEL || !thing->rdthing.model3)
         return NULL;
 
@@ -166,12 +166,12 @@ static rdMaterial* aacore_find_compscreen_material(sithThing* thing)
     for (unsigned int m = 0; m < model->numMaterials; m++) {
         rdMaterial* mat = model->materials[m];
         if (!mat || mat->num_textures == 0) continue;
-        if (strstr(mat->mat_full_fpath, "compscreen")) {
-            g_compscreenMaterial = mat;
+        if (strstr(mat->mat_full_fpath, "dynscreen")) {
+            g_dynscreenMaterial = mat;
             g_originalTextures = mat->textures;
             g_origAlphaTexId = mat->textures[0].alphaMats[0].texture_id;
             g_origOpaqueTexId = mat->textures[0].opaqueMats[0].texture_id;
-            stdPlatform_Printf("AACoreManager: Found compscreen material %p (%s, origAlphaTexId=%d, origOpaqueTexId=%d)\n",
+            stdPlatform_Printf("AACoreManager: Found dynscreen material %p (%s, origAlphaTexId=%d, origOpaqueTexId=%d)\n",
                               mat, mat->mat_full_fpath, g_origAlphaTexId, g_origOpaqueTexId);
             return mat;
         }
@@ -279,7 +279,7 @@ void AACoreManager_Init(void)
     }
 
     /* Dynamic texture callback disabled — using per-thing GL texture swap instead.
-     * rdDynamicTexture_Register("compscreen.mat", aacore_texture_callback, NULL); */
+     * rdDynamicTexture_Register("dynscreen.mat", aacore_texture_callback, NULL); */
 
     /* Open SDL audio device to play DLL audio */
     {
@@ -373,7 +373,7 @@ void AACoreManager_Shutdown(void)
         }
     }
     g_thingTaskCount = 0;
-    g_compscreenMaterial = NULL;
+    g_dynscreenMaterial = NULL;
     g_originalTextures = NULL;
     g_origAlphaTexId = -1;
     g_origOpaqueTexId = -1;
@@ -384,15 +384,15 @@ void AACoreManager_Shutdown(void)
     stdPlatform_Printf("AACoreManager: Shutdown complete\n");
 }
 
-/* Spawn a compscreen thing at the player's aim point (reuses jkSpawn raycast logic) */
+/* Spawn a dynscreen thing at the player's aim point (reuses jkSpawn raycast logic) */
 static sithThing* aacore_spawn_at_player_aim(void)
 {
     sithThing* player = sithPlayer_pLocalPlayerThing;
     if (!player) return NULL;
 
-    sithThing* tmpl = sithTemplate_GetEntryByName("slcompmoniter");
+    sithThing* tmpl = sithTemplate_GetEntryByName("dyn_videosign");
     if (!tmpl) {
-        stdPlatform_Printf("AACoreManager: Template 'slcompmoniter' not found\n");
+        stdPlatform_Printf("AACoreManager: Template 'dyn_videosign' not found\n");
         return NULL;
     }
 
@@ -575,10 +575,10 @@ void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskInd
 
     sithThing* thing = (sithThing*)pSithThing;
 
-    /* Find and cache the compscreen material on first call */
-    rdMaterial* mat = aacore_find_compscreen_material(thing);
+    /* Find and cache the dynscreen material on first call */
+    rdMaterial* mat = aacore_find_dynscreen_material(thing);
     if (!mat) {
-        stdPlatform_Printf("AACoreManager: WARNING: No compscreen material found on thing %d\n", thingIdx);
+        stdPlatform_Printf("AACoreManager: WARNING: No dynscreen material found on thing %d\n", thingIdx);
         return;
     }
 
@@ -599,7 +599,7 @@ void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskInd
 
 void AACoreManager_PreRenderThing(void* pSithThing)
 {
-    if (!g_compscreenMaterial || g_thingTaskCount == 0) return;
+    if (!g_dynscreenMaterial || g_thingTaskCount == 0) return;
 
     for (int i = 0; i < g_thingTaskCount; i++) {
         if (g_thingTaskMap[i].thing == pSithThing) {

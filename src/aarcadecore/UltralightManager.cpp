@@ -10,7 +10,7 @@ void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
 #define UL_MAINMENU_HTML     "file:///aarcadecore/ui/mainMenu.html"
 #define UL_LIBRARY_HTML      "file:///aarcadecore/ui/library.html"
 #define UL_TASKMENU_HTML     "file:///aarcadecore/ui/taskMenu.html"
-#define UL_HUD_MATERIAL      "compscreen.mat"
+#define UL_HUD_MATERIAL      "DynScreen.mat"
 
 /* The HUD instance is always alive */
 static EmbeddedInstance* g_hudInstance = NULL;

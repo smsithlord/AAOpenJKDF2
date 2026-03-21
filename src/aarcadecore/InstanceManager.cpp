@@ -125,10 +125,10 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
         /* TEST: Libretro instance for items with "Mario" in the title */
         if (g_host.host_printf)
             g_host.host_printf("InstanceManager: Title '%s' contains 'Mario' — creating Libretro instance\n", item.title.c_str());
-        task = LibretroInstance_Create("bsnes_libretro.dll", "testgame.zip", "compscreen.mat");
+        task = LibretroInstance_Create("bsnes_libretro.dll", "testgame.zip", "DynScreen.mat");
     } else {
         /* Default: Steamworks Web Browser */
-        task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "compscreen.mat");
+        task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "DynScreen.mat");
     }
 
     if (task && task->vtable->init(task)) {

@@ -196,7 +196,7 @@ AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void)
     /* The active instance determines what renders on in-game screens */
     if (g_activeInstance && g_activeInstance->target_material)
         return g_activeInstance->target_material;
-    return "compscreen.mat"; /* default fallback */
+    return "DynScreen.mat"; /* default fallback */
 }
 
 AARCADECORE_EXPORT void aarcadecore_render_texture(

@@ -2,7 +2,7 @@
  * Libretro Integration for OpenJKDF2
  *
  * Connects Libretro emulator output to in-game dynamic textures
- * Specifically displays emulator output on compscreen.mat
+ * Specifically displays emulator output on DynScreen.mat
  */
 
 #include "libretro_host.h"
@@ -24,7 +24,7 @@ static LibretroHost* g_libretro = NULL;
 static uint32_t g_frame_counter = 0;
 
 /* ========================================================================
- * Dynamic Texture Callback for compscreen.mat
+ * Dynamic Texture Callback for DynScreen.mat
  * ======================================================================== */
 
 static void libretro_compscreen_callback(
@@ -159,11 +159,11 @@ void libretro_integration_init(void)
         return;
     }
 
-    /* Register dynamic texture callback for compscreen.mat */
-    rdDynamicTexture_Register("compscreen.mat", libretro_compscreen_callback, NULL);
+    /* Register dynamic texture callback for DynScreen.mat */
+    rdDynamicTexture_Register("DynScreen.mat", libretro_compscreen_callback, NULL);
 
     stdPlatform_Printf("Libretro: Integration initialized successfully\n");
-    stdPlatform_Printf("Libretro: Emulator output will appear on compscreen.mat\n");
+    stdPlatform_Printf("Libretro: Emulator output will appear on DynScreen.mat\n");
 }
 
 static int16_t libretro_build_joypad_state(void)
