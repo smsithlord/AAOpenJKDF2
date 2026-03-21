@@ -33,6 +33,7 @@ html, body {
     display: flex;
     flex-direction: column;
     user-select: none;
+    z-index: 1;
 }
 
 /* Title bar */
@@ -157,12 +158,13 @@ html, body {
     flex-shrink: 0;
 }
 
-/* Help text flyout — absolute so it doesn't push content */
+/* Help text flyout — absolute, behind window */
 .aa-helptext {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: -32px;
+    z-index: 0;
+    top: 100%;
     background: rgba(15, 15, 30, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;

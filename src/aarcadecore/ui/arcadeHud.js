@@ -582,6 +582,26 @@ const arcadeHud = (function() {
             hasLoadedOnce: false
         };
 
+        // Restore persisted options
+        try {
+            var saved = JSON.parse(localStorage.getItem('libraryOpts'));
+            if (saved) {
+                if (saved.type) state.type = saved.type;
+                if (typeof saved.displayMode === 'number') state.displayMode = saved.displayMode;
+                if (saved.searchTerm) state.searchTerm = saved.searchTerm;
+            }
+        } catch (e) {}
+
+        function saveOpts() {
+            try {
+                localStorage.setItem('libraryOpts', JSON.stringify({
+                    type: state.type,
+                    displayMode: state.displayMode,
+                    searchTerm: state.searchTerm
+                }));
+            } catch (e) {}
+        }
+
         // Build DOM
         var wrapper = document.createElement('div');
         wrapper.className = 'aa-library-wrapper';
@@ -615,6 +635,7 @@ const arcadeHud = (function() {
         slider.addEventListener('change', function() {
             state.displayMode = parseInt(slider.value);
             grid.className = 'aa-library-grid aa-library-mode-' + DISPLAY_MODES[state.displayMode];
+            saveOpts();
         });
         bar.appendChild(slider);
 
@@ -650,8 +671,23 @@ const arcadeHud = (function() {
         wrapper.appendChild(bar);
         containerEl.appendChild(wrapper);
 
-        // Show initial message
-        grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
+        // Apply restored state to UI
+        grid.className = 'aa-library-grid aa-library-mode-' + DISPLAY_MODES[state.displayMode];
+        slider.value = String(state.displayMode);
+        if (state.searchTerm) searchInput.value = state.searchTerm;
+        // Highlight the correct type button
+        var typeBtns = typesDiv.querySelectorAll('.aa-library-type-btn');
+        for (var tb = 0; tb < typeBtns.length; tb++) {
+            typeBtns[tb].classList.toggle('aa-active', typeBtns[tb].getAttribute('data-type') === state.type);
+        }
+
+        // Show initial content: auto-search if restored term, otherwise show message
+        if (state.searchTerm) {
+            state.isSearchMode = true;
+            doSearch(state.searchTerm);
+        } else {
+            grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
+        }
 
         // Search debounce
         var searchTimeout = null;
@@ -662,10 +698,12 @@ const arcadeHud = (function() {
                 if (term) {
                     state.isSearchMode = true;
                     state.searchTerm = term;
+                    saveOpts();
                     doSearch(term);
                 } else {
                     state.isSearchMode = false;
                     state.searchTerm = '';
+                    saveOpts();
                     if (state.hasLoadedOnce) {
                         loadEntries(true);
                     } else {
@@ -740,7 +778,10 @@ const arcadeHud = (function() {
             state.isSearchMode = false;
             state.searchTerm = '';
             searchInput.value = '';
-            loadEntries(true);
+            saveOpts();
+            if (state.hasLoadedOnce) {
+                loadEntries(true);
+            }
         }
 
         function renderCards(entries, append) {

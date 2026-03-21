@@ -9,6 +9,7 @@
 #include "aarcadecore_internal.h"
 #include <Ultralight/Ultralight.h>
 #include <Ultralight/MouseEvent.h>
+#include <Ultralight/ScrollEvent.h>
 #include <AppCore/Platform.h>
 #include <JavaScriptCore/JavaScript.h>
 #ifdef _WIN32
@@ -819,6 +820,17 @@ static void ul_mouse_up(EmbeddedInstance* inst, int button)
     data->view->FireMouseEvent(evt);
 }
 
+static void ul_mouse_wheel(EmbeddedInstance* inst, int delta)
+{
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    ScrollEvent evt;
+    evt.type = ScrollEvent::kType_ScrollByPixel;
+    evt.delta_x = 0;
+    evt.delta_y = delta;
+    data->view->FireScrollEvent(evt);
+}
+
 static const EmbeddedInstanceVtable g_ulVtable = {
     ul_init,
     ul_shutdown,
@@ -831,7 +843,7 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_mouse_move,
     ul_mouse_down,
     ul_mouse_up,
-    NULL, /* mouse_wheel */
+    ul_mouse_wheel,
     NULL, /* get_title */
     NULL, NULL /* get_width, get_height */
 };
