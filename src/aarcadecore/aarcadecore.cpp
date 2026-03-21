@@ -42,6 +42,9 @@ static int addTask(EmbeddedInstance* inst)
     return g_taskCount++;
 }
 
+/* Non-static wrapper for InstanceManager to call */
+int aarcadecore_addTask(EmbeddedInstance* inst) { return addTask(inst); }
+
 static int getActiveTaskIndex(void)
 {
     for (int i = 0; i < g_taskCount; i++) {
@@ -165,6 +168,15 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
     LibretroManager_Update();
     SteamworksWebBrowserManager_Update();
     g_imageLoader.update();
+
+    /* Update all tasks in the task list (includes dynamically spawned browsers) */
+    for (int i = 0; i < g_taskCount; i++) {
+        if (g_tasks[i] && g_tasks[i]->vtable->update)
+            g_tasks[i]->vtable->update(g_tasks[i]);
+    }
+
+    /* Sync titles from browser instances */
+    g_instanceManager.updateTitles();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
@@ -370,4 +382,9 @@ AARCADECORE_EXPORT int aarcadecore_get_selected_thing_idx(void)
 AARCADECORE_EXPORT int aarcadecore_get_active_instance_count(void)
 {
     return g_instanceManager.getActiveInstanceCount();
+}
+
+AARCADECORE_EXPORT int aarcadecore_get_thing_task_index(int thingIdx)
+{
+    return g_instanceManager.getTaskIndexForThing(thingIdx);
 }

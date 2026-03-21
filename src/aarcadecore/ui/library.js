@@ -630,7 +630,7 @@ class LibraryBrowser {
         html += `<div class="detail-section">
             <h4>Actions</h4>
             <button class="spawn-btn" style="padding: 10px 20px; background: #0f9d58; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;"
-                onclick="window.libraryBrowser.spawnObject('${this.escapeAttr(entry.id)}', '${this.escapeAttr(entry.file || '')}', '${this.escapeAttr(entry.screen || '')}')">
+                onclick="window.libraryBrowser.spawnObject('${this.escapeAttr(entry.id)}', '${this.escapeAttr(entry.file || '')}', '${this.escapeAttr(entry.screen || '')}', '${this.escapeAttr(entry.title || '')}')">
                 Spawn Object
             </button>
         </div>`;
@@ -717,9 +717,9 @@ class LibraryBrowser {
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
-    spawnObject(itemId, fileUrl, previewUrl) {
+    spawnObject(itemId, fileUrl, previewUrl, itemTitle) {
         if (window.aapi && aapi.manager && aapi.manager.spawnItemObject) {
-            aapi.manager.spawnItemObject(itemId, fileUrl, previewUrl);
+            aapi.manager.spawnItemObject(itemId, fileUrl, previewUrl, itemTitle || '');
             /* Close the detail modal */
             this.elements.modalOverlay.style.display = 'none';
             /* Close the menu so the player can see the spawned object */

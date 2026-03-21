@@ -140,6 +140,7 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(
 AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(char* itemIdOut, int itemIdSize, char* urlOut, int urlSize);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
+AARCADECORE_EXPORT int  aarcadecore_get_thing_task_index(int thingIdx);
 
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
@@ -173,6 +174,7 @@ typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int he
 typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
 typedef void  (*aarcadecore_pop_pending_spawn_t)(char* itemIdOut, int itemIdSize, char* urlOut, int urlSize);
 typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
+typedef int   (*aarcadecore_get_thing_task_index_t)(int thingIdx);
 
 #ifdef __cplusplus
 }

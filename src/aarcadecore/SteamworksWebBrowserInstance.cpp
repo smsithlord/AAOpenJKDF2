@@ -33,6 +33,9 @@ struct SteamworksData {
     uint32_t bufferHeight;
     bool hasNewFrame;
 
+    /* Page title — set by HTML_ChangedTitle_t callback */
+    char title[256];
+
     /* Callback helpers */
     CCallResult<SteamworksData, HTML_BrowserReady_t> callResultBrowserReady;
 
@@ -40,6 +43,7 @@ struct SteamworksData {
 
     STEAM_CALLBACK(SteamworksData, OnNeedsPaint, HTML_NeedsPaint_t);
     STEAM_CALLBACK(SteamworksData, OnStartRequest, HTML_StartRequest_t);
+    STEAM_CALLBACK(SteamworksData, OnChangedTitle, HTML_ChangedTitle_t);
     STEAM_CALLBACK(SteamworksData, OnJSAlert, HTML_JSAlert_t);
     STEAM_CALLBACK(SteamworksData, OnJSConfirm, HTML_JSConfirm_t);
     STEAM_CALLBACK(SteamworksData, OnFileOpenDialog, HTML_FileOpenDialog_t);
@@ -91,6 +95,18 @@ void SteamworksData::OnStartRequest(HTML_StartRequest_t* pParam)
     ISteamHTMLSurface* surface = SteamHTMLSurface();
     if (surface)
         surface->AllowStartRequest(browserHandle, true);
+}
+
+void SteamworksData::OnChangedTitle(HTML_ChangedTitle_t* pParam)
+{
+    if (!pParam || pParam->unBrowserHandle != browserHandle)
+        return;
+    if (pParam->pchTitle) {
+        strncpy(title, pParam->pchTitle, sizeof(title) - 1);
+        title[sizeof(title) - 1] = '\0';
+        if (g_host.host_printf)
+            g_host.host_printf("SWB: Title changed: \"%s\"\n", title);
+    }
 }
 
 void SteamworksData::OnJSAlert(HTML_JSAlert_t* pParam)
@@ -284,6 +300,12 @@ static void swb_mouse_wheel(EmbeddedInstance* inst, int delta)
     if (surface) surface->MouseWheel(data->browserHandle, delta);
 }
 
+static const char* swb_get_title(EmbeddedInstance* inst)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    return data->title[0] ? data->title : NULL;
+}
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
@@ -296,7 +318,8 @@ static const EmbeddedInstanceVtable g_swbVtable = {
     swb_mouse_move,
     swb_mouse_down,
     swb_mouse_up,
-    swb_mouse_wheel
+    swb_mouse_wheel,
+    swb_get_title
 };
 
 /* ========================================================================
@@ -317,6 +340,7 @@ EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const cha
     data->bufferWidth = 0;
     data->bufferHeight = 0;
     data->hasNewFrame = false;
+    data->title[0] = '\0';
 
     inst->type = EMBEDDED_STEAMWORKS_BROWSER;
     inst->vtable = &g_swbVtable;

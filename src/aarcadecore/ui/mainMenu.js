@@ -20,6 +20,10 @@ function onLibraryBrowser() {
     if (window.aapi) aapi.manager.openLibraryBrowser();
 }
 
+function onTaskMenu() {
+    if (window.aapi) aapi.manager.openTaskMenu();
+}
+
 function onTestLibretro() {
     if (window.aapi) aapi.manager.startLibretro();
 }

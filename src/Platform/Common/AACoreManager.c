@@ -56,6 +56,7 @@ static aarcadecore_render_overlay_t        g_fn_render_overlay = NULL;
 static aarcadecore_has_pending_spawn_t    g_fn_has_pending_spawn = NULL;
 static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
 static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
+static aarcadecore_get_thing_task_index_t g_fn_get_thing_task_index = NULL;
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -252,6 +253,7 @@ void AACoreManager_Init(void)
     LOAD_FN(has_pending_spawn)
     LOAD_FN(pop_pending_spawn)
     LOAD_FN(confirm_spawn)
+    LOAD_FN(get_thing_task_index)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -351,6 +353,7 @@ void AACoreManager_Shutdown(void)
     g_fn_has_pending_spawn = NULL;
     g_fn_pop_pending_spawn = NULL;
     g_fn_confirm_spawn = NULL;
+    g_fn_get_thing_task_index = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -606,9 +609,18 @@ void AACoreManager_PreRenderThing(void* pSithThing)
         if (g_thingTaskMap[i].thing == pSithThing) {
             /* Flush pending faces so previous thing's faces draw with previous texture_id */
             rdCache_Flush();
-            /* Overwrite the shared surface's texture_id to this thing's GL texture */
-            g_originalTextures[0].alphaMats[0].texture_id = g_thingTaskMap[i].glTexture;
-            g_originalTextures[0].opaqueMats[0].texture_id = g_thingTaskMap[i].glTexture;
+
+            /* Try to use the task's rendered texture (browser content) */
+            GLuint texToUse = g_thingTaskMap[i].glTexture; /* fallback: solid color */
+            if (g_fn_get_thing_task_index) {
+                int taskIdx = g_fn_get_thing_task_index(g_thingTaskMap[i].thingIdx);
+                if (taskIdx >= 0 && taskIdx < MAX_TASKS && g_taskTextures[taskIdx]) {
+                    texToUse = g_taskTextures[taskIdx];
+                }
+            }
+
+            g_originalTextures[0].alphaMats[0].texture_id = texToUse;
+            g_originalTextures[0].opaqueMats[0].texture_id = texToUse;
             return;
         }
     }

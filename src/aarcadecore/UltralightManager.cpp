@@ -9,6 +9,7 @@ void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
 #define UL_BLANK_HTML        "file:///aarcadecore/ui/blank.html"
 #define UL_MAINMENU_HTML     "file:///aarcadecore/ui/mainMenu.html"
 #define UL_LIBRARY_HTML      "file:///aarcadecore/ui/library.html"
+#define UL_TASKMENU_HTML     "file:///aarcadecore/ui/taskMenu.html"
 #define UL_HUD_MATERIAL      "compscreen.mat"
 
 /* The HUD instance is always alive */
@@ -101,6 +102,22 @@ void UltralightManager_OpenLibraryBrowser(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening library browser\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_LIBRARY_HTML);
     g_mainMenuOpen = true; /* keep overlay active for input/rendering */
+}
+
+void UltralightManager_OpenTaskMenu(void)
+{
+    if (!g_hudInstance) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening task menu\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_TASKMENU_HTML);
+    g_mainMenuOpen = true;
+}
+
+void UltralightManager_OpenMainMenuPage(void)
+{
+    if (!g_hudInstance) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Returning to main menu\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_MAINMENU_HTML);
+    g_mainMenuOpen = true;
 }
 
 bool UltralightManager_IsMainMenuOpen(void)

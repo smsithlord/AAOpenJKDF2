@@ -53,6 +53,8 @@ static UltralightData* g_currentULData = nullptr;
 void UltralightManager_RequestEngineMenu(void);
 void UltralightManager_RequestStartLibretro(void);
 void UltralightManager_OpenLibraryBrowser(void);
+void UltralightManager_OpenTaskMenu(void);
+void UltralightManager_OpenMainMenuPage(void);
 
 /* Helper: extract UTF-8 string from JSValue */
 static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
@@ -98,14 +100,56 @@ AAPI_CALLBACK(js_manager_getVersion) {
     return result;
 }
 
+AAPI_CALLBACK(js_manager_openTaskMenu) {
+    UltralightManager_OpenTaskMenu();
+    return JSValueMakeBoolean(ctx, true);
+}
+AAPI_CALLBACK(js_manager_openMainMenu) {
+    UltralightManager_OpenMainMenuPage();
+    return JSValueMakeBoolean(ctx, true);
+}
+
 #include "InstanceManager.h"
 extern InstanceManager g_instanceManager;
+
+static void jsSetPropStr(JSContextRef ctx, JSObjectRef obj, const char* name, const std::string& value) {
+    JSStringRef k = JSStringCreateWithUTF8CString(name);
+    JSStringRef v = JSStringCreateWithUTF8CString(value.c_str());
+    JSObjectSetProperty(ctx, obj, k, JSValueMakeString(ctx, v), 0, nullptr);
+    JSStringRelease(v); JSStringRelease(k);
+}
+
+AAPI_CALLBACK(js_manager_getActiveInstances) {
+    auto instances = g_instanceManager.getActiveInstances();
+    JSValueRef* vals = new JSValueRef[instances.size()];
+    for (size_t i = 0; i < instances.size(); i++) {
+        JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+        jsSetPropStr(ctx, o, "itemId", instances[i]->itemId);
+        jsSetPropStr(ctx, o, "url", instances[i]->url);
+        jsSetPropStr(ctx, o, "title", instances[i]->title);
+        JSStringRef ak = JSStringCreateWithUTF8CString("active");
+        JSObjectSetProperty(ctx, o, ak, JSValueMakeBoolean(ctx, instances[i]->active), 0, nullptr);
+        JSStringRelease(ak);
+        vals[i] = o;
+    }
+    JSObjectRef arr = JSObjectMakeArray(ctx, instances.size(), instances.empty() ? nullptr : vals, nullptr);
+    delete[] vals;
+    return arr;
+}
+
+AAPI_CALLBACK(js_manager_deactivateInstance) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string itemId = jsValueToString(ctx, arguments[0]);
+    g_instanceManager.deactivateInstance(itemId);
+    return JSValueMakeBoolean(ctx, true);
+}
 
 AAPI_CALLBACK(js_manager_spawnItemObject) {
     std::string itemId = (argumentCount > 0) ? jsValueToString(ctx, arguments[0]) : "";
     std::string fileUrl = (argumentCount > 1) ? jsValueToString(ctx, arguments[1]) : "";
     std::string previewUrl = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
-    g_instanceManager.requestSpawn(itemId, fileUrl, previewUrl);
+    std::string itemTitle = (argumentCount > 3) ? jsValueToString(ctx, arguments[3]) : "";
+    g_instanceManager.requestSpawn(itemId, fileUrl, previewUrl, itemTitle);
     return JSValueMakeBoolean(ctx, true);
 }
 
@@ -428,6 +472,10 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
     addJSMethod(ctx, managerObj, "spawnItemObject", js_manager_spawnItemObject);
+    addJSMethod(ctx, managerObj, "openTaskMenu", js_manager_openTaskMenu);
+    addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
+    addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);
+    addJSMethod(ctx, managerObj, "deactivateInstance", js_manager_deactivateInstance);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);
@@ -732,7 +780,8 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_mouse_move,
     ul_mouse_down,
     ul_mouse_up,
-    NULL  /* mouse_wheel — not needed for Ultralight currently */
+    NULL, /* mouse_wheel */
+    NULL  /* get_title */
 };
 
 /* ========================================================================
