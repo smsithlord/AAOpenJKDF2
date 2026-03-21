@@ -501,11 +501,7 @@ void AACoreManager_Update(void)
 
     /* Process pending spawn requests from the DLL */
     if (g_fn_has_pending_spawn && g_fn_has_pending_spawn()) {
-        char itemId[256] = {0};
-        char url[1024] = {0};
-        g_fn_pop_pending_spawn(itemId, sizeof(itemId), url, sizeof(url));
-
-        stdPlatform_Printf("AACoreManager: Processing spawn - item=%s url=%s\n", itemId, url);
+        g_fn_pop_pending_spawn();
 
         sithThing* spawned = aacore_spawn_at_player_aim();
         if (spawned) {

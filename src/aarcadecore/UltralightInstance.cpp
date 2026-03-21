@@ -110,7 +110,9 @@ AAPI_CALLBACK(js_manager_openMainMenu) {
 }
 
 #include "InstanceManager.h"
+#include "SQLiteLibrary.h"
 extern InstanceManager g_instanceManager;
+extern SQLiteLibrary g_library;
 
 static void jsSetPropStr(JSContextRef ctx, JSObjectRef obj, const char* name, const std::string& value) {
     JSStringRef k = JSStringCreateWithUTF8CString(name);
@@ -145,11 +147,18 @@ AAPI_CALLBACK(js_manager_deactivateInstance) {
 }
 
 AAPI_CALLBACK(js_manager_spawnItemObject) {
-    std::string itemId = (argumentCount > 0) ? jsValueToString(ctx, arguments[0]) : "";
-    std::string fileUrl = (argumentCount > 1) ? jsValueToString(ctx, arguments[1]) : "";
-    std::string previewUrl = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
-    std::string itemTitle = (argumentCount > 3) ? jsValueToString(ctx, arguments[3]) : "";
-    g_instanceManager.requestSpawn(itemId, fileUrl, previewUrl, itemTitle);
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string itemId = jsValueToString(ctx, arguments[0]);
+
+    /* Look up the full item from the database */
+    Arcade::Item item = g_library.getItemById(itemId);
+    if (item.id.empty()) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Item not found in database: %s\n", itemId.c_str());
+        return JSValueMakeBoolean(ctx, false);
+    }
+
+    g_instanceManager.requestSpawn(item);
     return JSValueMakeBoolean(ctx, true);
 }
 

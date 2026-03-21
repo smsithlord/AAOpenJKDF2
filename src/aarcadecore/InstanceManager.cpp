@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <cctype>
 
-/* Forward declarations for Steamworks browser creation */
+/* Forward declarations for embedded instance creation */
 EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const char* material_name);
 void SteamworksWebBrowserInstance_Destroy(EmbeddedInstance* inst);
+EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* game_path, const char* material_name);
+void LibretroInstance_Destroy(EmbeddedInstance* inst);
 
 /* Exposed from aarcadecore.cpp */
 int aarcadecore_addTask(EmbeddedInstance* inst);
+void aarcadecore_removeTask(int taskIndex);
 
 /* YouTube URL patterns:
  *   https://www.youtube.com/watch?v=VIDEO_ID
@@ -86,57 +89,77 @@ std::string InstanceManager::resolveUrl(const std::string& fileUrl, const std::s
 
 /* --- Embedded item instance management --- */
 
-void InstanceManager::ensureItemInstance(const std::string& itemId, const std::string& url)
+/* Case-insensitive substring search */
+static bool containsIgnoreCase(const std::string& haystack, const std::string& needle)
 {
-    auto it = itemInstances_.find(itemId);
+    std::string h = haystack, n = needle;
+    std::transform(h.begin(), h.end(), h.begin(), ::tolower);
+    std::transform(n.begin(), n.end(), n.begin(), ::tolower);
+    return h.find(n) != std::string::npos;
+}
+
+void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl)
+{
+    auto it = itemInstances_.find(item.id);
     if (it != itemInstances_.end()) {
         /* Already exists — ensure active */
         if (!it->second.active) {
             it->second.active = true;
             if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: Activated embedded instance for item=%s\n", itemId.c_str());
+                g_host.host_printf("InstanceManager: Activated embedded instance for item=%s\n", item.id.c_str());
         }
         return;
     }
 
-    /* Create new embedded item instance with a Steamworks browser */
     EmbeddedItemInstance inst;
-    inst.itemId = itemId;
-    inst.url = url;
+    inst.itemId = item.id;
+    inst.url = resolvedUrl;
     inst.active = true;
     inst.browser = nullptr;
     inst.taskIndex = -1;
 
-    /* Create and initialize the browser */
-    EmbeddedInstance* browser = SteamworksWebBrowserInstance_Create(url.c_str(), "compscreen.mat");
-    if (browser && browser->vtable->init(browser)) {
-        inst.browser = browser;
-        inst.taskIndex = aarcadecore_addTask(browser);
+    /* Decide which embedded instance type to create based on item data */
+    EmbeddedInstance* task = nullptr;
+
+    if (containsIgnoreCase(item.title, "mario")) {
+        /* TEST: Libretro instance for items with "Mario" in the title */
         if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: Created browser instance for item=%s (taskIndex=%d, url=%s)\n",
-                              itemId.c_str(), inst.taskIndex, url.c_str());
+            g_host.host_printf("InstanceManager: Title '%s' contains 'Mario' — creating Libretro instance\n", item.title.c_str());
+        task = LibretroInstance_Create("bsnes_libretro.dll", "testgame.zip", "compscreen.mat");
     } else {
-        if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: WARNING: Failed to create browser for item=%s\n", itemId.c_str());
-        if (browser) SteamworksWebBrowserInstance_Destroy(browser);
+        /* Default: Steamworks Web Browser */
+        task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "compscreen.mat");
     }
 
-    itemInstances_[itemId] = inst;
+    if (task && task->vtable->init(task)) {
+        inst.browser = task;
+        inst.taskIndex = aarcadecore_addTask(task);
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Created %s instance for item=%s (taskIndex=%d)\n",
+                              task->type == EMBEDDED_LIBRETRO ? "Libretro" : "SteamworksWebBrowser",
+                              item.id.c_str(), inst.taskIndex);
+    } else {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: WARNING: Failed to create instance for item=%s\n", item.id.c_str());
+        if (task) {
+            if (task->vtable->shutdown) task->vtable->shutdown(task);
+            free(task);
+        }
+    }
+
+    itemInstances_[item.id] = inst;
 }
 
 /* --- Spawn pipeline --- */
 
-void InstanceManager::requestSpawn(const std::string& itemId, const std::string& fileUrl, const std::string& previewUrl, const std::string& itemTitle)
+void InstanceManager::requestSpawn(const Arcade::Item& item)
 {
-    std::string resolved = resolveUrl(fileUrl, previewUrl, itemTitle);
-
     if (g_host.host_printf)
-        g_host.host_printf("InstanceManager: Spawn requested - item=%s url=%s\n",
-                          itemId.c_str(), resolved.c_str());
+        g_host.host_printf("InstanceManager: Spawn requested - item=%s title=%s\n",
+                          item.id.c_str(), item.title.c_str());
 
     SpawnRequest req;
-    req.itemId = itemId;
-    req.resolvedUrl = resolved;
+    req.item = item;
     pendingSpawns_.push(req);
 }
 
@@ -154,13 +177,16 @@ SpawnRequest InstanceManager::popPendingSpawn()
 
 void InstanceManager::confirmSpawn(int thingIdx)
 {
+    const Arcade::Item& item = lastPopped_.item;
+    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+
     /* Ensure the item has an embedded instance (creates + activates if new) */
-    ensureItemInstance(lastPopped_.itemId, lastPopped_.resolvedUrl);
+    ensureItemInstance(item, resolvedUrl);
 
     /* Add spawned object */
     SpawnedObject obj;
-    obj.itemId = lastPopped_.itemId;
-    obj.url = lastPopped_.resolvedUrl;
+    obj.itemId = item.id;
+    obj.url = resolvedUrl;
     obj.thingIdx = thingIdx;
     objects_.push_back(obj);
 
@@ -261,10 +287,11 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
 
     inst.active = false;
 
-    /* Shut down and destroy the browser */
+    /* Remove from task list, then destroy the browser */
+    if (inst.taskIndex >= 0) {
+        aarcadecore_removeTask(inst.taskIndex);
+    }
     if (inst.browser) {
-        if (inst.browser->vtable->shutdown)
-            inst.browser->vtable->shutdown(inst.browser);
         SteamworksWebBrowserInstance_Destroy(inst.browser);
         inst.browser = nullptr;
     }

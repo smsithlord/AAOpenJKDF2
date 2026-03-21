@@ -17,6 +17,7 @@ public:
     bool isOpen() const { return db_ != nullptr; }
 
     // Items
+    Arcade::Item getItemById(const std::string& id);
     std::vector<Arcade::Item> getItems(int offset, int limit);
     std::vector<Arcade::Item> searchItems(const std::string& query, int limit);
 

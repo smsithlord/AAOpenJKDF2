@@ -186,6 +186,8 @@ static void swb_shutdown(EmbeddedInstance* inst)
 
     free(data->pixelBuffer);
     data->pixelBuffer = NULL;
+    free((void*)data->url);
+    data->url = NULL;
 
     if (data->steamInitialized) {
         SteamAPI_Shutdown();
@@ -335,7 +337,7 @@ EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const cha
     data->browserHandle = INVALID_HTMLBROWSER;
     data->browserReady = false;
     data->steamInitialized = false;
-    data->url = url;
+    data->url = _strdup(url);
     data->pixelBuffer = NULL;
     data->bufferWidth = 0;
     data->bufferHeight = 0;

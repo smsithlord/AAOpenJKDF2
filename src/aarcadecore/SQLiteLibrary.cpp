@@ -36,6 +36,31 @@ void SQLiteLibrary::close()
 
 // --- Items ---
 
+Arcade::Item SQLiteLibrary::getItemById(const std::string& id)
+{
+    Arcade::Item item;
+    if (!db_) return item;
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id, app, description, file, marquee, screen, title, type FROM items WHERE id = ?";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return item;
+
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        item.id          = getStr(stmt, 0);
+        item.app         = getStr(stmt, 1);
+        item.description = getStr(stmt, 2);
+        item.file        = getStr(stmt, 3);
+        item.marquee     = getStr(stmt, 4);
+        item.screen      = getStr(stmt, 5);
+        item.title       = getStr(stmt, 6);
+        item.type        = getStr(stmt, 7);
+    }
+    sqlite3_finalize(stmt);
+    return item;
+}
+
 std::vector<Arcade::Item> SQLiteLibrary::getItems(int offset, int limit)
 {
     std::vector<Arcade::Item> results;

@@ -126,7 +126,12 @@ typedef struct AACoreHostCallbacks {
 | `EMBEDDED_STEAMWORKS_BROWSER` | Working | Steamworks HTML Surface. Loads URLs, renders pages. Requires Steam running + `steam_appid.txt`. |
 | `EMBEDDED_ULTRALIGHT` | Working | Ultralight HTML renderer. Loads local HTML files for UI. CPU rendering mode. |
 
-Tasks are created on demand (not at startup). The DLL's `aarcadecore_init()` only initializes the Ultralight HUD overlay. Libretro and Steamworks instances are started later via JS bridge commands or host API calls.
+Tasks are created on demand by the InstanceManager when items are spawned from the Library Browser. The instance type is determined by item data (e.g., items with "Mario" in the title create Libretro instances; others create Steamworks browsers). The `SpawnRequest` carries the full `Arcade::Item` from the database — the JS only passes the item ID and the DLL looks up the full data via `SQLiteLibrary::getItemById()`.
+
+### Instance Lifecycle:
+- **Spawn**: JS calls `aapi.manager.spawnItemObject(itemId)` → DLL looks up item → queues spawn → host creates sithThing → DLL creates per-item EmbeddedInstance (shared across objects with same item)
+- **Deactivate**: Task Menu "Close" → `aapi.manager.deactivateInstance(itemId)` → removes from task list → destroys browser → instance marked inactive
+- Task removal nulls `g_tasks[taskIndex]` before destroying the browser to prevent dangling pointer access in the update loop
 
 ## Build Dependencies (not in git)
 

@@ -5,12 +5,12 @@
 #include <vector>
 #include <queue>
 #include <map>
+#include "ArcadeTypes.h"
 
 struct EmbeddedInstance; /* forward decl from aarcadecore_internal.h */
 
 struct SpawnRequest {
-    std::string itemId;
-    std::string resolvedUrl;
+    Arcade::Item item;  /* full item data from the library */
 };
 
 /* Per-item embedded instance — shared by all objects using the same item */
@@ -35,7 +35,7 @@ public:
     InstanceManager() : selectedObjectIndex_(-1) {}
 
     /* Spawn pipeline */
-    void requestSpawn(const std::string& itemId, const std::string& fileUrl, const std::string& previewUrl, const std::string& itemTitle = "");
+    void requestSpawn(const Arcade::Item& item);
     bool hasPendingSpawn() const;
     SpawnRequest popPendingSpawn();
     void confirmSpawn(int thingIdx);
@@ -75,7 +75,7 @@ private:
     std::queue<SpawnRequest> pendingSpawns_;
     SpawnRequest lastPopped_;
 
-    void ensureItemInstance(const std::string& itemId, const std::string& url);
+    void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);
 };
 
 #endif
