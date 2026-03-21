@@ -4,141 +4,98 @@
     <meta charset="UTF-8">
     <title>Image Loader</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html, body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: black;
-        }
-
-        #image-container {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        img {
-            max-width: 100%;
-            max-height: 100%;
-            margin: 0;
-            padding: 0;
-            object-fit: contain;
-            display: block;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0;
+                     overflow: hidden; background: black; }
+        #image-container { width: 100%; height: 100%; display: flex;
+                          align-items: center; justify-content: center;
+                          overflow: hidden; }
+        img { max-width: 100%; max-height: 100%; margin: 0; padding: 0;
+              object-fit: contain; display: block; }
     </style>
 </head>
 <body>
-    <div id="image-container">
-        <img id="main-image" style="display: none;" />
-    </div>
-
+    <div id="image-container"></div>
     <script>
-        // Image loader state with queue support
-        let currentUrl = '';
-        let isLoading = false;
-        let imageQueue = [];
+        /*
+         * Parallel image loader.
+         * - loadImageUrl(url): creates a hidden <img> that downloads in parallel
+         * - When onload fires, the image is queued as "ready"
+         * - C++ calls showNextReady() to display one ready image for capture
+         * - After capture, C++ calls captureComplete() to clean up
+         */
 
-        const imageElement = document.getElementById('main-image');
+        const container = document.getElementById('image-container');
+        const readyQueue = [];
+        const imageMap = {};
+        let currentDisplayed = null;
 
-        // Process next image in queue
-        function processNextImage() {
-            if (isLoading || imageQueue.length === 0) {
-                return;
-            }
-
-            const url = imageQueue.shift();
-            loadImage(url);
-        }
-
-        // Internal function to actually load an image
-        function loadImage(url) {
-            console.log('[ImageLoader] Loading image: ' + url);
-
-            currentUrl = url;
-            isLoading = true;
-
-            // Reset image
-            imageElement.style.display = 'none';
-            imageElement.src = '';
-
-            // Set up event handlers
-            imageElement.onload = function() {
-                console.log('[ImageLoader] Image loaded successfully: ' + currentUrl);
-                imageElement.style.display = 'block';
-
-                // Calculate the actual rendered rect of the image
-                const rect = imageElement.getBoundingClientRect();
-                const rectX = Math.round(rect.left);
-                const rectY = Math.round(rect.top);
-                const rectWidth = Math.round(rect.width);
-                const rectHeight = Math.round(rect.height);
-
-                // Notify C++ that image is ready to render with rect info
-                if (window.cppBridge && window.cppBridge.onImageLoaded) {
-                    window.cppBridge.onImageLoaded(true, currentUrl, rectX, rectY, rectWidth, rectHeight);
-                } else {
-                    console.error('[ImageLoader] C++ bridge not available!');
-                }
-
-                // Mark as complete and process next
-                isLoading = false;
-                processNextImage();
-            };
-
-            imageElement.onerror = function() {
-                console.error('[ImageLoader] Failed to load image:', currentUrl);
-
-                // Notify C++ of failure (with zero rect)
-                if (window.cppBridge && window.cppBridge.onImageLoaded) {
-                    window.cppBridge.onImageLoaded(false, currentUrl, 0, 0, 0, 0);
-                } else {
-                    console.error('[ImageLoader] C++ bridge not available!');
-                }
-
-                // Mark as complete and process next
-                isLoading = false;
-                processNextImage();
-            };
-
-            // Start loading
-            imageElement.src = url;
-        }
-
-        // Called by C++ to queue a new image
         window.loadImageUrl = function(url) {
-            console.log('[ImageLoader] Queue request: ' + url);
-            imageQueue.push(url);
-            processNextImage();
+            const img = document.createElement('img');
+            img.style.display = 'none';
+            imageMap[url] = img;
+
+            img.onload = function() {
+                readyQueue.push(url);
+                if (window.cppBridge && window.cppBridge.onImageQueued) {
+                    window.cppBridge.onImageQueued(url);
+                }
+            };
+
+            img.onerror = function() {
+                if (window.cppBridge && window.cppBridge.onImageLoaded) {
+                    window.cppBridge.onImageLoaded(false, url, 0, 0, 0, 0);
+                }
+                delete imageMap[url];
+            };
+
+            container.appendChild(img);
+            img.src = url;
         };
 
-        // Initialize - call immediately since DOM is already loaded when this script runs
-        function initializeBridge() {
-            console.log('[ImageLoader] Initializing bridge');
+        window.showNextReady = function() {
+            if (currentDisplayed && imageMap[currentDisplayed]) {
+                imageMap[currentDisplayed].style.display = 'none';
+            }
+            if (readyQueue.length === 0) return false;
 
-            // Notify C++ that we're ready
+            var url = readyQueue.shift();
+            var img = imageMap[url];
+            if (!img) return false;
+
+            img.style.display = 'block';
+            currentDisplayed = url;
+
+            requestAnimationFrame(function() {
+                var rect = img.getBoundingClientRect();
+                if (window.cppBridge && window.cppBridge.onImageLoaded) {
+                    window.cppBridge.onImageLoaded(true, url,
+                        Math.round(rect.left), Math.round(rect.top),
+                        Math.round(rect.width), Math.round(rect.height));
+                }
+            });
+            return true;
+        };
+
+        window.captureComplete = function() {
+            if (currentDisplayed && imageMap[currentDisplayed]) {
+                var img = imageMap[currentDisplayed];
+                img.style.display = 'none';
+                container.removeChild(img);
+                delete imageMap[currentDisplayed];
+                currentDisplayed = null;
+            }
+        };
+
+        window.getReadyCount = function() {
+            return readyQueue.length;
+        };
+
+        function initializeBridge() {
             if (window.cppBridge && window.cppBridge.onImageLoaderReady) {
-                console.log('[ImageLoader] Calling onImageLoaderReady');
                 window.cppBridge.onImageLoaderReady();
-            } else {
-                console.error('[ImageLoader] C++ bridge not available!');
             }
         }
-
-        // The script runs after DOM is ready, and the C++ bridge is set up in OnDOMReady
-        // which fires before this script executes. So we can call it immediately.
         initializeBridge();
     </script>
 </body>

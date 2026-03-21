@@ -57,15 +57,27 @@ static const uint32_t crc32_table[256] = {
     0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-// Global pointer for JS callbacks to reach the ImageLoader
 static ImageLoader* g_activeImageLoader = nullptr;
 
-// JS callback: window.cppBridge.onImageLoaded(success, url, x, y, w, h)
+/* JS callbacks */
+static JSValueRef js_onImageQueued(JSContextRef ctx, JSObjectRef function,
+    JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
+{
+    if (!g_activeImageLoader || argc < 1) return JSValueMakeUndefined(ctx);
+    JSStringRef urlStr = JSValueToStringCopy(ctx, args[0], nullptr);
+    size_t maxLen = JSStringGetMaximumUTF8CStringSize(urlStr);
+    std::string url(maxLen, '\0');
+    size_t len = JSStringGetUTF8CString(urlStr, &url[0], maxLen);
+    url.resize(len > 0 ? len - 1 : 0);
+    JSStringRelease(urlStr);
+    g_activeImageLoader->onImageQueued(url);
+    return JSValueMakeUndefined(ctx);
+}
+
 static JSValueRef js_onImageLoaded(JSContextRef ctx, JSObjectRef function,
     JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
 {
     if (!g_activeImageLoader || argc < 6) return JSValueMakeUndefined(ctx);
-
     bool success = JSValueToBoolean(ctx, args[0]);
     JSStringRef urlStr = JSValueToStringCopy(ctx, args[1], nullptr);
     size_t maxLen = JSStringGetMaximumUTF8CStringSize(urlStr);
@@ -73,48 +85,38 @@ static JSValueRef js_onImageLoaded(JSContextRef ctx, JSObjectRef function,
     size_t len = JSStringGetUTF8CString(urlStr, &url[0], maxLen);
     url.resize(len > 0 ? len - 1 : 0);
     JSStringRelease(urlStr);
-
     int x = (int)JSValueToNumber(ctx, args[2], nullptr);
     int y = (int)JSValueToNumber(ctx, args[3], nullptr);
     int w = (int)JSValueToNumber(ctx, args[4], nullptr);
     int h = (int)JSValueToNumber(ctx, args[5], nullptr);
-
     g_activeImageLoader->onImageLoaded(success, url, x, y, w, h);
     return JSValueMakeUndefined(ctx);
 }
 
-// JS callback: window.cppBridge.onImageLoaderReady()
 static JSValueRef js_onImageLoaderReady(JSContextRef ctx, JSObjectRef function,
     JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
 {
-    if (g_activeImageLoader)
-        g_activeImageLoader->onImageLoaderReady();
+    if (g_activeImageLoader) g_activeImageLoader->onImageLoaderReady();
     return JSValueMakeUndefined(ctx);
 }
 
 // ============================================================
 
 ImageLoader::ImageLoader()
-    : isInitialized_(false), isProcessing_(false),
-      currentRectX_(0), currentRectY_(0), currentRectW_(0), currentRectH_(0)
+    : isInitialized_(false), captureReady_(false),
+      captureRectX_(0), captureRectY_(0), captureRectW_(0), captureRectH_(0)
 {
     cacheBasePath_ = ".\\cache\\urls";
 }
 
-ImageLoader::~ImageLoader()
-{
-    shutdown();
-}
+ImageLoader::~ImageLoader() { shutdown(); }
 
 bool ImageLoader::init()
 {
     if (g_host.host_printf) g_host.host_printf("ImageLoader: Initializing...\n");
-
-    // Ensure cache dirs exist
     MKDIR(".\\cache");
     MKDIR(cacheBasePath_.c_str());
 
-    // Ultralight Platform must already be configured (by UltralightInstance)
     renderer_ = Renderer::Create();
     if (!renderer_) {
         if (g_host.host_printf) g_host.host_printf("ImageLoader: Failed to create renderer\n");
@@ -126,11 +128,8 @@ bool ImageLoader::init()
     vc.is_transparent = false;
     view_ = renderer_->CreateView(512, 512, vc, nullptr);
     view_->set_load_listener(this);
-
     g_activeImageLoader = this;
-
     view_->LoadURL("file:///aarcadecore/ui/image-loader.html");
-
     if (g_host.host_printf) g_host.host_printf("ImageLoader: View created, loading image-loader.html\n");
     return true;
 }
@@ -141,6 +140,20 @@ void ImageLoader::update()
         renderer_->Update();
         renderer_->RefreshDisplay(0);
         renderer_->Render();
+    }
+
+    /* If a capture is ready (image shown + frame rendered), capture now */
+    if (captureReady_) {
+        captureReady_ = false;
+        renderAndSave();
+        callJSCaptureComplete();
+
+        /* Try to show next ready image immediately */
+        showNextAndCapture();
+    }
+    /* If no capture pending, check if any images are ready */
+    else if (!captureUrl_.empty() == false) {
+        showNextAndCapture();
     }
 }
 
@@ -154,16 +167,14 @@ void ImageLoader::shutdown()
 
 // --- URL normalization and hashing ---
 
-std::string ImageLoader::normalizeUrl(const std::string& url)
-{
+std::string ImageLoader::normalizeUrl(const std::string& url) {
     std::string n = url;
     std::transform(n.begin(), n.end(), n.begin(), ::tolower);
     for (char& c : n) { if (c == '\\') c = '/'; }
     return n;
 }
 
-std::string ImageLoader::calculateKodiHash(const std::string& normalizedUrl)
-{
+std::string ImageLoader::calculateKodiHash(const std::string& normalizedUrl) {
     uint32_t crc = 0xFFFFFFFF;
     for (char c : normalizedUrl)
         crc = crc32_table[(crc ^ (uint8_t)c) & 0xFF] ^ (crc >> 8);
@@ -173,8 +184,7 @@ std::string ImageLoader::calculateKodiHash(const std::string& normalizedUrl)
     return std::string(hash);
 }
 
-std::string ImageLoader::getCacheFilePath(const std::string& url)
-{
+std::string ImageLoader::getCacheFilePath(const std::string& url) {
     std::string hash = calculateKodiHash(normalizeUrl(url));
     std::string subfolder = hash.substr(0, 1);
     std::string dir = cacheBasePath_ + "\\" + subfolder;
@@ -182,8 +192,7 @@ std::string ImageLoader::getCacheFilePath(const std::string& url)
     return dir + "\\" + hash + ".png";
 }
 
-std::string ImageLoader::getCachedFilePath(const std::string& url)
-{
+std::string ImageLoader::getCachedFilePath(const std::string& url) {
     std::string path = getCacheFilePath(url);
 #ifdef _WIN32
     DWORD attrs = GetFileAttributesA(path.c_str());
@@ -195,102 +204,55 @@ std::string ImageLoader::getCachedFilePath(const std::string& url)
     return "";
 }
 
-// --- Job queue ---
+// --- Public API ---
 
 void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(const ImageLoadResult&)> callback)
 {
     std::string hash = calculateKodiHash(normalizeUrl(url));
-    bool shouldProcess = false;
 
-    {
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        auto it = jobMap_.find(hash);
-        if (it != jobMap_.end()) {
-            it->second.callbacks.push_back(callback);
-            return;
-        }
-        LoadJob job;
-        job.url = url;
-        job.hash = hash;
-        job.callbacks.push_back(callback);
-        jobMap_[hash] = job;
-        jobQueue_.push(hash);
-
-        if (jobQueue_.size() == 1 && isInitialized_ && !isProcessing_)
-            shouldProcess = true;
-    }
-
-    if (shouldProcess) processNextJob();
-}
-
-void ImageLoader::processNextJob()
-{
-    std::string hash;
-    LoadJob job;
-
-    {
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        if (isProcessing_ || jobQueue_.empty()) return;
-        hash = jobQueue_.front();
-        jobQueue_.pop();
-        auto it = jobMap_.find(hash);
-        if (it == jobMap_.end()) return;
-        job = it->second;
-        isProcessing_ = true;
-    }
-
-    // Check disk cache — if cached AND pixels already in memory, complete immediately.
-    // Otherwise, re-render through the view to populate the pixel cache for the host.
-    std::string cached = getCachedFilePath(job.url);
+    /* Check disk cache first — if cached AND pixels in memory, complete immediately */
+    std::string cached = getCachedFilePath(url);
     if (!cached.empty()) {
         std::lock_guard<std::mutex> pxLock(pixelCacheMutex_);
         if (pixelCache_.find(cached) != pixelCache_.end()) {
-            // Pixels already in memory — complete immediately
-            {
-                std::lock_guard<std::mutex> lock(completionMutex_);
-                for (auto& cb : job.callbacks)
-                    completionQueue_.push({true, cached, job.url, cb});
-            }
-            {
-                std::lock_guard<std::mutex> lock(queueMutex_);
-                jobMap_.erase(job.hash);
-                isProcessing_ = false;
-            }
-            processNextJob();
+            std::lock_guard<std::mutex> lock(completionMutex_);
+            completionQueue_.push({true, cached, url, callback});
             return;
         }
-        // Pixels not in memory — load the cached file through the view to populate pixel cache
-        currentUrl_ = job.url;
-        std::string fileUrl = "file:///" + cached;
-        for (char& c : fileUrl) { if (c == '\\') c = '/'; }
-        loadImageInView(fileUrl);
-        return;
+        /* Pixels not in memory — need to re-render from cached file */
     }
 
-    currentUrl_ = job.url;
-    loadImageInView(job.url);
+    /* Deduplicate: if same hash already pending, just add callback */
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        auto it = pendingImages_.find(hash);
+        if (it != pendingImages_.end()) {
+            it->second.callbacks.push_back(callback);
+            return;
+        }
+
+        PendingImage pi;
+        pi.url = url;
+        pi.callbacks.push_back(callback);
+        pendingImages_[hash] = pi;
+    }
+
+    /* Send to JS for parallel download */
+    if (isInitialized_) {
+        if (!cached.empty()) {
+            /* Load from local file cache */
+            std::string fileUrl = "file:///" + cached;
+            for (char& c : fileUrl) { if (c == '\\') c = '/'; }
+            sendUrlToJS(fileUrl);
+        } else {
+            sendUrlToJS(url);
+        }
+    }
 }
 
-void ImageLoader::loadImageInView(const std::string& url)
+void ImageLoader::sendUrlToJS(const std::string& url)
 {
-    if (!view_ || !isInitialized_) {
-        if (g_host.host_printf) g_host.host_printf("ImageLoader: View not ready for %s\n", url.c_str());
-        std::string hash = calculateKodiHash(normalizeUrl(url));
-        LoadJob job;
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            auto it = jobMap_.find(hash);
-            if (it != jobMap_.end()) { job = it->second; jobMap_.erase(it); }
-            isProcessing_ = false;
-        }
-        {
-            std::lock_guard<std::mutex> lock(completionMutex_);
-            for (auto& cb : job.callbacks)
-                completionQueue_.push({false, "", url, cb});
-        }
-        processNextJob();
-        return;
-    }
+    if (!view_ || !isInitialized_) return;
 
     auto ctx_lock = view_->LockJSContext();
     JSContextRef ctx = (*ctx_lock);
@@ -306,9 +268,42 @@ void ImageLoader::loadImageInView(const std::string& url)
         JSStringRelease(urlStr);
         JSValueRef args[] = { urlArg };
         JSObjectCallAsFunction(ctx, (JSObjectRef)fnVal, nullptr, 1, args, nullptr);
-    } else {
-        if (g_host.host_printf) g_host.host_printf("ImageLoader: loadImageUrl not found in JS!\n");
     }
+}
+
+void ImageLoader::showNextAndCapture()
+{
+    if (!captureUrl_.empty()) return; /* already waiting for a capture */
+
+    if (!view_ || !isInitialized_) return;
+
+    /* Call JS showNextReady() — it will display the image and call onImageLoaded with rect */
+    auto ctx_lock = view_->LockJSContext();
+    JSContextRef ctx = (*ctx_lock);
+    JSObjectRef global = JSContextGetGlobalObject(ctx);
+
+    JSStringRef fnName = JSStringCreateWithUTF8CString("showNextReady");
+    JSValueRef fnVal = JSObjectGetProperty(ctx, global, fnName, nullptr);
+    JSStringRelease(fnName);
+
+    if (JSValueIsObject(ctx, fnVal)) {
+        JSObjectCallAsFunction(ctx, (JSObjectRef)fnVal, nullptr, 0, nullptr, nullptr);
+    }
+}
+
+void ImageLoader::callJSCaptureComplete()
+{
+    if (!view_ || !isInitialized_) return;
+    auto ctx_lock = view_->LockJSContext();
+    JSContextRef ctx = (*ctx_lock);
+    JSObjectRef global = JSContextGetGlobalObject(ctx);
+
+    JSStringRef fnName = JSStringCreateWithUTF8CString("captureComplete");
+    JSValueRef fnVal = JSObjectGetProperty(ctx, global, fnName, nullptr);
+    JSStringRelease(fnName);
+
+    if (JSValueIsObject(ctx, fnVal))
+        JSObjectCallAsFunction(ctx, (JSObjectRef)fnVal, nullptr, 0, nullptr, nullptr);
 }
 
 // --- Render and save ---
@@ -322,11 +317,11 @@ void ImageLoader::renderAndSave()
     RefPtr<Bitmap> bitmap = bmpSurface->bitmap();
 
     RefPtr<Bitmap> cropped;
-    if (currentRectW_ > 0 && currentRectH_ > 0) {
-        int x = (std::max)(0, currentRectX_);
-        int y = (std::max)(0, currentRectY_);
-        int w = (std::min)(currentRectW_, (int)bitmap->width() - x);
-        int h = (std::min)(currentRectH_, (int)bitmap->height() - y);
+    if (captureRectW_ > 0 && captureRectH_ > 0) {
+        int x = (std::max)(0, captureRectX_);
+        int y = (std::max)(0, captureRectY_);
+        int w = (std::min)(captureRectW_, (int)bitmap->width() - x);
+        int h = (std::min)(captureRectH_, (int)bitmap->height() - y);
 
         cropped = Bitmap::Create(w, h, BitmapFormat::BGRA8_UNORM_SRGB);
         uint8_t* src = (uint8_t*)bitmap->LockPixels();
@@ -341,10 +336,27 @@ void ImageLoader::renderAndSave()
         cropped = bitmap;
     }
 
-    std::string outputPath = getCacheFilePath(currentUrl_);
+    /* Find the original URL for this capture (captureUrl_ may be a file:// URL for cache hits) */
+    std::string origUrl = captureUrl_;
+    /* Look up the pending image by scanning for matching URL */
+    std::string hash;
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        for (auto& pair : pendingImages_) {
+            std::string fileUrl = "file:///" + getCachedFilePath(pair.second.url);
+            for (char& c : fileUrl) { if (c == '\\') c = '/'; }
+            if (pair.second.url == captureUrl_ || fileUrl == captureUrl_) {
+                origUrl = pair.second.url;
+                hash = pair.first;
+                break;
+            }
+        }
+    }
+
+    std::string outputPath = getCacheFilePath(origUrl);
     cropped->WritePNG(outputPath.c_str());
 
-    /* Cache raw BGRA pixels in memory for host-side GL texture creation */
+    /* Cache raw BGRA pixels */
     {
         CachedPixels cp;
         cp.width = cropped->width();
@@ -363,48 +375,58 @@ void ImageLoader::renderAndSave()
 
     if (g_host.host_printf) g_host.host_printf("ImageLoader: Saved %s\n", outputPath.c_str());
 
-    // Complete all callbacks for this URL
-    std::string hash = calculateKodiHash(normalizeUrl(currentUrl_));
-    LoadJob job;
+    /* Complete all callbacks for this URL */
+    PendingImage pi;
     {
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        auto it = jobMap_.find(hash);
-        if (it != jobMap_.end()) { job = it->second; jobMap_.erase(it); }
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        if (!hash.empty()) {
+            auto it = pendingImages_.find(hash);
+            if (it != pendingImages_.end()) {
+                pi = it->second;
+                pendingImages_.erase(it);
+            }
+        }
     }
+
     {
         std::lock_guard<std::mutex> lock(completionMutex_);
-        for (auto& cb : job.callbacks)
-            completionQueue_.push({true, outputPath, currentUrl_, cb});
+        for (auto& cb : pi.callbacks)
+            completionQueue_.push({true, outputPath, origUrl, cb});
     }
-    {
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        isProcessing_ = false;
-    }
-    processNextJob();
+
+    captureUrl_.clear();
 }
 
-// --- JS bridge callbacks ---
+// --- JS callbacks ---
+
+void ImageLoader::onImageQueued(const std::string& url)
+{
+    /* An image finished downloading in JS. It's in the ready queue. */
+    /* Next update() will call showNextAndCapture() to display and capture it. */
+}
 
 void ImageLoader::onImageLoaded(bool success, const std::string& url, int x, int y, int w, int h)
 {
     if (success) {
-        currentRectX_ = x; currentRectY_ = y; currentRectW_ = w; currentRectH_ = h;
-        renderAndSave();
+        captureUrl_ = url;
+        captureRectX_ = x; captureRectY_ = y; captureRectW_ = w; captureRectH_ = h;
+        captureReady_ = true; /* capture on next update() after view paints */
     } else {
-        std::string hash = calculateKodiHash(normalizeUrl(url));
-        LoadJob job;
+        /* Find and fail all callbacks for this URL */
+        std::string hash;
+        PendingImage pi;
         {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            auto it = jobMap_.find(hash);
-            if (it != jobMap_.end()) { job = it->second; jobMap_.erase(it); }
-            isProcessing_ = false;
+            std::lock_guard<std::mutex> lock(pendingMutex_);
+            for (auto& pair : pendingImages_) {
+                if (pair.second.url == url) { hash = pair.first; pi = pair.second; break; }
+            }
+            if (!hash.empty()) pendingImages_.erase(hash);
         }
         {
             std::lock_guard<std::mutex> lock(completionMutex_);
-            for (auto& cb : job.callbacks)
+            for (auto& cb : pi.callbacks)
                 completionQueue_.push({false, "", url, cb});
         }
-        processNextJob();
     }
 }
 
@@ -412,32 +434,6 @@ void ImageLoader::onImageLoaderReady()
 {
     if (g_host.host_printf) g_host.host_printf("ImageLoader: HTML ready\n");
     isInitialized_ = true;
-
-    bool hasJobs = false;
-    { std::lock_guard<std::mutex> lock(queueMutex_); hasJobs = !jobQueue_.empty(); }
-    if (hasJobs) processNextJob();
-}
-
-bool ImageLoader::getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut)
-{
-    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
-    auto it = pixelCache_.find(cachePath);
-    if (it == pixelCache_.end()) return false;
-
-    *pixelsOut = it->second.pixels;
-    *widthOut = (int)it->second.width;
-    *heightOut = (int)it->second.height;
-    return true;
-}
-
-void ImageLoader::freePixels(const std::string& cachePath)
-{
-    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
-    auto it = pixelCache_.find(cachePath);
-    if (it != pixelCache_.end()) {
-        free(it->second.pixels);
-        pixelCache_.erase(it);
-    }
 }
 
 void ImageLoader::processCompletions()
@@ -450,6 +446,17 @@ void ImageLoader::processCompletions()
     }
 }
 
+bool ImageLoader::getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut)
+{
+    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+    auto it = pixelCache_.find(cachePath);
+    if (it == pixelCache_.end()) return false;
+    *pixelsOut = it->second.pixels;
+    *widthOut = (int)it->second.width;
+    *heightOut = (int)it->second.height;
+    return true;
+}
+
 // --- LoadListener ---
 
 void ImageLoader::setupJSBridge()
@@ -458,18 +465,25 @@ void ImageLoader::setupJSBridge()
     JSContextRef ctx = (*ctx_lock);
     JSObjectRef global = JSContextGetGlobalObject(ctx);
 
-    // Create window.cppBridge with onImageLoaded and onImageLoaderReady
     JSObjectRef bridge = JSObjectMake(ctx, nullptr, nullptr);
 
-    JSStringRef name1 = JSStringCreateWithUTF8CString("onImageLoaded");
-    JSObjectRef fn1 = JSObjectMakeFunctionWithCallback(ctx, name1, js_onImageLoaded);
-    JSObjectSetProperty(ctx, bridge, name1, fn1, 0, nullptr);
-    JSStringRelease(name1);
+    JSStringRef name;
+    JSObjectRef fn;
 
-    JSStringRef name2 = JSStringCreateWithUTF8CString("onImageLoaderReady");
-    JSObjectRef fn2 = JSObjectMakeFunctionWithCallback(ctx, name2, js_onImageLoaderReady);
-    JSObjectSetProperty(ctx, bridge, name2, fn2, 0, nullptr);
-    JSStringRelease(name2);
+    name = JSStringCreateWithUTF8CString("onImageQueued");
+    fn = JSObjectMakeFunctionWithCallback(ctx, name, js_onImageQueued);
+    JSObjectSetProperty(ctx, bridge, name, fn, 0, nullptr);
+    JSStringRelease(name);
+
+    name = JSStringCreateWithUTF8CString("onImageLoaded");
+    fn = JSObjectMakeFunctionWithCallback(ctx, name, js_onImageLoaded);
+    JSObjectSetProperty(ctx, bridge, name, fn, 0, nullptr);
+    JSStringRelease(name);
+
+    name = JSStringCreateWithUTF8CString("onImageLoaderReady");
+    fn = JSObjectMakeFunctionWithCallback(ctx, name, js_onImageLoaderReady);
+    JSObjectSetProperty(ctx, bridge, name, fn, 0, nullptr);
+    JSStringRelease(name);
 
     JSStringRef bridgeName = JSStringCreateWithUTF8CString("cppBridge");
     JSObjectSetProperty(ctx, global, bridgeName, bridge, 0, nullptr);

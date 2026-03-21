@@ -34,11 +34,10 @@ public:
     void processCompletions();
     bool isInitialized() const { return isInitialized_; }
 
-    /* Get cached BGRA pixels for a given cache file path. Returns true if found. Caller must call freePixels after. */
     bool getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut);
-    void freePixels(const std::string& cachePath);
 
-    // Called from image-loader.html JS
+    /* Called from image-loader.html JS */
+    void onImageQueued(const std::string& url);  /* image downloaded, ready for capture */
     void onImageLoaded(bool success, const std::string& url, int rectX, int rectY, int rectW, int rectH);
     void onImageLoaderReady();
 
@@ -48,24 +47,26 @@ private:
 
     std::string cacheBasePath_;
     bool isInitialized_;
-    bool isProcessing_;
-    std::string currentUrl_;
+    bool captureReady_;    /* an image has been shown, waiting one frame to capture */
+    std::string captureUrl_; /* URL of image currently displayed for capture */
+    int captureRectX_, captureRectY_, captureRectW_, captureRectH_;
 
-    int currentRectX_, currentRectY_, currentRectW_, currentRectH_;
-
-    struct LoadJob {
+    /* Per-URL callback tracking */
+    struct PendingImage {
         std::string url;
-        std::string hash;
         std::vector<std::function<void(const ImageLoadResult&)>> callbacks;
     };
+    std::map<std::string, PendingImage> pendingImages_; /* hash → pending */
+    std::mutex pendingMutex_;
 
-    std::queue<std::string> jobQueue_;
-    std::map<std::string, LoadJob> jobMap_;
+    /* Queue of URLs that have finished downloading (JS onload fired) */
+    std::queue<std::string> downloadedQueue_;
+    std::mutex downloadedMutex_;
+
     std::queue<ImageLoadResult> completionQueue_;
-    std::mutex queueMutex_;
     std::mutex completionMutex_;
 
-    /* Pixel cache: cachePath → raw BGRA pixels (read once by host, then freed) */
+    /* Pixel cache */
     struct CachedPixels {
         uint8_t* pixels;
         uint32_t width, height;
@@ -77,12 +78,12 @@ private:
     std::string calculateKodiHash(const std::string& normalizedUrl);
     std::string getCacheFilePath(const std::string& url);
     std::string getCachedFilePath(const std::string& url);
-    void processNextJob();
-    void loadImageInView(const std::string& url);
+    void sendUrlToJS(const std::string& url);
+    void showNextAndCapture();
     void renderAndSave();
     void setupJSBridge();
+    void callJSCaptureComplete();
 
-    // LoadListener
     void OnDOMReady(ultralight::View* caller, uint64_t frame_id,
                     bool is_main_frame, const String& url) override;
     void OnFinishLoading(ultralight::View* caller, uint64_t frame_id,
