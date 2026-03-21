@@ -791,7 +791,8 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_mouse_down,
     ul_mouse_up,
     NULL, /* mouse_wheel */
-    NULL  /* get_title */
+    NULL, /* get_title */
+    NULL, NULL /* get_width, get_height */
 };
 
 /* ========================================================================

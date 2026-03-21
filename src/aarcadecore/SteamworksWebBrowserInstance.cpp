@@ -236,11 +236,12 @@ static void swb_render(EmbeddedInstance* inst,
     if (!data->pixelBuffer || data->bufferWidth == 0)
         return;
 
+    int scale_x = ((int)data->bufferWidth << 16) / width;
+    int scale_y = ((int)data->bufferHeight << 16) / height;
+
     if (is16bit) {
         /* Convert BGRA -> RGB565 with scaling */
         uint16_t* dest = (uint16_t*)pixelData;
-        int scale_x = ((int)data->bufferWidth << 16) / width;
-        int scale_y = ((int)data->bufferHeight << 16) / height;
 
         for (int y = 0; y < height; y++) {
             int src_y = (y * scale_y) >> 16;
@@ -256,6 +257,26 @@ static void swb_render(EmbeddedInstance* inst,
                 uint8_t r = data->pixelBuffer[idx + 2];
 
                 dest[y * width + x] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+            }
+        }
+    } else {
+        /* 32-bit BGRA output with scaling */
+        uint8_t* dest = (uint8_t*)pixelData;
+
+        for (int y = 0; y < height; y++) {
+            int src_y = (y * scale_y) >> 16;
+            if (src_y >= (int)data->bufferHeight) src_y = data->bufferHeight - 1;
+
+            for (int x = 0; x < width; x++) {
+                int src_x = (x * scale_x) >> 16;
+                if (src_x >= (int)data->bufferWidth) src_x = data->bufferWidth - 1;
+
+                int src_idx = (src_y * data->bufferWidth + src_x) * 4;
+                int dst_idx = (y * width + x) * 4;
+                dest[dst_idx + 0] = data->pixelBuffer[src_idx + 0];
+                dest[dst_idx + 1] = data->pixelBuffer[src_idx + 1];
+                dest[dst_idx + 2] = data->pixelBuffer[src_idx + 2];
+                dest[dst_idx + 3] = data->pixelBuffer[src_idx + 3];
             }
         }
     }
@@ -326,6 +347,9 @@ static const char* swb_get_title(EmbeddedInstance* inst)
     return data->title[0] ? data->title : NULL;
 }
 
+static int swb_get_width(EmbeddedInstance* inst) { (void)inst; return SWB_DEFAULT_WIDTH; }
+static int swb_get_height(EmbeddedInstance* inst) { (void)inst; return SWB_DEFAULT_HEIGHT; }
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
@@ -339,7 +363,9 @@ static const EmbeddedInstanceVtable g_swbVtable = {
     swb_mouse_down,
     swb_mouse_up,
     swb_mouse_wheel,
-    swb_get_title
+    swb_get_title,
+    swb_get_width,
+    swb_get_height
 };
 
 /* ========================================================================

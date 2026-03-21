@@ -52,6 +52,10 @@ void AACoreManager_OnMapUnloaded(void);
 /* Notify DLL that player "used" (activated) an AArcade object */
 void AACoreManager_ObjectUsed(int thingIdx);
 
+/* Fullscreen overlay mode for embedded instances */
+bool AACoreManager_IsFullscreenActive(void);
+void AACoreManager_ExitFullscreen(void);
+
 /* Per-thing render hooks — swap cloned texture before/after rdThing_Draw */
 void AACoreManager_PreRenderThing(void* pSithThing);
 void AACoreManager_PostRenderThing(void* pSithThing);

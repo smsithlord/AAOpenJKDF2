@@ -14,10 +14,13 @@ void aaMainMenu_Update(void)
 {
     const Uint8* keys = SDL_GetKeyboardState(NULL);
 
-    /* Escape toggles the AArcade main menu */
+    /* Escape: exit fullscreen if active, otherwise toggle the AArcade main menu */
     int escDown = keys[SDL_SCANCODE_ESCAPE];
     if (escDown && !g_escKeyWasDown) {
-        AACoreManager_ToggleMainMenu();
+        if (AACoreManager_IsFullscreenActive())
+            AACoreManager_ExitFullscreen();
+        else
+            AACoreManager_ToggleMainMenu();
     }
     g_escKeyWasDown = escDown;
 

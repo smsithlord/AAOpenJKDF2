@@ -30,6 +30,10 @@ InstanceManager g_instanceManager;
  * input when not in menu mode. NULL = no active screen content. */
 static EmbeddedInstance* g_activeInstance = NULL;
 
+/* When set, this instance renders fullscreen in the overlay instead of
+ * on its sithThing screen. Game input is suppressed (like main menu). */
+static EmbeddedInstance* g_fullscreenInstance = NULL;
+
 /* Task list — all running embedded instances (excluding HUD overlay).
  * The host uses task indices to manage per-thing GL textures. */
 #define MAX_TASKS 16
@@ -50,6 +54,10 @@ void aarcadecore_removeTask(int taskIndex) {
     if (taskIndex >= 0 && taskIndex < g_taskCount)
         g_tasks[taskIndex] = NULL;
 }
+
+/* Fullscreen instance accessors for InstanceManager */
+void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) { g_fullscreenInstance = inst; }
+EmbeddedInstance* aarcadecore_getFullscreenInstance(void) { return g_fullscreenInstance; }
 
 static int getActiveTaskIndex(void)
 {
@@ -90,6 +98,8 @@ void UltralightManager_ClearStartLibretroFlag(void);
  * - Otherwise → active instance (e.g., Libretro) */
 static EmbeddedInstance* get_input_target(void)
 {
+    /* Fullscreen embedded instance gets all input */
+    if (g_fullscreenInstance) return g_fullscreenInstance;
     if (UltralightManager_IsMainMenuOpen()) {
         EmbeddedInstance* ul = UltralightManager_GetActive();
         if (ul && ul->vtable->is_active(ul)) return ul;
@@ -205,9 +215,9 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
 {
-    /* "Active" = input mode on = menu is open.
+    /* "Active" = input mode on = menu or fullscreen overlay is open.
      * Having an active instance (e.g., Libretro on screens) does NOT mean input mode. */
-    return UltralightManager_IsMainMenuOpen();
+    return g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
 }
 
 AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void)
@@ -271,8 +281,14 @@ AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modi
 AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
 {
     EmbeddedInstance* inst = get_input_target();
-    if (inst && inst->vtable->mouse_move)
+    if (inst && inst->vtable->mouse_move) {
+        /* Scale from overlay coords (1920x1080) to instance native coords when fullscreen */
+        if (g_fullscreenInstance == inst && inst->vtable->get_width && inst->vtable->get_height) {
+            x = x * inst->vtable->get_width(inst) / 1920;
+            y = y * inst->vtable->get_height(inst) / 1080;
+        }
         inst->vtable->mouse_move(inst, x, y);
+    }
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
@@ -307,7 +323,7 @@ AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void)
 
 AARCADECORE_EXPORT bool aarcadecore_is_main_menu_open(void)
 {
-    return UltralightManager_IsMainMenuOpen();
+    return g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_should_open_engine_menu(void)
@@ -362,7 +378,14 @@ AARCADECORE_EXPORT bool aarcadecore_render_task_texture(
 
 AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, int height)
 {
-    /* The overlay always comes from the HUD Ultralight instance */
+    /* Fullscreen embedded instance takes priority over HUD */
+    if (g_fullscreenInstance && g_fullscreenInstance->vtable->is_active(g_fullscreenInstance)
+        && g_fullscreenInstance->vtable->render) {
+        g_fullscreenInstance->vtable->render(g_fullscreenInstance, pixelData, width, height, 0, 32);
+        return true;
+    }
+
+    /* Otherwise render HUD overlay as before */
     EmbeddedInstance* ul = UltralightManager_GetActive();
     if (!ul || !ul->vtable->is_active(ul) || !ul->vtable->render)
         return false;
@@ -499,4 +522,14 @@ AARCADECORE_EXPORT int aarcadecore_get_thing_task_index(int thingIdx)
 AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx)
 {
     g_instanceManager.objectUsed(thingIdx);
+}
+
+AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void)
+{
+    return g_fullscreenInstance != NULL;
+}
+
+AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
+{
+    g_fullscreenInstance = NULL;
 }

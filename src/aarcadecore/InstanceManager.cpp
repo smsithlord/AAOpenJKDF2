@@ -12,6 +12,8 @@ void LibretroInstance_Destroy(EmbeddedInstance* inst);
 /* Exposed from aarcadecore.cpp */
 int aarcadecore_addTask(EmbeddedInstance* inst);
 void aarcadecore_removeTask(int taskIndex);
+void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst);
+EmbeddedInstance* aarcadecore_getFullscreenInstance(void);
 
 #include "ImageLoader.h"
 #include "SQLiteLibrary.h"
@@ -416,15 +418,30 @@ void InstanceManager::objectUsed(int thingIdx)
         return;
     }
 
-    /* If this object is already selected, toggle it off */
+    /* If this object is already selected, toggle fullscreen overlay */
     if (newIndex == selectedObjectIndex_) {
         const SpawnedObject& obj = objects_[newIndex];
-        if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: objectUsed — deselecting already-selected object #%d (thingIdx=%d)\n",
-                              newIndex, thingIdx);
-        deactivateInstance(obj.itemId);
-        selectedObjectIndex_ = -1;
+        const EmbeddedItemInstance* inst = getItemInstance(obj.itemId);
+
+        if (aarcadecore_getFullscreenInstance()) {
+            /* Already fullscreen — exit fullscreen (instance stays active on sithThing) */
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: objectUsed — exiting fullscreen for object #%d (thingIdx=%d)\n",
+                                  newIndex, thingIdx);
+            aarcadecore_setFullscreenInstance(NULL);
+        } else if (inst && inst->active && inst->browser) {
+            /* Instance is active — enter fullscreen overlay */
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: objectUsed — entering fullscreen for object #%d (thingIdx=%d)\n",
+                                  newIndex, thingIdx);
+            aarcadecore_setFullscreenInstance(inst->browser);
+        }
         return;
+    }
+
+    /* If switching to a different object, exit fullscreen first */
+    if (aarcadecore_getFullscreenInstance()) {
+        aarcadecore_setFullscreenInstance(NULL);
     }
 
     /* Deactivate the previously selected object's instance */

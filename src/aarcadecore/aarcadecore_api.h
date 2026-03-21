@@ -158,6 +158,12 @@ AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
  * Selects the object and activates its embedded instance (e.g. starts video). */
 AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
 
+/* Check if an embedded instance is being displayed fullscreen in the overlay */
+AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void);
+
+/* Exit fullscreen overlay mode (instance stays active on its sithThing screen) */
+AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -201,6 +207,8 @@ typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pix
 typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 typedef void  (*aarcadecore_object_used_t)(int thingIdx);
+typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
+typedef void  (*aarcadecore_exit_fullscreen_t)(void);
 
 #ifdef __cplusplus
 }

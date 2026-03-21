@@ -66,6 +66,8 @@ static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NU
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
+static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
+static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
 
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
@@ -287,6 +289,8 @@ void AACoreManager_Init(void)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
+    LOAD_FN(is_fullscreen_active)
+    LOAD_FN(exit_fullscreen)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -396,6 +400,8 @@ void AACoreManager_Shutdown(void)
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
+    g_fn_is_fullscreen_active = NULL;
+    g_fn_exit_fullscreen = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -785,6 +791,19 @@ void AACoreManager_ObjectUsed(int thingIdx)
 {
     if (g_fn_object_used)
         g_fn_object_used(thingIdx);
+}
+
+bool AACoreManager_IsFullscreenActive(void)
+{
+    if (g_fn_is_fullscreen_active)
+        return g_fn_is_fullscreen_active();
+    return false;
+}
+
+void AACoreManager_ExitFullscreen(void)
+{
+    if (g_fn_exit_fullscreen)
+        g_fn_exit_fullscreen();
 }
 
 /* Host callback: DLL queries current map key (e.g., "smhq.gob-01nf.jkl") */
