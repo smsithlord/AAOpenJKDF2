@@ -57,6 +57,8 @@ static aarcadecore_has_pending_spawn_t    g_fn_has_pending_spawn = NULL;
 static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
 static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
 static aarcadecore_get_thing_task_index_t g_fn_get_thing_task_index = NULL;
+static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NULL;
+static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -78,7 +80,8 @@ typedef struct {
     void* thing;           /* sithThing* */
     int thingIdx;
     int taskIndex;
-    GLuint glTexture;      /* per-thing GL texture (256x256 solid color) */
+    GLuint glTexture;      /* per-thing GL texture */
+    int imageLoaded;       /* 0=pending, 1=loaded, -1=failed */
 } ThingTaskMapping;
 static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
 static int g_thingTaskCount = 0;
@@ -254,6 +257,8 @@ void AACoreManager_Init(void)
     LOAD_FN(pop_pending_spawn)
     LOAD_FN(confirm_spawn)
     LOAD_FN(get_thing_task_index)
+    LOAD_FN(load_thing_screen_pixels)
+    LOAD_FN(free_pixels)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -354,6 +359,8 @@ void AACoreManager_Shutdown(void)
     g_fn_pop_pending_spawn = NULL;
     g_fn_confirm_spawn = NULL;
     g_fn_get_thing_task_index = NULL;
+    g_fn_load_thing_screen_pixels = NULL;
+    g_fn_free_pixels = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -510,6 +517,38 @@ void AACoreManager_Update(void)
                 g_fn_confirm_spawn(spawned->thingIdx);
         } else {
             stdPlatform_Printf("AACoreManager: Spawn failed\n");
+        }
+    }
+
+    /* Poll for screen images that have been cached by the ImageLoader */
+    if (g_fn_load_thing_screen_pixels && g_fn_free_pixels) {
+        for (int i = 0; i < g_thingTaskCount; i++) {
+            if (g_thingTaskMap[i].imageLoaded != 0) continue; /* already loaded or failed */
+
+            void* pixels = NULL;
+            int w = 0, h = 0;
+            if (g_fn_load_thing_screen_pixels(g_thingTaskMap[i].thingIdx, &pixels, &w, &h)) {
+                /* Create GL texture from BGRA pixels */
+                GLuint newTex;
+                glGenTextures(1, &newTex);
+                glBindTexture(GL_TEXTURE_2D, newTex);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
+                             GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+                g_fn_free_pixels(pixels);
+
+                /* Replace the solid color texture */
+                if (g_thingTaskMap[i].glTexture)
+                    glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+                g_thingTaskMap[i].glTexture = newTex;
+                g_thingTaskMap[i].imageLoaded = 1;
+
+                stdPlatform_Printf("AACoreManager: Screen image loaded for thingIdx=%d (%dx%d, glTex=%u)\n",
+                                  g_thingTaskMap[i].thingIdx, w, h, newTex);
+            }
         }
     }
 }

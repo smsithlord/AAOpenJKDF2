@@ -13,6 +13,9 @@ void LibretroInstance_Destroy(EmbeddedInstance* inst);
 int aarcadecore_addTask(EmbeddedInstance* inst);
 void aarcadecore_removeTask(int taskIndex);
 
+#include "ImageLoader.h"
+extern ImageLoader g_imageLoader;
+
 /* YouTube URL patterns:
  *   https://www.youtube.com/watch?v=VIDEO_ID
  *   https://youtube.com/watch?v=VIDEO_ID&list=...
@@ -88,6 +91,33 @@ std::string InstanceManager::resolveUrl(const std::string& fileUrl, const std::s
 }
 
 /* --- Embedded item instance management --- */
+
+/* Check if a URL looks like an image (matches library.js isImageUrl logic) */
+static bool isImageUrl(const std::string& url)
+{
+    if (url.empty()) return false;
+    std::string lower = url;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    const char* exts[] = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"};
+    for (const char* ext : exts) {
+        if (lower.find(ext) != std::string::npos) return true;
+    }
+    const char* keywords[] = {"image", "screenshot", "preview", "thumb"};
+    for (const char* kw : keywords) {
+        if (lower.find(kw) != std::string::npos) return true;
+    }
+    return false;
+}
+
+/* Get the best image URL from an item (priority: marquee → screen → file, image URLs only) */
+static std::string getBestImageUrl(const Arcade::Item& item)
+{
+    if (isImageUrl(item.marquee)) return item.marquee;
+    if (isImageUrl(item.screen)) return item.screen;
+    if (isImageUrl(item.file)) return item.file;
+    return "";
+}
 
 /* Case-insensitive substring search */
 static bool containsIgnoreCase(const std::string& haystack, const std::string& needle)
@@ -188,7 +218,28 @@ void InstanceManager::confirmSpawn(int thingIdx)
     obj.itemId = item.id;
     obj.url = resolvedUrl;
     obj.thingIdx = thingIdx;
+    obj.screenImageRequested = false;
     objects_.push_back(obj);
+
+    /* Request screen image from ImageLoader — same logic as library.js getBestImage */
+    int objIdx = (int)objects_.size() - 1;
+    std::string screenUrl = getBestImageUrl(item);
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Screen image for item=%s: '%s'\n",
+                          item.id.c_str(), screenUrl.empty() ? "(none)" : screenUrl.c_str());
+
+    if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
+        objects_[objIdx].screenImageRequested = true;
+        g_imageLoader.loadAndCacheImage(screenUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
+            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
+                objects_[objIdx].screenImagePath = result.filePath;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: Screen image ready for thingIdx=%d: %s\n",
+                                      thingIdx, result.filePath.c_str());
+            }
+        });
+    }
 
     int newIndex = (int)objects_.size() - 1;
 
@@ -310,6 +361,15 @@ std::vector<const EmbeddedItemInstance*> InstanceManager::getActiveInstances() c
             result.push_back(&pair.second);
     }
     return result;
+}
+
+std::string InstanceManager::getScreenImagePath(int thingIdx) const
+{
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx)
+            return obj.screenImagePath;
+    }
+    return "";
 }
 
 int InstanceManager::getTaskIndexForThing(int thingIdx) const

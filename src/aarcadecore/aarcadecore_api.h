@@ -141,6 +141,10 @@ AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
 AARCADECORE_EXPORT int  aarcadecore_get_thing_task_index(int thingIdx);
+AARCADECORE_EXPORT bool aarcadecore_get_thing_screen_path(int thingIdx, char* pathOut, int pathSize);
+/* Load screen image pixels (BGRA, caller must free with aarcadecore_free_pixels) */
+AARCADECORE_EXPORT bool aarcadecore_load_thing_screen_pixels(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
+AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
 
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
@@ -175,6 +179,9 @@ typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
 typedef void  (*aarcadecore_pop_pending_spawn_t)(void);
 typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
 typedef int   (*aarcadecore_get_thing_task_index_t)(int thingIdx);
+typedef bool  (*aarcadecore_get_thing_screen_path_t)(int thingIdx, char* pathOut, int pathSize);
+typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
+typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 
 #ifdef __cplusplus
 }

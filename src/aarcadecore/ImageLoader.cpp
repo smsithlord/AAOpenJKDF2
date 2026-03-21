@@ -239,20 +239,31 @@ void ImageLoader::processNextJob()
         isProcessing_ = true;
     }
 
-    // Check disk cache
+    // Check disk cache — if cached AND pixels already in memory, complete immediately.
+    // Otherwise, re-render through the view to populate the pixel cache for the host.
     std::string cached = getCachedFilePath(job.url);
     if (!cached.empty()) {
-        {
-            std::lock_guard<std::mutex> lock(completionMutex_);
-            for (auto& cb : job.callbacks)
-                completionQueue_.push({true, cached, job.url, cb});
+        std::lock_guard<std::mutex> pxLock(pixelCacheMutex_);
+        if (pixelCache_.find(cached) != pixelCache_.end()) {
+            // Pixels already in memory — complete immediately
+            {
+                std::lock_guard<std::mutex> lock(completionMutex_);
+                for (auto& cb : job.callbacks)
+                    completionQueue_.push({true, cached, job.url, cb});
+            }
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                jobMap_.erase(job.hash);
+                isProcessing_ = false;
+            }
+            processNextJob();
+            return;
         }
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            jobMap_.erase(job.hash);
-            isProcessing_ = false;
-        }
-        processNextJob();
+        // Pixels not in memory — load the cached file through the view to populate pixel cache
+        currentUrl_ = job.url;
+        std::string fileUrl = "file:///" + cached;
+        for (char& c : fileUrl) { if (c == '\\') c = '/'; }
+        loadImageInView(fileUrl);
         return;
     }
 
@@ -333,6 +344,23 @@ void ImageLoader::renderAndSave()
     std::string outputPath = getCacheFilePath(currentUrl_);
     cropped->WritePNG(outputPath.c_str());
 
+    /* Cache raw BGRA pixels in memory for host-side GL texture creation */
+    {
+        CachedPixels cp;
+        cp.width = cropped->width();
+        cp.height = cropped->height();
+        size_t pixelBytes = (size_t)cp.width * cp.height * 4;
+        cp.pixels = (uint8_t*)malloc(pixelBytes);
+        uint8_t* src = (uint8_t*)cropped->LockPixels();
+        uint32_t rowBytes = cropped->row_bytes();
+        for (uint32_t row = 0; row < cp.height; row++)
+            memcpy(cp.pixels + row * cp.width * 4, src + row * rowBytes, cp.width * 4);
+        cropped->UnlockPixels();
+
+        std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+        pixelCache_[outputPath] = cp;
+    }
+
     if (g_host.host_printf) g_host.host_printf("ImageLoader: Saved %s\n", outputPath.c_str());
 
     // Complete all callbacks for this URL
@@ -388,6 +416,28 @@ void ImageLoader::onImageLoaderReady()
     bool hasJobs = false;
     { std::lock_guard<std::mutex> lock(queueMutex_); hasJobs = !jobQueue_.empty(); }
     if (hasJobs) processNextJob();
+}
+
+bool ImageLoader::getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut)
+{
+    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+    auto it = pixelCache_.find(cachePath);
+    if (it == pixelCache_.end()) return false;
+
+    *pixelsOut = it->second.pixels;
+    *widthOut = (int)it->second.width;
+    *heightOut = (int)it->second.height;
+    return true;
+}
+
+void ImageLoader::freePixels(const std::string& cachePath)
+{
+    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+    auto it = pixelCache_.find(cachePath);
+    if (it != pixelCache_.end()) {
+        free(it->second.pixels);
+        pixelCache_.erase(it);
+    }
 }
 
 void ImageLoader::processCompletions()

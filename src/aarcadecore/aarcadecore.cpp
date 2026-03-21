@@ -195,6 +195,9 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
             g_tasks[i]->vtable->update(g_tasks[i]);
     }
 
+    /* Process image loader completions (callbacks for cached/downloaded images) */
+    g_imageLoader.processCompletions();
+
     /* Sync titles from browser instances */
     g_instanceManager.updateTitles();
 }
@@ -389,6 +392,48 @@ AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx)
 AARCADECORE_EXPORT int aarcadecore_get_selected_thing_idx(void)
 {
     return g_instanceManager.getSelectedThingIdx();
+}
+
+AARCADECORE_EXPORT bool aarcadecore_get_thing_screen_path(int thingIdx, char* pathOut, int pathSize)
+{
+    std::string path = g_instanceManager.getScreenImagePath(thingIdx);
+    if (path.empty()) return false;
+    if (pathOut && pathSize > 0) {
+        strncpy(pathOut, path.c_str(), pathSize - 1);
+        pathOut[pathSize - 1] = '\0';
+    }
+    return true;
+}
+
+AARCADECORE_EXPORT bool aarcadecore_load_thing_screen_pixels(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut)
+{
+    if (!pixelsOut || !widthOut || !heightOut) return false;
+    std::string cachePath = g_instanceManager.getScreenImagePath(thingIdx);
+    if (cachePath.empty()) return false;
+
+    /* Get cached BGRA pixels from the ImageLoader's in-memory cache */
+    uint8_t* pixels = nullptr;
+    int w = 0, h = 0;
+    if (!g_imageLoader.getPixels(cachePath, &pixels, &w, &h))
+        return false;
+
+    /* Copy pixels so the caller owns the memory */
+    size_t pixelBytes = (size_t)w * h * 4;
+    uint8_t* copy = (uint8_t*)malloc(pixelBytes);
+    memcpy(copy, pixels, pixelBytes);
+
+    /* Free the cache entry (it's been consumed) */
+    g_imageLoader.freePixels(cachePath);
+
+    *pixelsOut = copy;
+    *widthOut = w;
+    *heightOut = h;
+    return true;
+}
+
+AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels)
+{
+    free(pixels);
 }
 
 AARCADECORE_EXPORT int aarcadecore_get_active_instance_count(void)
