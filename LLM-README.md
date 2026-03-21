@@ -10,7 +10,7 @@ This document contains notes for building OpenJKDF2 on Windows with Visual Studi
 - OpenAL 1.1 SDK with `OPENALDIR` environment variable set to `C:\Program Files (x86)\OpenAL 1.1 SDK`
 - CMake 3.x or Visual Studio 2022 (which includes CMake)
 
-### Building
+### Building (MSVC standalone)
 ```bash
 git submodule update --init
 mkdir build_msvc
@@ -19,9 +19,30 @@ cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release --target openjkdf2-64
 ```
 
+### Building (Libretro Host — with aarcadecore.dll)
+This is the main development build. It includes the AArcade Core DLL, Ultralight HUD, Library Browser, and per-thing texture rendering.
+
+**Additional prerequisites:**
+- Ultralight SDK 1.4.0 (`ultralight-free-sdk-1.4.0-win-x64/` at repo root)
+- Steamworks SDK 1.64 (`steamworks_sdk_164/` at repo root — for Steamworks browser, optional)
+- Runtime: Ultralight DLLs + `resources/` folder in game directory
+
+```bash
+git submodule update --init
+mkdir build_libretro_host
+cd build_libretro_host
+cmake -G "Visual Studio 17 2022" -A x64 ..
+cmake --build . --config Release
+```
+
+This builds both `openjkdf2-64.exe` and `aarcadecore.dll`. UI files are auto-copied to the output directory via a CMake post-build step.
+
 ### Output Location
-- **Executable**: `build_msvc/Release/openjkdf2-64.exe`
-- **Required DLLs**: `build_msvc/*.dll` (OpenAL32.dll, exchndl.dll, mgwhelp.dll, symsrv.dll)
+- **Executable**: `build_libretro_host/Release/openjkdf2-64.exe` (or `build_msvc/Release/`)
+- **DLL**: `build_libretro_host/Release/aarcadecore.dll`
+- **UI files**: `build_libretro_host/Release/aarcadecore/ui/` (auto-copied from `src/aarcadecore/ui/`)
+- **Required DLLs**: OpenAL32.dll, exchndl.dll, mgwhelp.dll, symsrv.dll, Ultralight*.dll, steam_api64.dll
+- **Image cache**: `./cache/urls/` (created automatically by ImageLoader)
 
 ## Required Code Changes for MSVC Compilation
 

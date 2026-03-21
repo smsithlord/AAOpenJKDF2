@@ -9,6 +9,7 @@
 #include "aarcadecore_internal.h"
 #include "libretro_host.h"
 #include "SQLiteLibrary.h"
+#include "ImageLoader.h"
 #include <string.h>
 
 /* Global host callbacks */
@@ -16,6 +17,9 @@ AACoreHostCallbacks g_host = {0};
 
 /* Global library database */
 SQLiteLibrary g_library;
+
+/* Global image loader */
+ImageLoader g_imageLoader;
 
 /* The active instance renders to in-game 3DO screens and receives
  * input when not in menu mode. NULL = no active screen content. */
@@ -123,6 +127,9 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     /* Open the library database */
     g_library.open("G:/Documents Sym Links/GitHub/aarcade-core/x64/Release/library.db");
 
+    /* Initialize the image loader (headless Ultralight view for thumbnail caching) */
+    g_imageLoader.init();
+
     /* Tasks are created on demand, not at startup */
     g_taskCount = 0;
     g_activeInstance = NULL;
@@ -138,6 +145,7 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     if (g_host.host_printf)
         g_host.host_printf("AACore: Shutting down...\n");
 
+    g_imageLoader.shutdown();
     g_library.close();
     LibretroManager_Shutdown();
     SteamworksWebBrowserManager_Shutdown();
@@ -152,6 +160,7 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
     UltralightManager_Update();
     LibretroManager_Update();
     SteamworksWebBrowserManager_Update();
+    g_imageLoader.update();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)

@@ -104,9 +104,19 @@ typedef struct AACoreHostCallbacks {
 | `UltralightInstance.cpp` | Ultralight HTML renderer — loads local HTML files, CPU rendering to textures |
 | `UltralightManager.cpp` | Creates/manages the active Ultralight instance |
 | `libretro_host.cpp` / `.h` | Low-level Libretro core loading, audio ring buffer, video frame buffer |
-| `ui/ui.html` | Test HTML page for the Ultralight renderer |
+| `ImageLoader.h` / `.cpp` | Headless Ultralight view (512x512) for downloading and caching thumbnail images |
+| `SQLiteLibrary.h` / `.cpp` | SQLite wrapper for library database queries |
+| `ArcadeTypes.h` | C++ data structs for library entries (Item, Type, Model, App, etc.) |
+| `sqlite3.c` / `.h` | SQLite amalgamation (bundled) |
+| `ui/mainMenu.html` / `.js` | AArcade main menu overlay |
+| `ui/library.html` / `.js` | Library browser UI |
+| `ui/arcadeHud.js` | JS-side image cache layer (CRC32 hash, cache prediction, polling) |
+| `ui/image-loader.html` | Headless page for ImageLoader view — loads images, reports rect to C++ |
+| `ui/style.css` | Shared CSS for library browser |
+| `ui/blank.html` | Transparent blank page for inactive HUD |
+| `ui/media-loading.jpg` | Placeholder image while thumbnails load |
 
-**Note:** All DLL source files are C++ (`.cpp`). The public API (`aarcadecore_api.h`) uses `extern "C"` so any C host can load the DLL.
+**Note:** DLL source files are C++ (`.cpp`) except `sqlite3.c`. The public API (`aarcadecore_api.h`) uses `extern "C"` so any C host can load the DLL.
 
 ## Embedded Instance Types
 
@@ -162,6 +172,43 @@ Each spawned compscreen thing gets its own GL texture. The host swaps `texture_i
 **Why direct overwrite works:** All compscreen tris point to the same `rdDDrawSurface` address. The deferred renderer reads `texture_id` from that address at draw time. By overwriting the value and flushing between things, each thing's faces draw with the correct GL texture.
 
 **Dynamic texture callback** (`rdDynamicTexture_Register`) is currently disabled — the texture_id swap approach doesn't need it.
+
+## How Image Loading / Thumbnail Caching Works
+
+The Library Browser displays thumbnail images for each entry. Images are downloaded and cached locally using a dedicated headless Ultralight view.
+
+### Architecture:
+```
+library.js createEntryCard()
+  → arcadeHud.loadImage(url)
+    → predictCachePath(url) — CRC32 hash → file:///./cache/urls/[char]/[hash].png
+    → try loading from predicted cache path (instant if cached)
+    → if cache miss: aapi.images.getCacheImage(url)
+      → C++ ImageLoader.loadAndCacheImage(url, callback)
+        → check disk cache, or load via image-loader.html view
+        → image-loader.html <img> loads URL via Ultralight's network stack
+        → JS onload: getBoundingClientRect() → cppBridge.onImageLoaded()
+        → C++ renders view, crops bitmap to image rect, saves PNG to cache
+      → completion queued, polled by aapi.images.processCompletions() every 50ms
+      → Promise resolved with {filePath} → library.js updates <img> src
+```
+
+### Key components:
+- **ImageLoader** (`ImageLoader.h/.cpp`): Manages a 512x512 headless Ultralight view, job queue with deduplication, CRC32 hashing, PNG cache saving via `Bitmap::WritePNG()`
+- **image-loader.html**: Loaded into the headless view. Has `<img>` with `object-fit: contain`. Exposes `window.loadImageUrl(url)` called from C++. Reports image rect back via `window.cppBridge.onImageLoaded()`
+- **arcadeHud.js**: JS-side cache layer. Predicts cache paths using CRC32, polls `processCompletions`, manages pending requests
+- **aapi.images.getCacheImage(url)**: Returns Promise-like object. Resolved when image is cached. Rejected on failure.
+- **aapi.images.processCompletions()**: Polled every 50ms to invoke completed download callbacks
+
+### Cache structure:
+```
+./cache/urls/
+  0/  0ddf2abd.png
+  3/  3fa982fb.png
+  ...
+  f/  ...
+```
+Files are named by CRC32 hash of the lowercase URL. Subfolder is first hex character.
 
 ## How Audio Works
 

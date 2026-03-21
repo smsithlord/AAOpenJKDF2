@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Image Loader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: black;
+        }
+
+        #image-container {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 100%;
+            margin: 0;
+            padding: 0;
+            object-fit: contain;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="image-container">
+        <img id="main-image" style="display: none;" />
+    </div>
+
+    <script>
+        // Image loader state with queue support
+        let currentUrl = '';
+        let isLoading = false;
+        let imageQueue = [];
+
+        const imageElement = document.getElementById('main-image');
+
+        // Process next image in queue
+        function processNextImage() {
+            if (isLoading || imageQueue.length === 0) {
+                return;
+            }
+
+            const url = imageQueue.shift();
+            loadImage(url);
+        }
+
+        // Internal function to actually load an image
+        function loadImage(url) {
+            console.log('[ImageLoader] Loading image: ' + url);
+
+            currentUrl = url;
+            isLoading = true;
+
+            // Reset image
+            imageElement.style.display = 'none';
+            imageElement.src = '';
+
+            // Set up event handlers
+            imageElement.onload = function() {
+                console.log('[ImageLoader] Image loaded successfully: ' + currentUrl);
+                imageElement.style.display = 'block';
+
+                // Calculate the actual rendered rect of the image
+                const rect = imageElement.getBoundingClientRect();
+                const rectX = Math.round(rect.left);
+                const rectY = Math.round(rect.top);
+                const rectWidth = Math.round(rect.width);
+                const rectHeight = Math.round(rect.height);
+
+                // Notify C++ that image is ready to render with rect info
+                if (window.cppBridge && window.cppBridge.onImageLoaded) {
+                    window.cppBridge.onImageLoaded(true, currentUrl, rectX, rectY, rectWidth, rectHeight);
+                } else {
+                    console.error('[ImageLoader] C++ bridge not available!');
+                }
+
+                // Mark as complete and process next
+                isLoading = false;
+                processNextImage();
+            };
+
+            imageElement.onerror = function() {
+                console.error('[ImageLoader] Failed to load image:', currentUrl);
+
+                // Notify C++ of failure (with zero rect)
+                if (window.cppBridge && window.cppBridge.onImageLoaded) {
+                    window.cppBridge.onImageLoaded(false, currentUrl, 0, 0, 0, 0);
+                } else {
+                    console.error('[ImageLoader] C++ bridge not available!');
+                }
+
+                // Mark as complete and process next
+                isLoading = false;
+                processNextImage();
+            };
+
+            // Start loading
+            imageElement.src = url;
+        }
+
+        // Called by C++ to queue a new image
+        window.loadImageUrl = function(url) {
+            console.log('[ImageLoader] Queue request: ' + url);
+            imageQueue.push(url);
+            processNextImage();
+        };
+
+        // Initialize - call immediately since DOM is already loaded when this script runs
+        function initializeBridge() {
+            console.log('[ImageLoader] Initializing bridge');
+
+            // Notify C++ that we're ready
+            if (window.cppBridge && window.cppBridge.onImageLoaderReady) {
+                console.log('[ImageLoader] Calling onImageLoaderReady');
+                window.cppBridge.onImageLoaderReady();
+            } else {
+                console.error('[ImageLoader] C++ bridge not available!');
+            }
+        }
+
+        // The script runs after DOM is ready, and the C++ bridge is set up in OnDOMReady
+        // which fires before this script executes. So we can call it immediately.
+        initializeBridge();
+    </script>
+</body>
+</html>

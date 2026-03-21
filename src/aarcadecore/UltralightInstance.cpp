@@ -254,6 +254,138 @@ AAPI_CALLBACK(js_aapi_searchInstancesTyped) {
     return vectorToJSArray(ctx, g_library.searchInstances(q, limit), instanceToJS);
 }
 
+/* --- aapi.images.* callback implementations --- */
+
+#include "ImageLoader.h"
+extern ImageLoader g_imageLoader;
+
+/*
+ * Promise-like completion system for getCacheImage.
+ *
+ * getCacheImage(url) returns a JS object with then() and catch() methods.
+ * When the image is cached, processCompletions() invokes the stored resolve callback.
+ */
+
+struct PendingImageRequest {
+    JSContextRef ctx;
+    JSObjectRef promiseObj;  /* GC-protected */
+    std::string url;
+};
+static std::vector<PendingImageRequest> g_pendingImages;
+static std::mutex g_pendingImagesMutex;
+
+/* then() method on promise-like object — stores resolve callback as _resolve property */
+static JSValueRef js_promise_then(JSContextRef ctx, JSObjectRef function,
+    JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
+{
+    if (argc >= 1) {
+        JSStringRef key = JSStringCreateWithUTF8CString("_resolve");
+        JSObjectSetProperty(ctx, thisObject, key, args[0], 0, nullptr);
+        JSStringRelease(key);
+    }
+    return thisObject; /* chainable */
+}
+
+/* catch() method on promise-like object — stores reject callback as _reject property */
+static JSValueRef js_promise_catch(JSContextRef ctx, JSObjectRef function,
+    JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
+{
+    if (argc >= 1) {
+        JSStringRef key = JSStringCreateWithUTF8CString("_reject");
+        JSObjectSetProperty(ctx, thisObject, key, args[0], 0, nullptr);
+        JSStringRelease(key);
+    }
+    return thisObject; /* chainable */
+}
+
+AAPI_CALLBACK(js_images_getCacheImage) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string url = jsValueToString(ctx, arguments[0]);
+
+    /* Create promise-like object with then() and catch() */
+    JSObjectRef promiseObj = JSObjectMake(ctx, nullptr, nullptr);
+
+    JSStringRef thenName = JSStringCreateWithUTF8CString("then");
+    JSObjectRef thenFn = JSObjectMakeFunctionWithCallback(ctx, thenName, js_promise_then);
+    JSObjectSetProperty(ctx, promiseObj, thenName, thenFn, 0, nullptr);
+    JSStringRelease(thenName);
+
+    JSStringRef catchName = JSStringCreateWithUTF8CString("catch");
+    JSObjectRef catchFn = JSObjectMakeFunctionWithCallback(ctx, catchName, js_promise_catch);
+    JSObjectSetProperty(ctx, promiseObj, catchName, catchFn, 0, nullptr);
+    JSStringRelease(catchName);
+
+    /* Protect from GC until completion */
+    JSValueProtect(ctx, promiseObj);
+
+    /* Queue the image load — the callback fires from processCompletions */
+    PendingImageRequest req;
+    req.ctx = ctx;
+    req.promiseObj = promiseObj;
+    req.url = url;
+
+    {
+        std::lock_guard<std::mutex> lock(g_pendingImagesMutex);
+        g_pendingImages.push_back(req);
+    }
+
+    g_imageLoader.loadAndCacheImage(url, [url](const ImageLoadResult& result) {
+        /* This fires on the main thread from processCompletions.
+         * Find and resolve the matching pending request. */
+        std::lock_guard<std::mutex> lock(g_pendingImagesMutex);
+        for (auto it = g_pendingImages.begin(); it != g_pendingImages.end(); ++it) {
+            if (it->url == url) {
+                JSContextRef c = it->ctx;
+                JSObjectRef p = it->promiseObj;
+
+                if (result.success) {
+                    /* Convert file path to file:// URL */
+                    std::string fileUrl = "file:///./" + result.filePath;
+                    for (char& ch : fileUrl) { if (ch == '\\') ch = '/'; }
+
+                    JSStringRef resolveKey = JSStringCreateWithUTF8CString("_resolve");
+                    JSValueRef resolveVal = JSObjectGetProperty(c, p, resolveKey, nullptr);
+                    JSStringRelease(resolveKey);
+
+                    if (JSValueIsObject(c, resolveVal)) {
+                        JSObjectRef resultObj = JSObjectMake(c, nullptr, nullptr);
+                        jsSetProp(c, resultObj, "filePath", fileUrl);
+                        JSStringRef sk = JSStringCreateWithUTF8CString("success");
+                        JSObjectSetProperty(c, resultObj, sk, JSValueMakeBoolean(c, true), 0, nullptr);
+                        JSStringRelease(sk);
+                        JSValueRef callArgs[] = { resultObj };
+                        JSObjectCallAsFunction(c, (JSObjectRef)resolveVal, nullptr, 1, callArgs, nullptr);
+                    }
+                } else {
+                    /* Call _reject so arcadeHud shows the error placeholder */
+                    JSStringRef rejectKey = JSStringCreateWithUTF8CString("_reject");
+                    JSValueRef rejectVal = JSObjectGetProperty(c, p, rejectKey, nullptr);
+                    JSStringRelease(rejectKey);
+
+                    if (JSValueIsObject(c, rejectVal)) {
+                        JSStringRef errStr = JSStringCreateWithUTF8CString("Image load failed");
+                        JSValueRef errArg = JSValueMakeString(c, errStr);
+                        JSStringRelease(errStr);
+                        JSValueRef callArgs[] = { errArg };
+                        JSObjectCallAsFunction(c, (JSObjectRef)rejectVal, nullptr, 1, callArgs, nullptr);
+                    }
+                }
+
+                JSValueUnprotect(c, p);
+                g_pendingImages.erase(it);
+                break;
+            }
+        }
+    });
+
+    return promiseObj;
+}
+
+AAPI_CALLBACK(js_images_processCompletions) {
+    g_imageLoader.processCompletions();
+    return JSValueMakeUndefined(ctx);
+}
+
 /* Helper to register a method on a JS object */
 static void addJSMethod(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectCallAsFunctionCallback fn) {
     JSStringRef methodName = JSStringCreateWithUTF8CString(name);
@@ -307,6 +439,15 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     JSStringRef libraryName = JSStringCreateWithUTF8CString("library");
     JSObjectSetProperty(ctx, aapiObj, libraryName, libraryObj, 0, nullptr);
     JSStringRelease(libraryName);
+
+    /* aapi.images — image caching */
+    JSObjectRef imagesObj = JSObjectMake(ctx, nullptr, nullptr);
+    addJSMethod(ctx, imagesObj, "getCacheImage", js_images_getCacheImage);
+    addJSMethod(ctx, imagesObj, "processCompletions", js_images_processCompletions);
+
+    JSStringRef imagesName = JSStringCreateWithUTF8CString("images");
+    JSObjectSetProperty(ctx, aapiObj, imagesName, imagesObj, 0, nullptr);
+    JSStringRelease(imagesName);
 
     /* Attach aapi to global window */
     JSStringRef aapiName = JSStringCreateWithUTF8CString("aapi");
