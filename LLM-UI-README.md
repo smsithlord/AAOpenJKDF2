@@ -56,6 +56,10 @@ Creates a draggable window with title bar, content area, optional footer, and he
 | `onBack` | function | Callback when Back is clicked |
 | `onClose` | function | Callback when X is clicked |
 | `footerButtons` | array | Optional footer buttons: `[{ label, className, onClick }]` |
+| `tabs` | array | Tab definitions: `[{ label, onActivate(contentEl) }]` |
+| `tabPosition` | string | `'bottom'` to place tabs below content (default: top) |
+| `onReady` | function | Called with content element after window is built (non-tabbed pages) |
+| `windowClass` | string | Additional CSS class(es) added to `.aa-window` |
 
 ### Window Structure
 
@@ -67,9 +71,28 @@ Creates a draggable window with title bar, content area, optional footer, and he
       .aa-titlebar-buttons
         button.aa-titlebar-btn        (Back)
         button.aa-titlebar-btn.aa-btn-close  (X)
+    .aa-tabs                           (if tabs provided, top position)
+      button.aa-tab.aa-tab-active
+      button.aa-tab
     .aa-content                        ← returned element
+    .aa-tabs.aa-tabs-bottom            (if tabs provided, bottom position)
     .aa-footer                         (if footerButtons provided)
-  .aa-helptext                         (flyout below window)
+  .aa-helptext                         (flyout below window, absolute positioned)
+```
+
+## Tabs
+
+When `tabs` is provided, a row of tab buttons appears (top or bottom). Clicking a tab clears the content area and calls that tab's `onActivate(contentEl)` callback. The first tab is activated on creation.
+
+```javascript
+arcadeHud.ui.createWindow({
+    title: 'My Tabs',
+    tabPosition: 'bottom',
+    tabs: [
+        { label: 'Tab A', onActivate: function(el) { el.innerHTML = 'Content A'; } },
+        { label: 'Tab B', onActivate: function(el) { el.innerHTML = 'Content B'; } }
+    ]
+});
 ```
 
 ## Dragging
@@ -131,19 +154,34 @@ arcadeHud.ui.createWindow({
 });
 ```
 
-## Utilities
+## Reusable Components
 
 | Function | Description |
 |----------|-------------|
 | `arcadeHud.ui.escapeHtml(str)` | Escape HTML special characters for safe insertion |
+| `arcadeHud.ui.renderTaskList(containerEl)` | Render active task list with close buttons into any container |
+| `arcadeHud.ui.renderLibrary(containerEl)` | Render library browser with grid, search, display modes, and type filters |
+
+### Library Component
+
+`renderLibrary` creates a self-contained library browser with:
+- **Display mode slider** (left): List → Small Squares → Small Landscape → Medium Landscape → Dynamic
+- **Search box** (center, flex-grows to fill space): 300ms debounce
+- **Type toggle buttons** (right): Items, Apps, Maps, Models, Instances (with icons + helpText)
+- **Scrollable grid** with "Load More" pagination
+- **Initial state**: shows "Type into the SEARCH box or select a favorites list."
+- Click an item card to spawn it
+
+The library wrapper sets `min-width: 30vw; min-height: 30vh; max-width: 80vw; height: 60vh` to control its size within the tab content area.
 
 ## Existing Pages Using the Framework
 
 | Page | Title | Features |
 |------|-------|----------|
-| `mainMenu.html/js` | AArcade | Close button, 4 navigation buttons with helpText |
-| `taskMenu.html/js` | Active Tasks | Back + Close, dynamic task list with close buttons |
+| `mainMenu.html/js` | AArcade | Close button, navigation buttons with helpText |
+| `taskMenu.html/js` | Active Tasks | Back + Close, uses `renderTaskList` component |
 | `buildContextMenu.html/js` | Build | Close, aimed object info, Move/Destroy buttons |
+| `tabMenu.html/js` | AArcade (tabs) | Back + Close, bottom tabs: Tasks + Library |
 
 ## JS Bridge (`aapi.manager.*`)
 
@@ -160,3 +198,4 @@ All pages communicate with the C++ backend through the `aapi.manager` namespace.
 | `destroyAimedObject()` | Destroy the aimed-at object |
 | `getActiveInstances()` | Get list of active embedded instances |
 | `deactivateInstance(itemId)` | Deactivate a specific instance |
+| `openTabMenu()` | Open the tabbed control hub |

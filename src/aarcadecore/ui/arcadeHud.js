@@ -319,7 +319,7 @@ const arcadeHud = (function() {
 
         // Window
         var win = document.createElement('div');
-        win.className = 'aa-window';
+        win.className = 'aa-window' + (options.windowClass ? ' ' + options.windowClass : '');
 
         // Title bar
         var titlebar = document.createElement('div');
@@ -352,10 +352,49 @@ const arcadeHud = (function() {
         titlebar.appendChild(buttons);
         win.appendChild(titlebar);
 
+        // Optional tabs (top position by default)
+        var tabsRow = null;
+        var tabsBottom = options.tabPosition === 'bottom';
+        if (options.tabs && options.tabs.length > 0) {
+            tabsRow = document.createElement('div');
+            tabsRow.className = tabsBottom ? 'aa-tabs aa-tabs-bottom' : 'aa-tabs';
+            if (!tabsBottom) win.appendChild(tabsRow);
+        }
+
         // Content area
         var content = document.createElement('div');
         content.className = 'aa-content';
         win.appendChild(content);
+
+        // Bottom tabs go after content
+        if (tabsRow && tabsBottom) win.appendChild(tabsRow);
+
+        // Set up tab buttons and switching
+        if (tabsRow && options.tabs) {
+            var activeTabIndex = -1;
+            function activateTab(index) {
+                if (index === activeTabIndex) return;
+                activeTabIndex = index;
+                // Update active class
+                var tabBtns = tabsRow.querySelectorAll('.aa-tab');
+                for (var j = 0; j < tabBtns.length; j++) {
+                    tabBtns[j].classList.toggle('aa-tab-active', j === index);
+                }
+                // Clear content and call tab callback
+                content.innerHTML = '';
+                var tab = options.tabs[index];
+                if (tab && tab.onActivate) tab.onActivate(content);
+            }
+            for (var t = 0; t < options.tabs.length; t++) {
+                (function(idx) {
+                    var tabBtn = document.createElement('button');
+                    tabBtn.className = 'aa-tab';
+                    tabBtn.textContent = options.tabs[idx].label || 'Tab ' + (idx + 1);
+                    tabBtn.addEventListener('click', function() { activateTab(idx); });
+                    tabsRow.appendChild(tabBtn);
+                })(t);
+            }
+        }
 
         // Optional footer
         if (options.footerButtons && options.footerButtons.length > 0) {
@@ -393,6 +432,15 @@ const arcadeHud = (function() {
 
         // Set up help text hover
         setupHelpText(helptext);
+
+        // Activate first tab if tabs were provided
+        if (tabsRow && options.tabs && options.tabs.length > 0) {
+            var firstTabBtn = tabsRow.querySelector('.aa-tab');
+            if (firstTabBtn) firstTabBtn.click();
+        }
+
+        // Call onReady callback if provided (for non-tabbed pages)
+        if (options.onReady) options.onReady(content);
 
         return content;
     }
@@ -452,6 +500,334 @@ const arcadeHud = (function() {
         });
     }
 
+    /* ========================================================================
+     * Reusable UI Components
+     * ======================================================================== */
+
+    /**
+     * Render a task list into a container element.
+     * Shows active embedded instances with close buttons.
+     * @param {HTMLElement} containerEl - Element to render into
+     */
+    function renderTaskList(containerEl) {
+        if (!containerEl) return;
+
+        function refresh() {
+            if (!window.aapi || !aapi.manager || !aapi.manager.getActiveInstances) {
+                containerEl.innerHTML = '<div class="aa-empty-message">API not available</div>';
+                return;
+            }
+
+            var instances = aapi.manager.getActiveInstances();
+            if (!instances || instances.length === 0) {
+                containerEl.innerHTML = '<div class="aa-empty-message">No active instances</div>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < instances.length; i++) {
+                var inst = instances[i];
+                html += '<div class="aa-task-item">';
+                html += '  <div class="aa-task-info">';
+                html += '    <div class="aa-task-title">' + escapeHtml(inst.title || inst.itemId) + '</div>';
+                html += '    <div class="aa-task-url">' + escapeHtml(inst.url || '') + '</div>';
+                html += '  </div>';
+                html += '  <button class="aa-task-close" data-item-id="' + escapeHtml(inst.itemId) + '">Close</button>';
+                html += '</div>';
+            }
+            containerEl.innerHTML = html;
+
+            // Attach close handlers via delegation
+            var closeBtns = containerEl.querySelectorAll('.aa-task-close');
+            for (var j = 0; j < closeBtns.length; j++) {
+                closeBtns[j].addEventListener('click', function() {
+                    var itemId = this.getAttribute('data-item-id');
+                    if (window.aapi && aapi.manager && aapi.manager.deactivateInstance) {
+                        aapi.manager.deactivateInstance(itemId);
+                        refresh();
+                    }
+                });
+            }
+        }
+
+        refresh();
+    }
+
+    /* ========================================================================
+     * Library Browser Component
+     * ======================================================================== */
+
+    var libraryTypes = [
+        { key: 'items',     icon: '\uD83D\uDCE6', help: 'Browse items' },
+        { key: 'apps',      icon: '\uD83C\uDFAE', help: 'Browse apps' },
+        { key: 'maps',      icon: '\uD83D\uDDFA\uFE0F', help: 'Browse maps' },
+        { key: 'models',    icon: '\uD83E\uDDE9', help: 'Browse models' },
+        { key: 'instances', icon: '\uD83D\uDCCB', help: 'Browse instances' }
+    ];
+
+    var DISPLAY_MODES = ['list', 'square', 'landscape', 'large', 'dynamic'];
+
+    function renderLibrary(containerEl) {
+        if (!containerEl) return;
+
+        var PAGE_SIZE = 30;
+        var state = {
+            type: 'items',
+            offset: 0,
+            searchTerm: '',
+            isSearchMode: false,
+            hasMore: true,
+            loading: false,
+            displayMode: 0, /* index into DISPLAY_MODES */
+            hasLoadedOnce: false
+        };
+
+        // Build DOM
+        var wrapper = document.createElement('div');
+        wrapper.className = 'aa-library-wrapper';
+
+        var scrollArea = document.createElement('div');
+        scrollArea.className = 'aa-library-scroll';
+
+        var grid = document.createElement('div');
+        grid.className = 'aa-library-grid aa-library-mode-list';
+
+        var loadMoreBtn = document.createElement('button');
+        loadMoreBtn.className = 'aa-library-loadmore';
+        loadMoreBtn.textContent = 'Load More';
+        loadMoreBtn.style.display = 'none';
+        loadMoreBtn.addEventListener('click', function() { loadMore(); });
+
+        scrollArea.appendChild(grid);
+        scrollArea.appendChild(loadMoreBtn);
+
+        // Bottom bar: slider | search | type toggles
+        var bar = document.createElement('div');
+        bar.className = 'aa-library-bar';
+
+        var slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'aa-library-slider';
+        slider.min = '0';
+        slider.max = String(DISPLAY_MODES.length - 1);
+        slider.value = '0';
+        slider.setAttribute('helpText', 'Display mode: List / Small Squares / Small Landscape / Medium Landscape / Dynamic');
+        slider.addEventListener('change', function() {
+            state.displayMode = parseInt(slider.value);
+            grid.className = 'aa-library-grid aa-library-mode-' + DISPLAY_MODES[state.displayMode];
+        });
+        bar.appendChild(slider);
+
+        var searchInput = document.createElement('input');
+        searchInput.className = 'aa-library-search';
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search...';
+        bar.appendChild(searchInput);
+
+        var typesDiv = document.createElement('div');
+        typesDiv.className = 'aa-library-types';
+
+        for (var i = 0; i < libraryTypes.length; i++) {
+            (function(lt, idx) {
+                var btn = document.createElement('button');
+                btn.className = 'aa-library-type-btn' + (idx === 0 ? ' aa-active' : '');
+                btn.textContent = lt.icon;
+                btn.setAttribute('helpText', lt.help);
+                btn.setAttribute('data-type', lt.key);
+                btn.addEventListener('click', function() {
+                    switchType(lt.key);
+                    var btns = typesDiv.querySelectorAll('.aa-library-type-btn');
+                    for (var j = 0; j < btns.length; j++) btns[j].classList.remove('aa-active');
+                    btn.classList.add('aa-active');
+                });
+                typesDiv.appendChild(btn);
+            })(libraryTypes[i], i);
+        }
+
+        bar.appendChild(typesDiv);
+
+        wrapper.appendChild(scrollArea);
+        wrapper.appendChild(bar);
+        containerEl.appendChild(wrapper);
+
+        // Show initial message
+        grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
+
+        // Search debounce
+        var searchTimeout = null;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                var term = searchInput.value.trim();
+                if (term) {
+                    state.isSearchMode = true;
+                    state.searchTerm = term;
+                    doSearch(term);
+                } else {
+                    state.isSearchMode = false;
+                    state.searchTerm = '';
+                    if (state.hasLoadedOnce) {
+                        loadEntries(true);
+                    } else {
+                        grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
+                        loadMoreBtn.style.display = 'none';
+                    }
+                }
+            }, 300);
+        });
+
+        // API helpers
+        function getApi() {
+            return (window.aapi && aapi.library) ? aapi.library : null;
+        }
+
+        function loadEntries(reset) {
+            var api = getApi();
+            if (!api || state.loading) return;
+
+            if (reset) { state.offset = 0; grid.innerHTML = ''; state.hasMore = true; }
+
+            state.loading = true;
+            state.hasLoadedOnce = true;
+            var entries = [];
+
+            try {
+                var t = state.type;
+                if (t === 'items') entries = api.getItems(state.offset, PAGE_SIZE);
+                else if (t === 'apps') entries = api.getApps(state.offset, PAGE_SIZE);
+                else if (t === 'maps') entries = api.getMaps(state.offset, PAGE_SIZE);
+                else if (t === 'models') entries = api.getModels(state.offset, PAGE_SIZE);
+                else if (t === 'instances') entries = api.getInstances(state.offset, PAGE_SIZE);
+            } catch (e) { entries = []; }
+
+            if (!entries || entries.length < PAGE_SIZE) state.hasMore = false;
+            state.offset += (entries ? entries.length : 0);
+            renderCards(entries || [], !reset);
+            loadMoreBtn.style.display = state.hasMore ? 'block' : 'none';
+            state.loading = false;
+        }
+
+        function doSearch(term) {
+            var api = getApi();
+            if (!api || state.loading) return;
+
+            state.loading = true;
+            state.hasLoadedOnce = true;
+            grid.innerHTML = '';
+            var entries = [];
+
+            try {
+                var t = state.type;
+                if (t === 'items') entries = api.searchItems(term, PAGE_SIZE);
+                else if (t === 'apps') entries = api.searchApps(term, PAGE_SIZE);
+                else if (t === 'maps') entries = api.searchMaps(term, PAGE_SIZE);
+                else if (t === 'models') entries = api.searchModels(term, PAGE_SIZE);
+                else if (t === 'instances') entries = api.searchInstances(term, PAGE_SIZE);
+            } catch (e) { entries = []; }
+
+            renderCards(entries || [], false);
+            loadMoreBtn.style.display = 'none';
+            state.loading = false;
+        }
+
+        function loadMore() {
+            if (state.isSearchMode || !state.hasMore) return;
+            loadEntries(false);
+        }
+
+        function switchType(type) {
+            state.type = type;
+            state.isSearchMode = false;
+            state.searchTerm = '';
+            searchInput.value = '';
+            loadEntries(true);
+        }
+
+        function renderCards(entries, append) {
+            if (!append) grid.innerHTML = '';
+            if (!entries.length && !append) {
+                grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">No entries found</div>';
+                return;
+            }
+            for (var i = 0; i < entries.length; i++) {
+                grid.appendChild(createCard(entries[i]));
+            }
+        }
+
+        function createCard(entry) {
+            var card = document.createElement('div');
+            card.className = 'aa-library-card';
+
+            var imgDiv = document.createElement('div');
+            imgDiv.className = 'aa-library-card-img';
+
+            var imgUrl = getBestImage(entry);
+            if (imgUrl) {
+                loadCardImage(imgDiv, imgUrl);
+            } else {
+                imgDiv.textContent = '\uD83D\uDDBC';
+            }
+
+            var titleDiv = document.createElement('div');
+            titleDiv.className = 'aa-library-card-title';
+            titleDiv.textContent = entry.title || entry.id || 'Untitled';
+
+            card.appendChild(imgDiv);
+            card.appendChild(titleDiv);
+
+            // Click to spawn (items type) or show title
+            if (state.type === 'items' && entry.id) {
+                card.addEventListener('click', function() {
+                    if (window.aapi && aapi.manager && aapi.manager.spawnItemObject) {
+                        aapi.manager.spawnItemObject(entry.id);
+                        aapi.manager.closeMenu();
+                    }
+                });
+            }
+
+            return card;
+        }
+
+        function getBestImage(entry) {
+            return entry.marquee || entry.screen || entry.preview || entry.file || '';
+        }
+
+        function isImgUrl(url) {
+            if (!url) return false;
+            var lower = url.toLowerCase();
+            var exts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+            for (var i = 0; i < exts.length; i++) {
+                if (lower.indexOf(exts[i]) !== -1) return true;
+            }
+            return false;
+        }
+
+        function loadCardImage(imgDiv, url) {
+            if (!isImgUrl(url)) {
+                imgDiv.textContent = '\uD83D\uDDBC';
+                return;
+            }
+            if (typeof arcadeHud.loadImage === 'function') {
+                arcadeHud.loadImage(url).then(function(result) {
+                    if (result && result.filePath) {
+                        var img = document.createElement('img');
+                        img.src = result.filePath;
+                        img.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                        imgDiv.textContent = '';
+                        imgDiv.appendChild(img);
+                    }
+                }).catch(function() {
+                    imgDiv.textContent = '\uD83D\uDDBC';
+                });
+            } else {
+                imgDiv.textContent = '\uD83D\uDDBC';
+            }
+        }
+
+        // Initial load
+        loadEntries(true);
+    }
+
     // Public API
     return {
         initialize: initialize,
@@ -468,7 +844,9 @@ const arcadeHud = (function() {
         // UI framework
         ui: {
             createWindow: createWindow,
-            escapeHtml: escapeHtml
+            escapeHtml: escapeHtml,
+            renderTaskList: renderTaskList,
+            renderLibrary: renderLibrary
         },
 
         // Direct access to aapi (for advanced usage)

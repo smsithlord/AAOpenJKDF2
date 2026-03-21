@@ -171,6 +171,12 @@ AAPI_CALLBACK(js_manager_destroyAimedObject) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+void UltralightManager_OpenTabMenu(void);
+AAPI_CALLBACK(js_manager_openTabMenu) {
+    UltralightManager_OpenTabMenu();
+    return JSValueMakeBoolean(ctx, true);
+}
+
 void UltralightManager_OpenBuildContextMenu(void);
 AAPI_CALLBACK(js_manager_openBuildContextMenu) {
     UltralightManager_OpenBuildContextMenu();
@@ -519,6 +525,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "deactivateInstance", js_manager_deactivateInstance);
     addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
     addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);
+    addJSMethod(ctx, managerObj, "openTabMenu", js_manager_openTabMenu);
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");

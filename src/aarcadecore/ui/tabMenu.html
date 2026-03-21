@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AArcade - Tab Menu</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="arcadeHud.js"></script>
+    <script src="tabMenu.js"></script>
+</head>
+<body>
+    <script>
+        if (window.arcadeHud) {
+            initTabMenu();
+        } else {
+            window.addEventListener('load', function() { setTimeout(initTabMenu, 50); });
+        }
+    </script>
+</body>
+</html>
