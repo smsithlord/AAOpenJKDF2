@@ -16,6 +16,9 @@ public:
     void close();
     bool isOpen() const { return db_ != nullptr; }
 
+    /* Schema migration — call after open */
+    void ensureSchema();
+
     // Items
     Arcade::Item getItemById(const std::string& id);
     std::vector<Arcade::Item> getItems(int offset, int limit);
@@ -43,11 +46,18 @@ public:
     std::vector<Arcade::Instance> getInstances(int offset, int limit);
     std::vector<Arcade::Instance> searchInstances(const std::string& query, int limit);
 
+    /* Instance/map management for auto-save/restore */
+    std::string findMapByPlatformFile(const std::string& platformKey, const std::string& file);
+    std::string createMap(const std::string& title, const std::string& platformKey, const std::string& file);
+    std::string findInstanceByMap(const std::string& mapId);
+    std::string createInstance(const std::string& title, const std::string& mapId);
+    std::vector<Arcade::InstanceObject> getInstanceObjects(const std::string& instanceId);
+    void saveInstanceObject(const Arcade::InstanceObject& obj);
+
 private:
     sqlite3* db_;
-
-    // Helper to get a string column (returns "" if NULL)
     static std::string getStr(struct sqlite3_stmt* stmt, int col);
+    void execSQL(const char* sql);
 };
 
 #endif // SQLITE_LIBRARY_H

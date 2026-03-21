@@ -11,6 +11,11 @@ struct EmbeddedInstance; /* forward decl from aarcadecore_internal.h */
 
 struct SpawnRequest {
     Arcade::Item item;  /* full item data from the library */
+    bool hasExplicitPosition;
+    float posX, posY, posZ;
+    int sectorId;
+    float rotX, rotY, rotZ;
+    std::string objectKey; /* for restored objects */
 };
 
 /* Per-item embedded instance — shared by all objects using the same item */
@@ -25,11 +30,12 @@ struct EmbeddedItemInstance {
 
 /* A spawned object in the game world */
 struct SpawnedObject {
-    std::string itemId;   /* links to EmbeddedItemInstance */
+    std::string itemId;       /* links to EmbeddedItemInstance */
+    std::string objectKey;    /* Firebase push ID for DB storage */
     std::string url;
-    int thingIdx;         /* engine sithThing index */
-    std::string screenImagePath;  /* cached PNG path (empty = not ready) */
-    std::string marqueeImagePath; /* cached PNG path (empty = not ready) */
+    int thingIdx;             /* engine sithThing index */
+    std::string screenImagePath;
+    std::string marqueeImagePath;
     bool screenImageRequested;
     bool marqueeImageRequested;
 };
@@ -37,6 +43,11 @@ struct SpawnedObject {
 class InstanceManager {
 public:
     InstanceManager() : selectedObjectIndex_(-1) {}
+
+    /* Map lifecycle — called by host when maps load/unload */
+    void onMapLoaded();
+    void onMapUnloaded();
+    std::string getCurrentInstanceId() const { return currentInstanceId_; }
 
     /* Spawn pipeline */
     void requestSpawn(const Arcade::Item& item);
@@ -67,6 +78,9 @@ public:
     /* Per-frame update — sync titles from browsers */
     void updateTitles();
 
+    /* Report position after spawn (triggers auto-save) */
+    void reportThingTransform(int thingIdx, float px, float py, float pz, int sectorId, float rx, float ry, float rz);
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
@@ -79,6 +93,9 @@ private:
     std::vector<SpawnedObject> objects_;
     std::map<std::string, EmbeddedItemInstance> itemInstances_; /* itemId → per-item instance */
     int selectedObjectIndex_;
+
+    std::string currentInstanceId_;
+    std::string currentMapId_;
 
     std::queue<SpawnRequest> pendingSpawns_;
     SpawnRequest lastPopped_;

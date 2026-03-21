@@ -38,11 +38,13 @@ extern "C" {
  * ======================================================================== */
 typedef void (*AACore_PrintfFn)(const char* fmt, ...);
 typedef int  (*AACore_GetKeyStateFn)(int key_index);
+typedef void (*AACore_GetCurrentMapFn)(char* mapKeyOut, int mapKeySize);
 
 typedef struct AACoreHostCallbacks {
     int api_version;
-    AACore_PrintfFn       host_printf;
-    AACore_GetKeyStateFn  get_key_state;
+    AACore_PrintfFn          host_printf;
+    AACore_GetKeyStateFn     get_key_state;
+    AACore_GetCurrentMapFn   get_current_map;
 } AACoreHostCallbacks;
 
 /* ========================================================================
@@ -140,6 +142,11 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(
 AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
+AARCADECORE_EXPORT bool aarcadecore_spawn_has_position(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
+AARCADECORE_EXPORT void aarcadecore_on_map_loaded(void);
+AARCADECORE_EXPORT void aarcadecore_on_map_unloaded(void);
+AARCADECORE_EXPORT void aarcadecore_report_thing_transform(int thingIdx,
+    float px, float py, float pz, int sectorId, float pitch, float yaw, float roll);
 AARCADECORE_EXPORT int  aarcadecore_get_thing_task_index(int thingIdx);
 AARCADECORE_EXPORT bool aarcadecore_get_thing_screen_path(int thingIdx, char* pathOut, int pathSize);
 /* Load screen image pixels (BGRA, caller must free with aarcadecore_free_pixels) */
@@ -179,6 +186,11 @@ typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int he
 typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
 typedef void  (*aarcadecore_pop_pending_spawn_t)(void);
 typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
+typedef bool  (*aarcadecore_spawn_has_position_t)(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
+typedef void  (*aarcadecore_on_map_loaded_t)(void);
+typedef void  (*aarcadecore_on_map_unloaded_t)(void);
+typedef void  (*aarcadecore_report_thing_transform_t)(int thingIdx,
+    float px, float py, float pz, int sectorId, float pitch, float yaw, float roll);
 typedef int   (*aarcadecore_get_thing_task_index_t)(int thingIdx);
 typedef bool  (*aarcadecore_get_thing_screen_path_t)(int thingIdx, char* pathOut, int pathSize);
 typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);

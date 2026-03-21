@@ -17,6 +17,7 @@
 #include "../../Gameplay/sithPlayer.h"
 #include "../../Primitives/rdMatrix.h"
 #include "../../Primitives/rdVector.h"
+#include "../../World/sithSector.h"
 #include "../../Raster/rdCache.h"
 #include "globals.h"
 
@@ -57,9 +58,16 @@ static aarcadecore_has_pending_spawn_t    g_fn_has_pending_spawn = NULL;
 static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
 static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
 static aarcadecore_get_thing_task_index_t g_fn_get_thing_task_index = NULL;
+static aarcadecore_spawn_has_position_t g_fn_spawn_has_position = NULL;
+static aarcadecore_on_map_loaded_t g_fn_on_map_loaded = NULL;
+static aarcadecore_on_map_unloaded_t g_fn_on_map_unloaded = NULL;
+static aarcadecore_report_thing_transform_t g_fn_report_thing_transform = NULL;
 static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NULL;
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
+
+/* Forward declarations */
+static void host_get_current_map(char* mapKeyOut, int mapKeySize);
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -270,6 +278,10 @@ void AACoreManager_Init(void)
     LOAD_FN(pop_pending_spawn)
     LOAD_FN(confirm_spawn)
     LOAD_FN(get_thing_task_index)
+    LOAD_FN(spawn_has_position)
+    LOAD_FN(on_map_loaded)
+    LOAD_FN(on_map_unloaded)
+    LOAD_FN(report_thing_transform)
     LOAD_FN(load_thing_screen_pixels)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
@@ -289,6 +301,7 @@ void AACoreManager_Init(void)
     callbacks.api_version = AARCADECORE_API_VERSION;
     callbacks.host_printf = host_printf;
     callbacks.get_key_state = host_get_key_state;
+    callbacks.get_current_map = host_get_current_map;
 
     if (!g_fn_init(&callbacks)) {
         stdPlatform_Printf("AACoreManager: DLL init failed\n");
@@ -373,6 +386,10 @@ void AACoreManager_Shutdown(void)
     g_fn_pop_pending_spawn = NULL;
     g_fn_confirm_spawn = NULL;
     g_fn_get_thing_task_index = NULL;
+    g_fn_spawn_has_position = NULL;
+    g_fn_on_map_loaded = NULL;
+    g_fn_on_map_unloaded = NULL;
+    g_fn_report_thing_transform = NULL;
     g_fn_load_thing_screen_pixels = NULL;
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
@@ -488,6 +505,49 @@ static sithThing* aacore_spawn_at_player_aim(void)
     return spawned;
 }
 
+/* Spawn a thing at an explicit position (for restoring saved objects) */
+static sithThing* aacore_spawn_at_position(float px, float py, float pz, int sectorId, float rx, float ry, float rz)
+{
+    sithThing* player = sithPlayer_pLocalPlayerThing;
+    if (!player) return NULL;
+
+    sithThing* tmpl = sithTemplate_GetEntryByName("dyn_videosign");
+    if (!tmpl) {
+        stdPlatform_Printf("AACoreManager: Template 'dyn_videosign' not found\n");
+        return NULL;
+    }
+
+    rdVector3 pos;
+    pos.x = px; pos.y = py; pos.z = pz;
+
+    /* Build orientation from PYR angles */
+    rdMatrix34 orient;
+    rdVector3 pyr;
+    pyr.x = rx; /* pitch */
+    pyr.y = ry; /* yaw */
+    pyr.z = rz; /* roll */
+    rdMatrix_BuildRotate34(&orient, &pyr);
+
+    /* Use saved sector ID → fall back to FindSectorAtPos → fall back to player's sector */
+    sithSector* sector = NULL;
+    if (sectorId >= 0 && sithWorld_pCurrentWorld && sectorId < (int)sithWorld_pCurrentWorld->numSectors) {
+        sector = &sithWorld_pCurrentWorld->sectors[sectorId];
+    }
+    if (!sector && sithWorld_pCurrentWorld) {
+        sector = sithSector_sub_4F8D00(sithWorld_pCurrentWorld, &pos);
+    }
+    if (!sector) {
+        sector = player->sector;
+    }
+
+    sithThing* spawned = sithThing_Create((sithThing*)tmpl, &pos, &orient, sector, NULL);
+    if (spawned) {
+        stdPlatform_Printf("AACoreManager: Restored at (%.2f, %.2f, %.2f) thingIdx=%d\n",
+                          px, py, pz, spawned->thingIdx);
+    }
+    return spawned;
+}
+
 void AACoreManager_Update(void)
 {
     if (g_fn_update)
@@ -526,11 +586,33 @@ void AACoreManager_Update(void)
     if (g_fn_has_pending_spawn && g_fn_has_pending_spawn()) {
         g_fn_pop_pending_spawn();
 
-        sithThing* spawned = aacore_spawn_at_player_aim();
+        sithThing* spawned = NULL;
+        float px, py, pz, rx, ry, rz;
+        int sectorId = -1;
+        int isRestore = 0;
+        if (g_fn_spawn_has_position && g_fn_spawn_has_position(&px, &py, &pz, &sectorId, &rx, &ry, &rz)) {
+            /* Restore spawn: use explicit position */
+            spawned = aacore_spawn_at_position(px, py, pz, sectorId, rx, ry, rz);
+            isRestore = 1;
+        } else {
+            /* User spawn: raycast from player aim */
+            spawned = aacore_spawn_at_player_aim();
+        }
+
         if (spawned) {
             AACoreManager_RegisterThingTask(spawned, spawned->thingIdx, 0);
             if (g_fn_confirm_spawn)
                 g_fn_confirm_spawn(spawned->thingIdx);
+            /* Only save to DB for new user spawns, not restores */
+            if (!isRestore && g_fn_report_thing_transform) {
+                rdVector3 pos = spawned->position;
+                int sector = spawned->sector ? (int)spawned->sector->id : -1;
+                /* Use engine's own ExtractAngles for roundtrip-safe PYR */
+                rdVector3 pyr;
+                rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
+                g_fn_report_thing_transform(spawned->thingIdx,
+                    pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+            }
         } else {
             stdPlatform_Printf("AACoreManager: Spawn failed\n");
         }
@@ -684,6 +766,26 @@ void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskInd
 
     stdPlatform_Printf("AACoreManager: Registered thing %p (thingIdx=%d) task %d, screenTex=%u, marqueeTex=%u\n",
                       pSithThing, thingIdx, taskIndex, screenTex, marqueeTex);
+}
+
+void AACoreManager_OnMapLoaded(void)
+{
+    if (g_fn_on_map_loaded) g_fn_on_map_loaded();
+}
+
+void AACoreManager_OnMapUnloaded(void)
+{
+    if (g_fn_on_map_unloaded) g_fn_on_map_unloaded();
+}
+
+/* Host callback: DLL queries current map key (e.g., "smhq.gob-01nf.jkl") */
+static void host_get_current_map(char* mapKeyOut, int mapKeySize)
+{
+    if (sithWorld_pCurrentWorld && mapKeyOut && mapKeySize > 0) {
+        snprintf(mapKeyOut, mapKeySize, "%s.gob-%s",
+                sithWorld_pCurrentWorld->episodeName,
+                sithWorld_pCurrentWorld->map_jkl_fname);
+    }
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)

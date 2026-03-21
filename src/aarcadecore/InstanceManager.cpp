@@ -14,7 +14,9 @@ int aarcadecore_addTask(EmbeddedInstance* inst);
 void aarcadecore_removeTask(int taskIndex);
 
 #include "ImageLoader.h"
+#include "SQLiteLibrary.h"
 extern ImageLoader g_imageLoader;
+extern SQLiteLibrary g_library;
 
 /* YouTube URL patterns:
  *   https://www.youtube.com/watch?v=VIDEO_ID
@@ -191,6 +193,100 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
     itemInstances_[item.id] = inst;
 }
 
+/* --- Level management --- */
+
+void InstanceManager::onMapUnloaded()
+{
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Map unloaded, deactivating all instances\n");
+
+    /* Deactivate all embedded instances (browsers etc.) */
+    for (auto& pair : itemInstances_) {
+        if (pair.second.active) {
+            deactivateInstance(pair.first);
+        }
+    }
+
+    /* Clear spawned objects and state */
+    objects_.clear();
+    selectedObjectIndex_ = -1;
+    currentInstanceId_.clear();
+    currentMapId_.clear();
+}
+
+void InstanceManager::onMapLoaded()
+{
+    /* Clear any stale state from previous map */
+    objects_.clear();
+    selectedObjectIndex_ = -1;
+    currentInstanceId_.clear();
+    currentMapId_.clear();
+
+    /* Query host for current map key */
+    if (!g_host.get_current_map) return;
+    char mapKey[128] = {0};
+    g_host.get_current_map(mapKey, sizeof(mapKey));
+    if (!mapKey[0]) return;
+
+    std::string fileKey = mapKey;
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Setting level to '%s'\n", fileKey.c_str());
+
+    /* Find or create the map */
+    currentMapId_ = g_library.findMapByPlatformFile(OPENJK_PLATFORM_ID, fileKey);
+    if (currentMapId_.empty()) {
+        currentMapId_ = g_library.createMap(fileKey, OPENJK_PLATFORM_ID, fileKey);
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Created new map '%s' (id=%s)\n", fileKey.c_str(), currentMapId_.c_str());
+    } else {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Found existing map (id=%s)\n", currentMapId_.c_str());
+    }
+
+    /* Find or create the instance */
+    currentInstanceId_ = g_library.findInstanceByMap(currentMapId_);
+    if (currentInstanceId_.empty()) {
+        currentInstanceId_ = g_library.createInstance("Unnamed Instance", currentMapId_);
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Created new instance (id=%s)\n", currentInstanceId_.c_str());
+    } else {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Found existing instance (id=%s)\n", currentInstanceId_.c_str());
+
+        /* Restore saved objects */
+        auto savedObjects = g_library.getInstanceObjects(currentInstanceId_);
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Restoring %d objects\n", (int)savedObjects.size());
+
+        for (const auto& obj : savedObjects) {
+            /* Look up the item from the database */
+            Arcade::Item item = g_library.getItemById(obj.item);
+            if (item.id.empty()) {
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: WARNING: Item '%s' not found, skipping object\n", obj.item.c_str());
+                continue;
+            }
+
+            /* Parse position and rotation from strings */
+            SpawnRequest req;
+            req.item = item;
+            req.hasExplicitPosition = true;
+            req.objectKey = obj.object_key;
+
+            float px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0;
+            int sector = -1;
+            sscanf(obj.position.c_str(), "%f %f %f %d", &px, &py, &pz, &sector);
+            sscanf(obj.rotation.c_str(), "%f %f %f", &rx, &ry, &rz);
+            req.posX = px; req.posY = py; req.posZ = pz;
+            req.sectorId = sector;
+            req.rotX = rx; req.rotY = ry; req.rotZ = rz;
+
+            pendingSpawns_.push(req);
+        }
+    }
+}
+
 /* --- Spawn pipeline --- */
 
 void InstanceManager::requestSpawn(const Arcade::Item& item)
@@ -201,6 +297,10 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
 
     SpawnRequest req;
     req.item = item;
+    req.hasExplicitPosition = false;
+    req.posX = req.posY = req.posZ = 0;
+    req.sectorId = -1;
+    req.rotX = req.rotY = req.rotZ = 0;
     pendingSpawns_.push(req);
 }
 
@@ -221,12 +321,10 @@ void InstanceManager::confirmSpawn(int thingIdx)
     const Arcade::Item& item = lastPopped_.item;
     std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
 
-    /* Ensure the item has an embedded instance (creates + activates if new) */
-    ensureItemInstance(item, resolvedUrl);
-
     /* Add spawned object */
     SpawnedObject obj;
     obj.itemId = item.id;
+    obj.objectKey = lastPopped_.objectKey.empty() ? Arcade::generateFirebasePushId() : lastPopped_.objectKey;
     obj.url = resolvedUrl;
     obj.thingIdx = thingIdx;
     obj.screenImageRequested = false;
@@ -278,8 +376,7 @@ void InstanceManager::confirmSpawn(int thingIdx)
         g_host.host_printf("InstanceManager: Spawn confirmed - thingIdx=%d item=%s url=%s (total objects: %d)\n",
                           thingIdx, obj.itemId.c_str(), obj.url.c_str(), (int)objects_.size());
 
-    /* Select the newly spawned object (deselects previous) */
-    selectObject(newIndex);
+    /* Don't auto-select or auto-activate — that will be done in "spawn mode" later */
 }
 
 /* --- Selection --- */
@@ -355,6 +452,35 @@ void InstanceManager::updateTitles()
         if (inst.active && inst.browser && inst.browser->vtable->get_title) {
             const char* t = inst.browser->vtable->get_title(inst.browser);
             inst.title = t ? t : "";
+        }
+    }
+}
+
+void InstanceManager::reportThingTransform(int thingIdx, float px, float py, float pz, int sectorId, float rx, float ry, float rz)
+{
+    if (currentInstanceId_.empty()) return;
+
+    for (auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx) {
+            /* Save to database */
+            char posBuf[128], rotBuf[128];
+            snprintf(posBuf, sizeof(posBuf), "%.10f %.10f %.10f %d", px, py, pz, sectorId);
+            snprintf(rotBuf, sizeof(rotBuf), "%.10f %.10f %.10f", rx, ry, rz);
+
+            Arcade::InstanceObject dbObj;
+            dbObj.instance_id = currentInstanceId_;
+            dbObj.object_key = obj.objectKey;
+            dbObj.item = obj.itemId;
+            dbObj.position = posBuf;
+            dbObj.rotation = rotBuf;
+            dbObj.scale = 1.0f;
+
+            g_library.saveInstanceObject(dbObj);
+
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Saved object %s (thingIdx=%d) to instance %s\n",
+                                  obj.objectKey.c_str(), thingIdx, currentInstanceId_.c_str());
+            return;
         }
     }
 }

@@ -129,9 +129,20 @@ typedef struct AACoreHostCallbacks {
 Tasks are created on demand by the InstanceManager when items are spawned from the Library Browser. The instance type is determined by item data (e.g., items with "Mario" in the title create Libretro instances; others create Steamworks browsers). The `SpawnRequest` carries the full `Arcade::Item` from the database — the JS only passes the item ID and the DLL looks up the full data via `SQLiteLibrary::getItemById()`.
 
 ### Instance Lifecycle:
-- **Spawn**: JS calls `aapi.manager.spawnItemObject(itemId)` → DLL looks up item → queues spawn → host creates sithThing → DLL creates per-item EmbeddedInstance (shared across objects with same item)
+- **Spawn**: JS calls `aapi.manager.spawnItemObject(itemId)` → DLL looks up item → queues spawn → host creates sithThing. Objects are NOT auto-activated or auto-selected on spawn (activation comes from "spawn mode" later).
 - **Deactivate**: Task Menu "Close" → `aapi.manager.deactivateInstance(itemId)` → removes from task list → destroys browser → instance marked inactive
+- **Map load**: `sithMain_Open()` → `AACoreManager_OnMapLoaded()` → DLL queries `get_current_map` host callback → finds/creates map+instance in DB → restores saved objects at saved positions
+- **Map unload**: `sithMain_Close()` → `AACoreManager_OnMapUnloaded()` → DLL deactivates all instances, clears spawned objects
 - Task removal nulls `g_tasks[taskIndex]` before destroying the browser to prevent dangling pointer access in the update loop
+
+### Instance Persistence:
+- Maps identified by `gobname.gob-levelname.jkl` (stored in `map_platforms` with OpenJK platform key `-qy1Xi800ElhAZksOIc8`)
+- Instances linked to maps via `instances.map` column. One instance per map for now.
+- Objects saved to `instance_objects` with position (X Y Z sectorId), rotation (PYR), item reference
+- Position includes sector ID as 4th value for OpenJK's non-euclidean sectors (other engines ignore it)
+- PYR extraction uses `rdMatrix_ExtractAngles34` / `rdMatrix_BuildRotate34` for roundtrip-safe conversion
+- Only new user spawns save to DB — restored objects don't re-save (prevents PYR degradation)
+- `AACoreManager_Update` runs from `Window_SdlUpdate` (main loop, not just gameplay) so Steam callbacks pump even on menus
 
 ## Build Dependencies (not in git)
 

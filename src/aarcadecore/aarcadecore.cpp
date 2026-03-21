@@ -141,8 +141,9 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     /* Initialize the HUD overlay (always alive, starts with blank.html) */
     UltralightManager_Init();
 
-    /* Open the library database */
+    /* Open the library database and ensure schema is up to date */
     g_library.open("G:/Documents Sym Links/GitHub/aarcade-core/x64/Release/library.db");
+    g_library.ensureSchema();
 
     /* Initialize the image loader (headless Ultralight view for thumbnail caching) */
     g_imageLoader.init();
@@ -379,9 +380,11 @@ AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void)
     return g_instanceManager.hasPendingSpawn();
 }
 
+static SpawnRequest g_lastPoppedSpawn;
+
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void)
 {
-    g_instanceManager.popPendingSpawn();
+    g_lastPoppedSpawn = g_instanceManager.popPendingSpawn();
 }
 
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx)
@@ -452,6 +455,35 @@ AARCADECORE_EXPORT bool aarcadecore_load_thing_marquee_pixels(int thingIdx, void
 AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels)
 {
     free(pixels);
+}
+
+AARCADECORE_EXPORT void aarcadecore_on_map_loaded(void)
+{
+    g_instanceManager.onMapLoaded();
+}
+
+AARCADECORE_EXPORT void aarcadecore_on_map_unloaded(void)
+{
+    g_instanceManager.onMapUnloaded();
+}
+
+AARCADECORE_EXPORT void aarcadecore_report_thing_transform(int thingIdx,
+    float px, float py, float pz, int sectorId, float pitch, float yaw, float roll)
+{
+    g_instanceManager.reportThingTransform(thingIdx, px, py, pz, sectorId, pitch, yaw, roll);
+}
+
+AARCADECORE_EXPORT bool aarcadecore_spawn_has_position(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz)
+{
+    if (!g_lastPoppedSpawn.hasExplicitPosition) return false;
+    if (px) *px = g_lastPoppedSpawn.posX;
+    if (py) *py = g_lastPoppedSpawn.posY;
+    if (pz) *pz = g_lastPoppedSpawn.posZ;
+    if (sectorId) *sectorId = g_lastPoppedSpawn.sectorId;
+    if (rx) *rx = g_lastPoppedSpawn.rotX;
+    if (ry) *ry = g_lastPoppedSpawn.rotY;
+    if (rz) *rz = g_lastPoppedSpawn.rotZ;
+    return true;
 }
 
 AARCADECORE_EXPORT int aarcadecore_get_active_instance_count(void)

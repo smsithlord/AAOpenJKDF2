@@ -146,8 +146,7 @@ int jkGame_Update()
 
     jkGame_Update_Start = stdPlatform_GetTimeMsec();
 
-    // Update aarcadecore.dll (Libretro, web browser, etc.)
-    AACoreManager_Update();
+    // AACoreManager_Update() is now called from Window_SdlUpdate (runs every frame including menus)
 
     // Check for 3DO spawn key and main menu hotkey
     jkSpawn_Update();

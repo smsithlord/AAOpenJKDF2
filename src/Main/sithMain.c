@@ -1,5 +1,6 @@
 #include "sithMain.h"
 
+#include "Platform/Common/AACoreManager.h"
 #include "Main/jkGame.h"
 #include "Main/Main.h"
 #include "World/sithWorld.h"
@@ -198,6 +199,10 @@ int sithMain_Open()
     sithRender_Open();
     sithWeapon_StartupEntry();
     sithMain_bOpened = 1;
+
+    /* Notify AArcade that a map is now loaded and playable */
+    AACoreManager_OnMapLoaded();
+
     return 1;
 }
 
@@ -205,6 +210,9 @@ void sithMain_Close()
 {
     if ( sithMain_bOpened )
     {
+        /* Notify AArcade before the map is freed */
+        AACoreManager_OnMapUnloaded();
+
         sithSoundMixer_StopSong();
         sithRender_Close();
         sithAIAwareness_Shutdown();

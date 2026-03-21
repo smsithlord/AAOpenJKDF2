@@ -817,6 +817,9 @@ static int Window_GetAACoreModifiers(void)
 
 void Window_SdlUpdate()
 {
+    /* Pump AArcade Core every frame (including main menu) so Steam callbacks process */
+    AACoreManager_Update();
+
     if (Main_bHeadless)
     {
         Window_UpdateHeadless();
