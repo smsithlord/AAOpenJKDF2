@@ -145,13 +145,9 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
 {
     auto it = itemInstances_.find(item.id);
     if (it != itemInstances_.end()) {
-        /* Already exists — ensure active */
-        if (!it->second.active) {
-            it->second.active = true;
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: Activated embedded instance for item=%s\n", item.id.c_str());
-        }
-        return;
+        if (it->second.active) return; /* already active, nothing to do */
+        /* Stale entry (browser destroyed on deactivate) — remove it so we recreate below */
+        itemInstances_.erase(it);
     }
 
     EmbeddedItemInstance inst;
