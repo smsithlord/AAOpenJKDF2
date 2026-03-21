@@ -473,6 +473,35 @@ void InstanceManager::objectUsed(int thingIdx)
     ensureItemInstance(item, resolvedUrl);
 }
 
+/* --- Selector ray --- */
+
+void InstanceManager::setAimedThing(int thingIdx)
+{
+    if (thingIdx == aimedThingIdx_) return;
+    aimedThingIdx_ = thingIdx;
+
+    if (thingIdx < 0) return;
+
+    /* Find the spawned object and look up the item */
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx) {
+            Arcade::Item item = g_library.getItemById(obj.itemId);
+            if (!item.id.empty() && g_host.host_printf)
+                g_host.host_printf("InstanceManager: Aiming at '%s'\n", item.title.c_str());
+            return;
+        }
+    }
+}
+
+const SpawnedObject* InstanceManager::getAimedObject() const
+{
+    if (aimedThingIdx_ < 0) return nullptr;
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == aimedThingIdx_) return &obj;
+    }
+    return nullptr;
+}
+
 const SpawnedObject* InstanceManager::getSelectedObject() const
 {
     return getSpawned(selectedObjectIndex_);

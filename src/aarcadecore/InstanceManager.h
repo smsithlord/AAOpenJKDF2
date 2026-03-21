@@ -42,7 +42,7 @@ struct SpawnedObject {
 
 class InstanceManager {
 public:
-    InstanceManager() : selectedObjectIndex_(-1) {}
+    InstanceManager() : selectedObjectIndex_(-1), aimedThingIdx_(-1) {}
 
     /* Map lifecycle — called by host when maps load/unload */
     void onMapLoaded();
@@ -84,6 +84,11 @@ public:
     /* Object "used" by player — select and activate its embedded instance */
     void objectUsed(int thingIdx);
 
+    /* Selector ray — update which thing the player is aiming at */
+    void setAimedThing(int thingIdx);
+    int getAimedThingIdx() const { return aimedThingIdx_; }
+    const SpawnedObject* getAimedObject() const;
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
@@ -96,6 +101,7 @@ private:
     std::vector<SpawnedObject> objects_;
     std::map<std::string, EmbeddedItemInstance> itemInstances_; /* itemId → per-item instance */
     int selectedObjectIndex_;
+    int aimedThingIdx_;
 
     std::string currentInstanceId_;
     std::string currentMapId_;

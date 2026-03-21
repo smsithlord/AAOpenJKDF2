@@ -158,6 +158,9 @@ AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
  * Selects the object and activates its embedded instance (e.g. starts video). */
 AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
 
+/* Selector ray — notify DLL which AArcade thing the player is aiming at (-1 = none) */
+AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx);
+
 /* Check if an embedded instance is being displayed fullscreen in the overlay */
 AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void);
 
@@ -207,6 +210,7 @@ typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pix
 typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 typedef void  (*aarcadecore_object_used_t)(int thingIdx);
+typedef void  (*aarcadecore_set_aimed_thing_t)(int thingIdx);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);
 

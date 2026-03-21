@@ -66,6 +66,7 @@ static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NU
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
+static aarcadecore_set_aimed_thing_t g_fn_set_aimed_thing = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
 
@@ -99,6 +100,9 @@ typedef struct {
 } ThingTaskMapping;
 static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
 static int g_thingTaskCount = 0;
+
+/* Selector ray — which AArcade thing the player is aiming at */
+static int g_aimedAtThingIdx = -1;
 
 /* Cached dynscreen material and original texture_id for restore */
 static rdMaterial* g_dynscreenMaterial = NULL;
@@ -289,6 +293,7 @@ void AACoreManager_Init(void)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
+    LOAD_FN(set_aimed_thing)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
     #undef LOAD_FN
@@ -400,6 +405,7 @@ void AACoreManager_Shutdown(void)
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
+    g_fn_set_aimed_thing = NULL;
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
 
@@ -561,6 +567,41 @@ void AACoreManager_Update(void)
 {
     if (g_fn_update)
         g_fn_update();
+
+    /* Selector ray — find which AArcade thing the player is aiming at */
+    {
+        sithThing* player = sithPlayer_pLocalPlayerThing;
+        int newAimedAt = -1;
+        if (player && player->sector && g_thingTaskCount > 0) {
+            rdMatrix34 aimMatrix;
+            _memcpy(&aimMatrix, &player->lookOrientation, sizeof(aimMatrix));
+            rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
+            rdVector3 lookDir = aimMatrix.lvec;
+
+            sithCollision_SearchRadiusForThings(player->sector, player,
+                &player->position, &lookDir, 50.0f, 0.0f, 0);
+            sithCollisionSearchEntry* hit = sithCollision_NextSearchResult();
+            while (hit) {
+                if ((hit->hitType & 0x1) && hit->receiver) { /* SITHCOLLISION_THING */
+                    int idx = hit->receiver->thingIdx;
+                    for (int i = 0; i < g_thingTaskCount; i++) {
+                        if (g_thingTaskMap[i].thingIdx == idx) {
+                            newAimedAt = idx;
+                            break;
+                        }
+                    }
+                    if (newAimedAt >= 0) break;
+                }
+                hit = sithCollision_NextSearchResult();
+            }
+            sithCollision_SearchClose();
+        }
+        if (newAimedAt != g_aimedAtThingIdx) {
+            g_aimedAtThingIdx = newAimedAt;
+            if (g_fn_set_aimed_thing)
+                g_fn_set_aimed_thing(newAimedAt);
+        }
+    }
 
     /* Pre-render all task textures — each task gets its own GL texture */
     if (g_fn_get_task_count && g_fn_render_task_texture) {

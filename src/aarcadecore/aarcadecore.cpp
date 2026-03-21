@@ -524,6 +524,11 @@ AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx)
     g_instanceManager.objectUsed(thingIdx);
 }
 
+AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
+{
+    g_instanceManager.setAimedThing(thingIdx);
+}
+
 AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void)
 {
     return g_fullscreenInstance != NULL;
