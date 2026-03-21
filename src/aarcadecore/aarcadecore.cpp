@@ -12,6 +12,7 @@
 #include "ImageLoader.h"
 #include "InstanceManager.h"
 #include <string.h>
+#include <steam_api.h>
 
 /* Global host callbacks */
 AACoreHostCallbacks g_host = {0};
@@ -133,6 +134,10 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     if (g_host.host_printf)
         g_host.host_printf("AACore: Initializing (API v%d)...\n", AARCADECORE_API_VERSION);
 
+    /* Initialize Steam API (persists for DLL lifetime) */
+    extern bool SteamworksWebBrowser_InitSteamAPI(void);
+    SteamworksWebBrowser_InitSteamAPI();
+
     /* Initialize the HUD overlay (always alive, starts with blank.html) */
     UltralightManager_Init();
 
@@ -163,11 +168,21 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     SteamworksWebBrowserManager_Shutdown();
     UltralightManager_Shutdown();
     g_activeInstance = NULL;
+
+    /* Shut down Steam API last (after all browsers destroyed) */
+    extern void SteamworksWebBrowser_ShutdownSteamAPI(void);
+    SteamworksWebBrowser_ShutdownSteamAPI();
+
     memset(&g_host, 0, sizeof(g_host));
 }
 
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
+    /* Pump Steam callbacks globally (handles all browsers + pending removals) */
+    extern bool SteamworksWebBrowser_IsSteamReady(void);
+    if (SteamworksWebBrowser_IsSteamReady())
+        SteamAPI_RunCallbacks();
+
     /* Update all running tasks — they all tick regardless of which is active */
     UltralightManager_Update();
     LibretroManager_Update();

@@ -17,14 +17,13 @@
 #include <string.h>
 #include <stdint.h>
 
-#define SWB_DEFAULT_WIDTH  1024
-#define SWB_DEFAULT_HEIGHT 1024
+#define SWB_DEFAULT_WIDTH  1280
+#define SWB_DEFAULT_HEIGHT 720
 
 /* Per-instance state */
 struct SteamworksData {
     HHTMLBrowser browserHandle;
     bool browserReady;
-    bool steamInitialized;
     const char* url;
 
     /* BGRA pixel buffer — copied from HTML_NeedsPaint_t */
@@ -137,12 +136,14 @@ void SteamworksData::OnFileOpenDialog(HTML_FileOpenDialog_t* pParam)
 }
 
 /* ========================================================================
- * EmbeddedInstance vtable implementations
+ * Global Steam API lifecycle — init once at DLL startup, shutdown at exit
  * ======================================================================== */
 
-static bool swb_init(EmbeddedInstance* inst)
+static bool g_steamApiReady = false;
+
+bool SteamworksWebBrowser_InitSteamAPI(void)
 {
-    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (g_steamApiReady) return true;
 
     if (g_host.host_printf) g_host.host_printf("SWB: Initializing Steam API...\n");
 
@@ -150,19 +151,46 @@ static bool swb_init(EmbeddedInstance* inst)
         if (g_host.host_printf) g_host.host_printf("SWB: SteamAPI_Init() failed. Is Steam running?\n");
         return false;
     }
-    data->steamInitialized = true;
     if (g_host.host_printf) g_host.host_printf("SWB: Steam API initialized\n");
 
     ISteamHTMLSurface* surface = SteamHTMLSurface();
-    if (!surface) {
-        if (g_host.host_printf) g_host.host_printf("SWB: Failed to get ISteamHTMLSurface\n");
+    if (!surface || !surface->Init()) {
+        if (g_host.host_printf) g_host.host_printf("SWB: ISteamHTMLSurface::Init() failed\n");
+        SteamAPI_Shutdown();
         return false;
     }
 
-    if (!surface->Init()) {
-        if (g_host.host_printf) g_host.host_printf("SWB: ISteamHTMLSurface::Init() failed\n");
+    g_steamApiReady = true;
+    return true;
+}
+
+bool SteamworksWebBrowser_IsSteamReady(void) { return g_steamApiReady; }
+
+void SteamworksWebBrowser_ShutdownSteamAPI(void)
+{
+    if (!g_steamApiReady) return;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface) surface->Shutdown();
+    SteamAPI_Shutdown();
+    g_steamApiReady = false;
+    if (g_host.host_printf) g_host.host_printf("SWB: Steam API shut down\n");
+}
+
+/* ========================================================================
+ * EmbeddedInstance vtable implementations
+ * ======================================================================== */
+
+static bool swb_init(EmbeddedInstance* inst)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+
+    if (!g_steamApiReady) {
+        if (g_host.host_printf) g_host.host_printf("SWB: Steam API not ready\n");
         return false;
     }
+
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (!surface) return false;
 
     SteamAPICall_t hCall = surface->CreateBrowser("AArcadeCore", NULL);
     data->callResultBrowserReady.Set(hCall, data, &SteamworksData::OnBrowserReady);
@@ -177,10 +205,7 @@ static void swb_shutdown(EmbeddedInstance* inst)
 
     if (data->browserReady) {
         ISteamHTMLSurface* surface = SteamHTMLSurface();
-        if (surface) {
-            surface->RemoveBrowser(data->browserHandle);
-            surface->Shutdown();
-        }
+        if (surface) surface->RemoveBrowser(data->browserHandle);
         data->browserReady = false;
     }
 
@@ -189,25 +214,18 @@ static void swb_shutdown(EmbeddedInstance* inst)
     free((void*)data->url);
     data->url = NULL;
 
-    if (data->steamInitialized) {
-        SteamAPI_Shutdown();
-        data->steamInitialized = false;
-    }
-
-    if (g_host.host_printf) g_host.host_printf("SWB: Shutdown complete\n");
+    if (g_host.host_printf) g_host.host_printf("SWB: Browser removed\n");
 }
 
 static void swb_update(EmbeddedInstance* inst)
 {
-    SteamworksData* data = (SteamworksData*)inst->user_data;
-    if (data->steamInitialized)
-        SteamAPI_RunCallbacks();
+    /* SteamAPI_RunCallbacks is pumped globally in aarcadecore_update, not per-instance */
 }
 
 static bool swb_is_active(EmbeddedInstance* inst)
 {
     SteamworksData* data = (SteamworksData*)inst->user_data;
-    return data->steamInitialized;
+    return g_steamApiReady && data->browserReady;
 }
 
 static void swb_render(EmbeddedInstance* inst,
@@ -336,7 +354,6 @@ EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const cha
 
     data->browserHandle = INVALID_HTMLBROWSER;
     data->browserReady = false;
-    data->steamInitialized = false;
     data->url = _strdup(url);
     data->pixelBuffer = NULL;
     data->bufferWidth = 0;
