@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* API version — bump when the interface changes */
-#define AARCADECORE_API_VERSION 2
+#define AARCADECORE_API_VERSION 3
 
 /* DLL export/import macros */
 #ifdef _WIN32
@@ -154,6 +154,10 @@ AARCADECORE_EXPORT bool aarcadecore_load_thing_screen_pixels(int thingIdx, void*
 AARCADECORE_EXPORT bool aarcadecore_load_thing_marquee_pixels(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
 
+/* Notify DLL that the player "used" (activated) an object in the game world.
+ * Selects the object and activates its embedded instance (e.g. starts video). */
+AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -196,6 +200,7 @@ typedef bool  (*aarcadecore_get_thing_screen_path_t)(int thingIdx, char* pathOut
 typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
+typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 
 #ifdef __cplusplus
 }

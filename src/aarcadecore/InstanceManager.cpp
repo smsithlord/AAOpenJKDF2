@@ -403,6 +403,63 @@ void InstanceManager::selectObject(int index)
     }
 }
 
+void InstanceManager::objectUsed(int thingIdx)
+{
+    /* Find the object by thingIdx */
+    int newIndex = -1;
+    for (int i = 0; i < (int)objects_.size(); i++) {
+        if (objects_[i].thingIdx == thingIdx) {
+            newIndex = i;
+            break;
+        }
+    }
+
+    if (newIndex < 0) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: objectUsed — thingIdx=%d not found in spawned objects\n", thingIdx);
+        return;
+    }
+
+    /* If this object is already selected, toggle it off */
+    if (newIndex == selectedObjectIndex_) {
+        const SpawnedObject& obj = objects_[newIndex];
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: objectUsed — deselecting already-selected object #%d (thingIdx=%d)\n",
+                              newIndex, thingIdx);
+        deactivateInstance(obj.itemId);
+        selectedObjectIndex_ = -1;
+        return;
+    }
+
+    /* Deactivate the previously selected object's instance */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        const SpawnedObject& prev = objects_[selectedObjectIndex_];
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: objectUsed — deactivating previous object #%d (item=%s)\n",
+                              selectedObjectIndex_, prev.itemId.c_str());
+        deactivateInstance(prev.itemId);
+    }
+
+    /* Select the new object */
+    selectedObjectIndex_ = newIndex;
+    const SpawnedObject& obj = objects_[newIndex];
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: objectUsed — selected object #%d (thingIdx=%d, item=%s)\n",
+                          newIndex, thingIdx, obj.itemId.c_str());
+
+    /* Activate its embedded instance */
+    Arcade::Item item = g_library.getItemById(obj.itemId);
+    if (item.id.empty()) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: objectUsed — WARNING: item '%s' not found in library\n", obj.itemId.c_str());
+        return;
+    }
+
+    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+    ensureItemInstance(item, resolvedUrl);
+}
+
 const SpawnedObject* InstanceManager::getSelectedObject() const
 {
     return getSpawned(selectedObjectIndex_);

@@ -495,3 +495,8 @@ AARCADECORE_EXPORT int aarcadecore_get_thing_task_index(int thingIdx)
 {
     return g_instanceManager.getTaskIndexForThing(thingIdx);
 }
+
+AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx)
+{
+    g_instanceManager.objectUsed(thingIdx);
+}

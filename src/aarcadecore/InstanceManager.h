@@ -81,6 +81,9 @@ public:
     /* Report position after spawn (triggers auto-save) */
     void reportThingTransform(int thingIdx, float px, float py, float pz, int sectorId, float rx, float ry, float rz);
 
+    /* Object "used" by player — select and activate its embedded instance */
+    void objectUsed(int thingIdx);
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;

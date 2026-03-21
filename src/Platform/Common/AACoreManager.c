@@ -65,6 +65,7 @@ static aarcadecore_report_thing_transform_t g_fn_report_thing_transform = NULL;
 static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NULL;
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
+static aarcadecore_object_used_t g_fn_object_used = NULL;
 
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
@@ -285,6 +286,7 @@ void AACoreManager_Init(void)
     LOAD_FN(load_thing_screen_pixels)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
+    LOAD_FN(object_used)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -393,6 +395,7 @@ void AACoreManager_Shutdown(void)
     g_fn_load_thing_screen_pixels = NULL;
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
+    g_fn_object_used = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -776,6 +779,12 @@ void AACoreManager_OnMapLoaded(void)
 void AACoreManager_OnMapUnloaded(void)
 {
     if (g_fn_on_map_unloaded) g_fn_on_map_unloaded();
+}
+
+void AACoreManager_ObjectUsed(int thingIdx)
+{
+    if (g_fn_object_used)
+        g_fn_object_used(thingIdx);
 }
 
 /* Host callback: DLL queries current map key (e.g., "smhq.gob-01nf.jkl") */

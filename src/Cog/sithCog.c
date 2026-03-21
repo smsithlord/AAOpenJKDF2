@@ -33,6 +33,7 @@
 #include "Dss/sithMulti.h"
 
 #include "jk.h"
+#include "Platform/Common/AACoreManager.h"
 
 static int32_t sithCog_bInitted = 0;
 
@@ -140,12 +141,24 @@ int32_t sithCog_Startup()
     return 1;
 }
 
+/* AArcade: COG verb handler for AAOJK_ObjectUsed(thingRef) */
+static void sithCog_AAOJK_ObjectUsed(sithCog *ctx)
+{
+    sithThing* thing = sithCogExec_PopThing(ctx);
+    if (thing) {
+        AACoreManager_ObjectUsed(thing->thingIdx);
+    }
+}
+
 // Added: Register all new COG verbs last
 int32_t sithCog_StartupEnhanced()
 {
-    if (!Main_bEnhancedCogVerbs) return 1;
-
     sithCogSymboltable* ctx = sithCog_pSymbolTable;
+
+    /* AArcade verbs — always registered regardless of enhanced mode */
+    sithCogScript_RegisterVerb(ctx, sithCog_AAOJK_ObjectUsed, "aaojk_objectused");
+
+    if (!Main_bEnhancedCogVerbs) return 1;
 
     // Generic
     if (!Main_bMotsCompat) {
