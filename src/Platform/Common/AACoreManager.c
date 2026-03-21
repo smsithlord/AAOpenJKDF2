@@ -12,6 +12,11 @@
 #include "../../Win95/Window.h"
 #include "../../stdPlatform.h"
 #include "../../World/sithThing.h"
+#include "../../World/sithTemplate.h"
+#include "../../Engine/sithCollision.h"
+#include "../../Gameplay/sithPlayer.h"
+#include "../../Primitives/rdMatrix.h"
+#include "../../Primitives/rdVector.h"
 #include "../../Raster/rdCache.h"
 #include "globals.h"
 
@@ -48,6 +53,9 @@ static aarcadecore_start_libretro_t          g_fn_start_libretro = NULL;
 static aarcadecore_get_task_count_t         g_fn_get_task_count = NULL;
 static aarcadecore_render_task_texture_t   g_fn_render_task_texture = NULL;
 static aarcadecore_render_overlay_t        g_fn_render_overlay = NULL;
+static aarcadecore_has_pending_spawn_t    g_fn_has_pending_spawn = NULL;
+static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
+static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -241,6 +249,9 @@ void AACoreManager_Init(void)
     LOAD_FN(get_task_count)
     LOAD_FN(render_task_texture)
     LOAD_FN(render_overlay)
+    LOAD_FN(has_pending_spawn)
+    LOAD_FN(pop_pending_spawn)
+    LOAD_FN(confirm_spawn)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -337,6 +348,9 @@ void AACoreManager_Shutdown(void)
     g_fn_get_task_count = NULL;
     g_fn_render_task_texture = NULL;
     g_fn_render_overlay = NULL;
+    g_fn_has_pending_spawn = NULL;
+    g_fn_pop_pending_spawn = NULL;
+    g_fn_confirm_spawn = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -365,6 +379,87 @@ void AACoreManager_Shutdown(void)
     if (g_overlayPixels) { free(g_overlayPixels); g_overlayPixels = NULL; }
 
     stdPlatform_Printf("AACoreManager: Shutdown complete\n");
+}
+
+/* Spawn a compscreen thing at the player's aim point (reuses jkSpawn raycast logic) */
+static sithThing* aacore_spawn_at_player_aim(void)
+{
+    sithThing* player = sithPlayer_pLocalPlayerThing;
+    if (!player) return NULL;
+
+    sithThing* tmpl = sithTemplate_GetEntryByName("slcompmoniter");
+    if (!tmpl) {
+        stdPlatform_Printf("AACoreManager: Template 'slcompmoniter' not found\n");
+        return NULL;
+    }
+
+    /* Get aim direction (player orientation + eye pitch) */
+    rdMatrix34 aimMatrix;
+    _memcpy(&aimMatrix, &player->lookOrientation, sizeof(aimMatrix));
+    rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
+    rdVector3 lookDir = aimMatrix.lvec;
+
+    /* Raycast forward from player */
+    sithCollision_SearchRadiusForThings(player->sector, player, &player->position,
+                                        &lookDir, 10.0f, 0.0f, 0x1);
+    sithCollisionSearchEntry* searchResult = sithCollision_NextSearchResult();
+    if (!searchResult || !searchResult->surface) {
+        sithCollision_SearchClose();
+        stdPlatform_Printf("AACoreManager: No surface hit for spawn\n");
+        return NULL;
+    }
+
+    rdVector3 hitPos, hitNorm;
+    hitNorm = searchResult->hitNorm;
+    float dist = searchResult->distance;
+    sithSector* hitSector = searchResult->surface->parent_sector;
+    sithCollision_SearchClose();
+
+    /* Hit position = player + lookDir * distance + normal * offset */
+    hitPos.x = player->position.x + lookDir.x * dist + hitNorm.x * 0.02f;
+    hitPos.y = player->position.y + lookDir.y * dist + hitNorm.y * 0.02f;
+    hitPos.z = player->position.z + lookDir.z * dist + hitNorm.z * 0.02f;
+
+    /* Build orientation: up = surface normal, forward = toward player */
+    rdVector3 uvec = hitNorm;
+    rdVector3 toPlayer;
+    rdVector_Sub3(&toPlayer, &player->position, &hitPos);
+    /* Project toPlayer onto the surface plane */
+    float dot = rdVector_Dot3(&toPlayer, &uvec);
+    toPlayer.x -= dot * uvec.x;
+    toPlayer.y -= dot * uvec.y;
+    toPlayer.z -= dot * uvec.z;
+    rdVector_Normalize3Acc(&toPlayer);
+
+    rdVector3 lvec, rvec;
+    if (rdVector_Len3(&toPlayer) < 0.001f) {
+        /* Degenerate — pick an arbitrary forward */
+        lvec.x = 1.0f; lvec.y = 0.0f; lvec.z = 0.0f;
+    } else {
+        lvec = toPlayer;
+    }
+    rdVector_Cross3(&rvec, &lvec, &uvec);
+    rdVector_Normalize3Acc(&rvec);
+    rdVector_Cross3(&lvec, &uvec, &rvec);
+    rdVector_Normalize3Acc(&lvec);
+
+    /* Small offset along normal to prevent sinking */
+    hitPos.x += hitNorm.x * 0.025f;
+    hitPos.y += hitNorm.y * 0.025f;
+    hitPos.z += hitNorm.z * 0.025f;
+
+    rdMatrix34 orient;
+    orient.rvec = rvec;
+    orient.lvec = lvec;
+    orient.uvec = uvec;
+    rdVector_Zero3(&orient.scale);
+
+    sithThing* spawned = sithThing_Create((sithThing*)tmpl, &hitPos, &orient, hitSector, NULL);
+    if (spawned) {
+        stdPlatform_Printf("AACoreManager: Spawned at (%.2f, %.2f, %.2f) thingIdx=%d\n",
+                          hitPos.x, hitPos.y, hitPos.z, spawned->thingIdx);
+    }
+    return spawned;
 }
 
 void AACoreManager_Update(void)
@@ -399,6 +494,24 @@ void AACoreManager_Update(void)
                          GL_RGB, GL_UNSIGNED_SHORT_5_6_5_REV, g_taskPixels);
         }
         g_taskTexturesReady = count;
+    }
+
+    /* Process pending spawn requests from the DLL */
+    if (g_fn_has_pending_spawn && g_fn_has_pending_spawn()) {
+        char itemId[256] = {0};
+        char url[1024] = {0};
+        g_fn_pop_pending_spawn(itemId, sizeof(itemId), url, sizeof(url));
+
+        stdPlatform_Printf("AACoreManager: Processing spawn - item=%s url=%s\n", itemId, url);
+
+        sithThing* spawned = aacore_spawn_at_player_aim();
+        if (spawned) {
+            AACoreManager_RegisterThingTask(spawned, spawned->thingIdx, 0);
+            if (g_fn_confirm_spawn)
+                g_fn_confirm_spawn(spawned->thingIdx);
+        } else {
+            stdPlatform_Printf("AACoreManager: Spawn failed\n");
+        }
     }
 }
 

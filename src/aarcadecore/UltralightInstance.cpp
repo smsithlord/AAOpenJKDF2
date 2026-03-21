@@ -98,6 +98,17 @@ AAPI_CALLBACK(js_manager_getVersion) {
     return result;
 }
 
+#include "InstanceManager.h"
+extern InstanceManager g_instanceManager;
+
+AAPI_CALLBACK(js_manager_spawnItemObject) {
+    std::string itemId = (argumentCount > 0) ? jsValueToString(ctx, arguments[0]) : "";
+    std::string fileUrl = (argumentCount > 1) ? jsValueToString(ctx, arguments[1]) : "";
+    std::string previewUrl = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
+    g_instanceManager.requestSpawn(itemId, fileUrl, previewUrl);
+    return JSValueMakeBoolean(ctx, true);
+}
+
 /* ========================================================================
  * aapi JS bridge — typed library database access
  * ======================================================================== */
@@ -416,6 +427,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "startLibretro", js_manager_startLibretro);
     addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
+    addJSMethod(ctx, managerObj, "spawnItemObject", js_manager_spawnItemObject);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);

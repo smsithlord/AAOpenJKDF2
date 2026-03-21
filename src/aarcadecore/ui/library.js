@@ -626,13 +626,26 @@ class LibraryBrowser {
             html += `</div></div>`;
         }
         
+        // Actions
+        html += `<div class="detail-section">
+            <h4>Actions</h4>
+            <button class="spawn-btn" style="padding: 10px 20px; background: #0f9d58; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;"
+                onclick="window.libraryBrowser.spawnObject('${this.escapeAttr(entry.id)}', '${this.escapeAttr(entry.file || '')}', '${this.escapeAttr(entry.screen || '')}')">
+                Spawn Object
+            </button>
+        </div>`;
+
         // Raw data
         html += `<div class="detail-section">
             <h4>Raw Data</h4>
             <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px;">${JSON.stringify(entry, null, 2)}</pre>
         </div>`;
-        
+
         return html;
+    }
+
+    escapeAttr(str) {
+        return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
 
     renderNestedObject(obj, html) {
@@ -702,6 +715,16 @@ class LibraryBrowser {
 
     capitalizeFirst(str) {
         return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    spawnObject(itemId, fileUrl, previewUrl) {
+        if (window.aapi && aapi.manager && aapi.manager.spawnItemObject) {
+            aapi.manager.spawnItemObject(itemId, fileUrl, previewUrl);
+            /* Close the detail modal */
+            this.elements.modalOverlay.style.display = 'none';
+            /* Close the menu so the player can see the spawned object */
+            aapi.manager.closeMenu();
+        }
     }
 }
 

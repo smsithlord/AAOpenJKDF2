@@ -10,6 +10,7 @@
 #include "libretro_host.h"
 #include "SQLiteLibrary.h"
 #include "ImageLoader.h"
+#include "InstanceManager.h"
 #include <string.h>
 
 /* Global host callbacks */
@@ -20,6 +21,9 @@ SQLiteLibrary g_library;
 
 /* Global image loader */
 ImageLoader g_imageLoader;
+
+/* Global instance manager */
+InstanceManager g_instanceManager;
 
 /* The active instance renders to in-game 3DO screens and receives
  * input when not in menu mode. NULL = no active screen content. */
@@ -329,4 +333,41 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, i
 
     ul->vtable->render(ul, pixelData, width, height, 0, 32);
     return true;
+}
+
+/* ========================================================================
+ * Instance Manager exports
+ * ======================================================================== */
+
+AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void)
+{
+    return g_instanceManager.hasPendingSpawn();
+}
+
+AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(char* itemIdOut, int itemIdSize, char* urlOut, int urlSize)
+{
+    SpawnRequest req = g_instanceManager.popPendingSpawn();
+    if (itemIdOut && itemIdSize > 0) {
+        strncpy(itemIdOut, req.itemId.c_str(), itemIdSize - 1);
+        itemIdOut[itemIdSize - 1] = '\0';
+    }
+    if (urlOut && urlSize > 0) {
+        strncpy(urlOut, req.resolvedUrl.c_str(), urlSize - 1);
+        urlOut[urlSize - 1] = '\0';
+    }
+}
+
+AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx)
+{
+    g_instanceManager.confirmSpawn(thingIdx);
+}
+
+AARCADECORE_EXPORT int aarcadecore_get_selected_thing_idx(void)
+{
+    return g_instanceManager.getSelectedThingIdx();
+}
+
+AARCADECORE_EXPORT int aarcadecore_get_active_instance_count(void)
+{
+    return g_instanceManager.getActiveInstanceCount();
 }

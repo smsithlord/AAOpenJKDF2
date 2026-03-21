@@ -136,6 +136,11 @@ AARCADECORE_EXPORT bool aarcadecore_render_task_texture(
 AARCADECORE_EXPORT bool aarcadecore_render_overlay(
     void* pixelData, int width, int height);
 
+/* Instance Manager — spawn objects from library browser */
+AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
+AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(char* itemIdOut, int itemIdSize, char* urlOut, int urlSize);
+AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -165,6 +170,9 @@ typedef void  (*aarcadecore_start_libretro_t)(void);
 typedef int   (*aarcadecore_get_task_count_t)(void);
 typedef bool  (*aarcadecore_render_task_texture_t)(int taskIndex, void* pixelData, int width, int height, int is16bit, int bpp);
 typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int height);
+typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
+typedef void  (*aarcadecore_pop_pending_spawn_t)(char* itemIdOut, int itemIdSize, char* urlOut, int urlSize);
+typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
 
 #ifdef __cplusplus
 }
