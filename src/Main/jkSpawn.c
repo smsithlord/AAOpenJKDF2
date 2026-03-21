@@ -128,13 +128,7 @@ void jkSpawn_Update(void)
         rdVector_Zero3(&orient.scale);
     }
 
-    /* Offset along surface normal so the model doesn't sink into the surface */
-    {
-        float normalOffset = 0.025f;
-        hitPos.x += searchResult->hitNorm.x * normalOffset;
-        hitPos.y += searchResult->hitNorm.y * normalOffset;
-        hitPos.z += searchResult->hitNorm.z * normalOffset;
-    }
+    /* No vertical offset — 3DO origin is at the bottom */
 
     /* Use the hit surface's sector — more reliable than tracing to the hit position */
     if (searchResult->surface && searchResult->surface->parent_sector) {

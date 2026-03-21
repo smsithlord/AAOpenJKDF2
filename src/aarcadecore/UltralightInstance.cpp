@@ -194,6 +194,7 @@ static JSObjectRef itemToJS(JSContextRef ctx, const Arcade::Item& item) {
     jsSetProp(ctx, o, "description", item.description);
     jsSetProp(ctx, o, "file", item.file);
     jsSetProp(ctx, o, "marquee", item.marquee);
+    jsSetProp(ctx, o, "preview", item.preview);
     jsSetProp(ctx, o, "screen", item.screen);
     jsSetProp(ctx, o, "title", item.title);
     jsSetProp(ctx, o, "type", item.type);

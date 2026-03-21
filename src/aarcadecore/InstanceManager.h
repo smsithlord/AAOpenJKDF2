@@ -28,8 +28,10 @@ struct SpawnedObject {
     std::string itemId;   /* links to EmbeddedItemInstance */
     std::string url;
     int thingIdx;         /* engine sithThing index */
-    std::string screenImagePath; /* cached PNG path (empty = not ready) */
+    std::string screenImagePath;  /* cached PNG path (empty = not ready) */
+    std::string marqueeImagePath; /* cached PNG path (empty = not ready) */
     bool screenImageRequested;
+    bool marqueeImageRequested;
 };
 
 class InstanceManager {
@@ -58,8 +60,9 @@ public:
     /* Task index lookup for per-thing texture rendering */
     int getTaskIndexForThing(int thingIdx) const;
 
-    /* Screen image for thing (empty string = not ready yet) */
+    /* Image paths for thing (empty string = not ready yet) */
     std::string getScreenImagePath(int thingIdx) const;
+    std::string getMarqueeImagePath(int thingIdx) const;
 
     /* Per-frame update — sync titles from browsers */
     void updateTitles();

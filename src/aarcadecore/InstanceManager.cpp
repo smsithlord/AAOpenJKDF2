@@ -110,12 +110,23 @@ static bool isImageUrl(const std::string& url)
     return false;
 }
 
-/* Get the best image URL from an item (priority: marquee → screen → file, image URLs only) */
-static std::string getBestImageUrl(const Arcade::Item& item)
+/* Get the best screen image URL (priority: screen → preview → file → marquee fallback) */
+static std::string getBestScreenUrl(const Arcade::Item& item)
+{
+    if (isImageUrl(item.screen)) return item.screen;
+    if (isImageUrl(item.preview)) return item.preview;
+    if (isImageUrl(item.file)) return item.file;
+    if (isImageUrl(item.marquee)) return item.marquee; /* fallback */
+    return "";
+}
+
+/* Get the best marquee image URL (priority: marquee → screen → preview → file fallback) */
+static std::string getBestMarqueeUrl(const Arcade::Item& item)
 {
     if (isImageUrl(item.marquee)) return item.marquee;
     if (isImageUrl(item.screen)) return item.screen;
-    if (isImageUrl(item.file)) return item.file;
+    if (isImageUrl(item.preview)) return item.preview;
+    if (isImageUrl(item.file)) return item.file; /* fallback */
     return "";
 }
 
@@ -219,11 +230,12 @@ void InstanceManager::confirmSpawn(int thingIdx)
     obj.url = resolvedUrl;
     obj.thingIdx = thingIdx;
     obj.screenImageRequested = false;
+    obj.marqueeImageRequested = false;
     objects_.push_back(obj);
 
-    /* Request screen image from ImageLoader — same logic as library.js getBestImage */
+    /* Request screen image from ImageLoader */
     int objIdx = (int)objects_.size() - 1;
-    std::string screenUrl = getBestImageUrl(item);
+    std::string screenUrl = getBestScreenUrl(item);
 
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: Screen image for item=%s: '%s'\n",
@@ -236,6 +248,25 @@ void InstanceManager::confirmSpawn(int thingIdx)
                 objects_[objIdx].screenImagePath = result.filePath;
                 if (g_host.host_printf)
                     g_host.host_printf("InstanceManager: Screen image ready for thingIdx=%d: %s\n",
+                                      thingIdx, result.filePath.c_str());
+            }
+        });
+    }
+
+    /* Request marquee image */
+    std::string marqueeUrl = getBestMarqueeUrl(item);
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Marquee image for item=%s: '%s'\n",
+                          item.id.c_str(), marqueeUrl.empty() ? "(none)" : marqueeUrl.c_str());
+
+    if (!marqueeUrl.empty() && g_imageLoader.isInitialized()) {
+        objects_[objIdx].marqueeImageRequested = true;
+        g_imageLoader.loadAndCacheImage(marqueeUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
+            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
+                objects_[objIdx].marqueeImagePath = result.filePath;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: Marquee image ready for thingIdx=%d: %s\n",
                                       thingIdx, result.filePath.c_str());
             }
         });
@@ -368,6 +399,15 @@ std::string InstanceManager::getScreenImagePath(int thingIdx) const
     for (const auto& obj : objects_) {
         if (obj.thingIdx == thingIdx)
             return obj.screenImagePath;
+    }
+    return "";
+}
+
+std::string InstanceManager::getMarqueeImagePath(int thingIdx) const
+{
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx)
+            return obj.marqueeImagePath;
     }
     return "";
 }

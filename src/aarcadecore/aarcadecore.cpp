@@ -417,13 +417,31 @@ AARCADECORE_EXPORT bool aarcadecore_load_thing_screen_pixels(int thingIdx, void*
     if (!g_imageLoader.getPixels(cachePath, &pixels, &w, &h))
         return false;
 
-    /* Copy pixels so the caller owns the memory */
+    /* Copy pixels so the caller owns the memory (cache persists for other readers) */
     size_t pixelBytes = (size_t)w * h * 4;
     uint8_t* copy = (uint8_t*)malloc(pixelBytes);
     memcpy(copy, pixels, pixelBytes);
 
-    /* Free the cache entry (it's been consumed) */
-    g_imageLoader.freePixels(cachePath);
+    *pixelsOut = copy;
+    *widthOut = w;
+    *heightOut = h;
+    return true;
+}
+
+AARCADECORE_EXPORT bool aarcadecore_load_thing_marquee_pixels(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut)
+{
+    if (!pixelsOut || !widthOut || !heightOut) return false;
+    std::string cachePath = g_instanceManager.getMarqueeImagePath(thingIdx);
+    if (cachePath.empty()) return false;
+
+    uint8_t* pixels = nullptr;
+    int w = 0, h = 0;
+    if (!g_imageLoader.getPixels(cachePath, &pixels, &w, &h))
+        return false;
+
+    size_t pixelBytes = (size_t)w * h * 4;
+    uint8_t* copy = (uint8_t*)malloc(pixelBytes);
+    memcpy(copy, pixels, pixelBytes);
 
     *pixelsOut = copy;
     *widthOut = w;

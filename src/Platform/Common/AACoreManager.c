@@ -58,6 +58,7 @@ static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
 static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
 static aarcadecore_get_thing_task_index_t g_fn_get_thing_task_index = NULL;
 static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NULL;
+static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 
 /* Cursor state (in screen coords) */
@@ -80,14 +81,21 @@ typedef struct {
     void* thing;           /* sithThing* */
     int thingIdx;
     int taskIndex;
-    GLuint glTexture;      /* per-thing GL texture */
-    int imageLoaded;       /* 0=pending, 1=loaded, -1=failed */
+    GLuint glTexture;          /* per-thing screen GL texture */
+    GLuint marqueeGlTexture;   /* per-thing marquee GL texture */
+    int imageLoaded;           /* screen: 0=pending, 1=loaded, -1=failed */
+    int marqueeImageLoaded;    /* marquee: 0=pending, 1=loaded, -1=failed */
 } ThingTaskMapping;
 static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
 static int g_thingTaskCount = 0;
 
 /* Cached dynscreen material and original texture_id for restore */
 static rdMaterial* g_dynscreenMaterial = NULL;
+/* Cached dynmarquee material */
+static rdMaterial* g_dynmarqueeMaterial = NULL;
+static rdTexture* g_origMarqueeTextures = NULL;
+static int g_origMarqueeAlphaTexId = -1;
+static int g_origMarqueeOpaqueTexId = -1;
 static rdTexture* g_originalTextures = NULL;
 static int g_origAlphaTexId = -1;
 static int g_origOpaqueTexId = -1;
@@ -158,10 +166,10 @@ static GLuint aacore_create_solid_texture(uint16_t color)
     return tex;
 }
 
-/* Find the dynscreen rdMaterial on a sithThing's model, cache it */
+/* Find DynScreen and DynMarquee materials on a sithThing's model, cache them */
 static rdMaterial* aacore_find_dynscreen_material(sithThing* thing)
 {
-    if (g_dynscreenMaterial) return g_dynscreenMaterial;
+    if (g_dynscreenMaterial && g_dynmarqueeMaterial) return g_dynscreenMaterial;
     if (!thing || thing->rdthing.type != RD_THINGTYPE_MODEL || !thing->rdthing.model3)
         return NULL;
 
@@ -169,17 +177,22 @@ static rdMaterial* aacore_find_dynscreen_material(sithThing* thing)
     for (unsigned int m = 0; m < model->numMaterials; m++) {
         rdMaterial* mat = model->materials[m];
         if (!mat || mat->num_textures == 0) continue;
-        if (strstr(mat->mat_full_fpath, "dynscreen")) {
+        if (!g_dynscreenMaterial && strstr(mat->mat_full_fpath, "dynscreen")) {
             g_dynscreenMaterial = mat;
             g_originalTextures = mat->textures;
             g_origAlphaTexId = mat->textures[0].alphaMats[0].texture_id;
             g_origOpaqueTexId = mat->textures[0].opaqueMats[0].texture_id;
-            stdPlatform_Printf("AACoreManager: Found dynscreen material %p (%s, origAlphaTexId=%d, origOpaqueTexId=%d)\n",
-                              mat, mat->mat_full_fpath, g_origAlphaTexId, g_origOpaqueTexId);
-            return mat;
+            stdPlatform_Printf("AACoreManager: Found dynscreen material %p (%s)\n", mat, mat->mat_full_fpath);
+        }
+        if (!g_dynmarqueeMaterial && strstr(mat->mat_full_fpath, "dynmarquee")) {
+            g_dynmarqueeMaterial = mat;
+            g_origMarqueeTextures = mat->textures;
+            g_origMarqueeAlphaTexId = mat->textures[0].alphaMats[0].texture_id;
+            g_origMarqueeOpaqueTexId = mat->textures[0].opaqueMats[0].texture_id;
+            stdPlatform_Printf("AACoreManager: Found dynmarquee material %p (%s)\n", mat, mat->mat_full_fpath);
         }
     }
-    return NULL;
+    return g_dynscreenMaterial;
 }
 
 /* ========================================================================
@@ -258,6 +271,7 @@ void AACoreManager_Init(void)
     LOAD_FN(confirm_spawn)
     LOAD_FN(get_thing_task_index)
     LOAD_FN(load_thing_screen_pixels)
+    LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
     #undef LOAD_FN
 
@@ -360,6 +374,7 @@ void AACoreManager_Shutdown(void)
     g_fn_confirm_spawn = NULL;
     g_fn_get_thing_task_index = NULL;
     g_fn_load_thing_screen_pixels = NULL;
+    g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
@@ -381,6 +396,10 @@ void AACoreManager_Shutdown(void)
     }
     g_thingTaskCount = 0;
     g_dynscreenMaterial = NULL;
+    g_dynmarqueeMaterial = NULL;
+    g_origMarqueeTextures = NULL;
+    g_origMarqueeAlphaTexId = -1;
+    g_origMarqueeOpaqueTexId = -1;
     g_originalTextures = NULL;
     g_origAlphaTexId = -1;
     g_origOpaqueTexId = -1;
@@ -453,10 +472,7 @@ static sithThing* aacore_spawn_at_player_aim(void)
     rdVector_Cross3(&lvec, &uvec, &rvec);
     rdVector_Normalize3Acc(&lvec);
 
-    /* Small offset along normal to prevent sinking */
-    hitPos.x += hitNorm.x * 0.025f;
-    hitPos.y += hitNorm.y * 0.025f;
-    hitPos.z += hitNorm.z * 0.025f;
+    /* No vertical offset — 3DO origin is at the bottom */
 
     rdMatrix34 orient;
     orient.rvec = rvec;
@@ -537,7 +553,7 @@ void AACoreManager_Update(void)
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
-                             GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+                             GL_RGBA, GL_UNSIGNED_BYTE, pixels);
                 g_fn_free_pixels(pixels);
 
                 /* Replace the solid color texture */
@@ -547,6 +563,36 @@ void AACoreManager_Update(void)
                 g_thingTaskMap[i].imageLoaded = 1;
 
                 stdPlatform_Printf("AACoreManager: Screen image loaded for thingIdx=%d (%dx%d, glTex=%u)\n",
+                                  g_thingTaskMap[i].thingIdx, w, h, newTex);
+            }
+        }
+    }
+
+    /* Poll for marquee images */
+    if (g_fn_load_thing_marquee_pixels && g_fn_free_pixels) {
+        for (int i = 0; i < g_thingTaskCount; i++) {
+            if (g_thingTaskMap[i].marqueeImageLoaded != 0) continue;
+
+            void* pixels = NULL;
+            int w = 0, h = 0;
+            if (g_fn_load_thing_marquee_pixels(g_thingTaskMap[i].thingIdx, &pixels, &w, &h)) {
+                GLuint newTex;
+                glGenTextures(1, &newTex);
+                glBindTexture(GL_TEXTURE_2D, newTex);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
+                             GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+                g_fn_free_pixels(pixels);
+
+                if (g_thingTaskMap[i].marqueeGlTexture)
+                    glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+                g_thingTaskMap[i].marqueeGlTexture = newTex;
+                g_thingTaskMap[i].marqueeImageLoaded = 1;
+
+                stdPlatform_Printf("AACoreManager: Marquee image loaded for thingIdx=%d (%dx%d, glTex=%u)\n",
                                   g_thingTaskMap[i].thingIdx, w, h, newTex);
             }
         }
@@ -621,19 +667,23 @@ void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskInd
         return;
     }
 
-    /* Create per-thing GL texture with unique color */
+    /* Create per-thing GL textures with unique color */
     uint16_t color = aacore_color_for_thingIdx(thingIdx);
-    GLuint glTex = aacore_create_solid_texture(color);
+    GLuint screenTex = aacore_create_solid_texture(color);
+    GLuint marqueeTex = aacore_create_solid_texture(color);
 
     /* Store mapping */
     g_thingTaskMap[g_thingTaskCount].thing = pSithThing;
     g_thingTaskMap[g_thingTaskCount].thingIdx = thingIdx;
     g_thingTaskMap[g_thingTaskCount].taskIndex = taskIndex;
-    g_thingTaskMap[g_thingTaskCount].glTexture = glTex;
+    g_thingTaskMap[g_thingTaskCount].glTexture = screenTex;
+    g_thingTaskMap[g_thingTaskCount].marqueeGlTexture = marqueeTex;
+    g_thingTaskMap[g_thingTaskCount].imageLoaded = 0;
+    g_thingTaskMap[g_thingTaskCount].marqueeImageLoaded = 0;
     g_thingTaskCount++;
 
-    stdPlatform_Printf("AACoreManager: Registered thing %p (thingIdx=%d) task %d, glTex=%u, color=0x%04X\n",
-                      pSithThing, thingIdx, taskIndex, glTex, color);
+    stdPlatform_Printf("AACoreManager: Registered thing %p (thingIdx=%d) task %d, screenTex=%u, marqueeTex=%u\n",
+                      pSithThing, thingIdx, taskIndex, screenTex, marqueeTex);
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)
@@ -655,7 +705,20 @@ void AACoreManager_PreRenderThing(void* pSithThing)
             }
 
             g_originalTextures[0].alphaMats[0].texture_id = texToUse;
+            g_originalTextures[0].alphaMats[0].texture_loaded = 1;
             g_originalTextures[0].opaqueMats[0].texture_id = texToUse;
+            g_originalTextures[0].opaqueMats[0].texture_loaded = 1;
+
+            /* Also swap DynMarquee if available */
+            if (g_dynmarqueeMaterial && g_origMarqueeTextures) {
+                GLuint marqueeTex = g_thingTaskMap[i].marqueeGlTexture;
+                g_origMarqueeTextures[0].alphaMats[0].texture_id = marqueeTex;
+                g_origMarqueeTextures[0].alphaMats[0].texture_loaded = 1;
+                g_origMarqueeTextures[0].alphaMats[0].is_16bit = 1;
+                g_origMarqueeTextures[0].opaqueMats[0].texture_id = marqueeTex;
+                g_origMarqueeTextures[0].opaqueMats[0].texture_loaded = 1;
+                g_origMarqueeTextures[0].opaqueMats[0].is_16bit = 1;
+            }
             return;
         }
     }

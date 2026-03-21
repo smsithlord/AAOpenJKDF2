@@ -42,7 +42,7 @@ Arcade::Item SQLiteLibrary::getItemById(const std::string& id)
     if (!db_) return item;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, app, description, file, marquee, screen, title, type FROM items WHERE id = ?";
+    const char* sql = "SELECT id, app, description, file, marquee, preview, screen, title, type FROM items WHERE id = ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return item;
 
     sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
@@ -53,9 +53,10 @@ Arcade::Item SQLiteLibrary::getItemById(const std::string& id)
         item.description = getStr(stmt, 2);
         item.file        = getStr(stmt, 3);
         item.marquee     = getStr(stmt, 4);
-        item.screen      = getStr(stmt, 5);
-        item.title       = getStr(stmt, 6);
-        item.type        = getStr(stmt, 7);
+        item.preview     = getStr(stmt, 5);
+        item.screen      = getStr(stmt, 6);
+        item.title       = getStr(stmt, 7);
+        item.type        = getStr(stmt, 8);
     }
     sqlite3_finalize(stmt);
     return item;
@@ -67,7 +68,7 @@ std::vector<Arcade::Item> SQLiteLibrary::getItems(int offset, int limit)
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, app, description, file, marquee, screen, title, type FROM items ORDER BY id LIMIT ? OFFSET ?";
+    const char* sql = "SELECT id, app, description, file, marquee, preview, screen, title, type FROM items ORDER BY id LIMIT ? OFFSET ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     sqlite3_bind_int(stmt, 1, limit);
@@ -80,9 +81,10 @@ std::vector<Arcade::Item> SQLiteLibrary::getItems(int offset, int limit)
         item.description = getStr(stmt, 2);
         item.file        = getStr(stmt, 3);
         item.marquee     = getStr(stmt, 4);
-        item.screen      = getStr(stmt, 5);
-        item.title       = getStr(stmt, 6);
-        item.type        = getStr(stmt, 7);
+        item.preview     = getStr(stmt, 5);
+        item.screen      = getStr(stmt, 6);
+        item.title       = getStr(stmt, 7);
+        item.type        = getStr(stmt, 8);
         results.push_back(std::move(item));
     }
     sqlite3_finalize(stmt);
@@ -95,7 +97,7 @@ std::vector<Arcade::Item> SQLiteLibrary::searchItems(const std::string& query, i
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, app, description, file, marquee, screen, title, type FROM items WHERE title LIKE ? LIMIT ?";
+    const char* sql = "SELECT id, app, description, file, marquee, preview, screen, title, type FROM items WHERE title LIKE ? LIMIT ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     std::string pattern = "%" + query + "%";
@@ -109,9 +111,10 @@ std::vector<Arcade::Item> SQLiteLibrary::searchItems(const std::string& query, i
         item.description = getStr(stmt, 2);
         item.file        = getStr(stmt, 3);
         item.marquee     = getStr(stmt, 4);
-        item.screen      = getStr(stmt, 5);
-        item.title       = getStr(stmt, 6);
-        item.type        = getStr(stmt, 7);
+        item.preview     = getStr(stmt, 5);
+        item.screen      = getStr(stmt, 6);
+        item.title       = getStr(stmt, 7);
+        item.type        = getStr(stmt, 8);
         results.push_back(std::move(item));
     }
     sqlite3_finalize(stmt);

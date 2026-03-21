@@ -6,7 +6,7 @@
 namespace Arcade {
 
 struct Item {
-    std::string id, app, description, file, marquee, screen, title, type;
+    std::string id, app, description, file, marquee, preview, screen, title, type;
 };
 
 struct Type {
