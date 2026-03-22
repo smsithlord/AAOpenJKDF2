@@ -1046,18 +1046,17 @@ const arcadeHud = (function() {
 
         function switchType(type) {
             state.type = type;
+            state.searchTerm = '';
+            state.isSearchMode = false;
+            searchInput.value = '';
             if (type !== 'items') {
                 state.itemType = '';
                 itemTypeSelect.value = '';
             }
             saveOpts();
             addSearchOption();
-            if (state.searchTerm) {
-                doSearch(state.searchTerm);
-            } else {
-                state.hasLoadedOnce = true;
-                loadEntries(true);
-            }
+            state.hasLoadedOnce = true;
+            loadEntries(true);
         }
 
         function renderCards(entries, append) {
@@ -1113,7 +1112,8 @@ const arcadeHud = (function() {
 
             card.appendChild(imgDiv);
             card.appendChild(titleDiv);
-            card.appendChild(favBtn);
+            if (state.type === 'items' || state.type === 'models')
+                card.appendChild(favBtn);
 
             // Click to spawn (items type) or show title
             if (state.type === 'items' && entry.id) {
