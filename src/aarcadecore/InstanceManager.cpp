@@ -466,18 +466,25 @@ void InstanceManager::objectUsed(int thingIdx)
         aarcadecore_setFullscreenInstance(NULL);
     }
 
-    /* Deactivate the previously selected object's instance */
+    /* Select the new object */
+    const SpawnedObject& obj = objects_[newIndex];
+
+    /* Deactivate the previously selected object's instance — but only if the
+     * new object uses a different item (shared items reuse the same instance) */
     if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
         const SpawnedObject& prev = objects_[selectedObjectIndex_];
-        if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: objectUsed — deactivating previous object #%d (item=%s)\n",
-                              selectedObjectIndex_, prev.itemId.c_str());
-        deactivateInstance(prev.itemId);
+        if (prev.itemId != obj.itemId) {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: objectUsed — deactivating previous object #%d (item=%s)\n",
+                                  selectedObjectIndex_, prev.itemId.c_str());
+            deactivateInstance(prev.itemId);
+        } else {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: objectUsed — keeping shared instance for item=%s\n", prev.itemId.c_str());
+        }
     }
 
-    /* Select the new object */
     selectedObjectIndex_ = newIndex;
-    const SpawnedObject& obj = objects_[newIndex];
 
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: objectUsed — selected object #%d (thingIdx=%d, item=%s)\n",
