@@ -166,6 +166,9 @@ AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx);
 AARCADECORE_EXPORT bool aarcadecore_has_pending_destroy(void);
 AARCADECORE_EXPORT int  aarcadecore_pop_pending_destroy(void);
 
+/* Open tab menu to a specific tab index (0=Tasks, 1=Library, etc.) */
+AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex);
+
 /* Toggle the build context menu overlay */
 AARCADECORE_EXPORT void aarcadecore_toggle_build_context_menu(void);
 
@@ -222,6 +225,7 @@ typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 typedef void  (*aarcadecore_set_aimed_thing_t)(int thingIdx);
 typedef bool  (*aarcadecore_has_pending_destroy_t)(void);
 typedef int   (*aarcadecore_pop_pending_destroy_t)(void);
+typedef void  (*aarcadecore_open_tab_menu_to_tab_t)(int tabIndex);
 typedef void  (*aarcadecore_toggle_build_context_menu_t)(void);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);

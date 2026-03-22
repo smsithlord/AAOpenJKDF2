@@ -80,6 +80,24 @@ The `aarcadecore` target's post-build step automatically copies UI files.
 | Both DLL and engine files | `--target aarcadecore` then `--target openjkdf2-64` |
 | CMakeLists.txt or everything | Full build (no `--target`) |
 
+## Troubleshooting: EXE locked (game still running)
+
+If the linker fails with `LNK1104: cannot open file 'openjkdf2-64.exe'`, close the game and retry. If you already compiled successfully but the link step failed, you only need to re-link — not recompile:
+
+```bash
+cmake --build build_libretro_host --config Release --target openjkdf2-64
+```
+
+This is fast because the `.obj` files are already up to date — it just re-links.
+
+For the DLL, the same applies — if the game had `aarcadecore.dll` locked:
+
+```bash
+cmake --build build_libretro_host --config Release --target aarcadecore
+```
+
+The post-build UI copy also re-runs automatically with either of these.
+
 ## CMake Targets Reference
 
 | Target | Output | Contains |

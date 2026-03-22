@@ -62,6 +62,7 @@ int sithControl_WriteConf();
 void sithControl_ReadControls();
 void sithControl_FinishRead();
 void sithControl_MapDefaults();
+void sithControl_EnsureAADefaults(void);
 void sithControl_InputInit();
 MATH_FUNC flex_t sithControl_GetAxisTimeCorrected(int axisNum);
 MATH_FUNC flex_t sithControl_GetAxisNonRaw(int funcIdx);

@@ -445,10 +445,12 @@ const arcadeHud = (function() {
         // Set up help text hover
         setupHelpText(helptext);
 
-        // Activate saved or first tab
+        // Activate override, saved, or first tab
         if (tabsRow && options.tabs && options.tabs.length > 0) {
             var startTab = 0;
-            if (options.tabStorageKey) {
+            if (typeof options.tabOverride === 'number' && options.tabOverride >= 0 && options.tabOverride < options.tabs.length) {
+                startTab = options.tabOverride;
+            } else if (options.tabStorageKey) {
                 try {
                     var saved = parseInt(localStorage.getItem(options.tabStorageKey));
                     if (!isNaN(saved) && saved >= 0 && saved < options.tabs.length) startTab = saved;

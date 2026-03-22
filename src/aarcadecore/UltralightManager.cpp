@@ -19,6 +19,7 @@ static EmbeddedInstance* g_hudInstance = NULL;
 static bool g_mainMenuOpen = false;
 static bool g_engineMenuRequested = false;
 static bool g_startLibretroRequested = false;
+static int g_requestedTabIndex = -1; /* -1 = use localStorage default */
 
 /* Forward declarations */
 void UltralightManager_CloseMainMenu(void);
@@ -128,6 +129,19 @@ void UltralightManager_OpenTabMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening tab menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TABMENU_HTML);
     g_mainMenuOpen = true;
+}
+
+void UltralightManager_OpenTabMenuToTab(int tabIndex)
+{
+    g_requestedTabIndex = tabIndex;
+    UltralightManager_OpenTabMenu();
+}
+
+int UltralightManager_ConsumeRequestedTab(void)
+{
+    int idx = g_requestedTabIndex;
+    g_requestedTabIndex = -1;
+    return idx;
 }
 
 void UltralightManager_OpenMainMenuPage(void)

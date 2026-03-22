@@ -115,6 +115,11 @@ static const char *sithControl_aFunctionStrs[INPUT_FUNC_MAX+1] =
 #ifdef QOL_IMPROVEMENTS
     "USELASTSELECTED", // Common button for both items and force power usage for controllers
 #endif // QOL_IMPROVEMENTS
+    "AATASKSTAB",
+    "AALIBRARYTAB",
+    "AATABMENU",
+    "AASELECT",
+    "AABUILD",
     "INPUT_FUNC_MAX"
 };
 
@@ -246,6 +251,13 @@ void sithControl_InitFuncToControlType()
 #ifdef QOL_IMPROVEMENTS
     sithControl_inputFuncToControlType[INPUT_FUNC_USELASTSELECTED] = 4 | 1;
 #endif
+
+    /* AArcade keybinds */
+    sithControl_inputFuncToControlType[INPUT_FUNC_AATASKSTAB] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AALIBRARYTAB] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AATABMENU] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AASELECT] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AABUILD] = 4 | 1;
 }
 
 // MOTS altered
@@ -1835,7 +1847,7 @@ void sithControl_MapDefaults()
     sithControl_MapFunc(INPUT_FUNC_PREVWEAPON, DIK_PERIOD, 0);
     sithControl_MapFunc(INPUT_FUNC_NEXTWEAPON, DIK_SLASH, 0);
     sithControl_MapFunc(INPUT_FUNC_NEXTWEAPON, DIK_G, 0);
-    sithControl_MapFunc(INPUT_FUNC_MAP, DIK_TAB, 0);
+    sithControl_MapFunc(INPUT_FUNC_MAP, DIK_M, 0);
     sithControl_MapFunc(INPUT_FUNC_INCREASE, DIK_EQUALS, 0);
     sithControl_MapFunc(INPUT_FUNC_DECREASE, DIK_MINUS, 0);
     if ( (g_debugmodeFlags & DEBUGFLAG_IN_EDITOR) != 0 )
@@ -1844,6 +1856,21 @@ void sithControl_MapDefaults()
     sithControl_MapFunc(INPUT_FUNC_GAMMA, DIK_F11, 0);
     sithControl_MapFunc(INPUT_FUNC_SCREENSHOT, DIK_F12, 0);
     sithControl_MapFunc(INPUT_FUNC_TALLY, DIK_GRAVE, 0);
+
+    sithControl_EnsureAADefaults();
+}
+
+/* AArcade: ensure keybinds exist (called after config load/restore too) */
+void sithControl_EnsureAADefaults(void)
+{
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AATASKSTAB].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AATASKSTAB, DIK_F4, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AALIBRARYTAB].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AALIBRARYTAB, DIK_F6, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AATABMENU].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AATABMENU, DIK_TAB, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AABUILD].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AABUILD, KEY_MOUSE_B3, 2);
 }
 
 void sithControl_InputInit()

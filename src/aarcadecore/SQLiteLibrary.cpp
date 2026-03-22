@@ -21,8 +21,12 @@ bool SQLiteLibrary::open(const char* dbPath)
         return false;
     }
 
+    /* WAL mode + relaxed sync for faster writes (safe against app crashes, not OS crashes) */
+    execSQL("PRAGMA journal_mode=WAL");
+    execSQL("PRAGMA synchronous=NORMAL");
+
     if (g_host.host_printf)
-        g_host.host_printf("SQLiteLibrary: Opened '%s'\n", dbPath);
+        g_host.host_printf("SQLiteLibrary: Opened '%s' (WAL mode)\n", dbPath);
     return true;
 }
 

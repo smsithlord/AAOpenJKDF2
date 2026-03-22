@@ -52,6 +52,12 @@ void AACoreManager_OnMapUnloaded(void);
 /* Notify DLL that player "used" (activated) an AArcade object */
 void AACoreManager_ObjectUsed(int thingIdx);
 
+/* Selector ray — get which AArcade thing the player is aiming at */
+int AACoreManager_GetAimedThingIdx(void);
+
+/* Tab menu — open to specific tab */
+void AACoreManager_OpenTabMenuToTab(int tabIndex);
+
 /* Build context menu */
 void AACoreManager_ToggleBuildContextMenu(void);
 

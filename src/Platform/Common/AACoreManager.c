@@ -70,6 +70,7 @@ static aarcadecore_object_used_t g_fn_object_used = NULL;
 static aarcadecore_set_aimed_thing_t g_fn_set_aimed_thing = NULL;
 static aarcadecore_has_pending_destroy_t g_fn_has_pending_destroy = NULL;
 static aarcadecore_pop_pending_destroy_t g_fn_pop_pending_destroy = NULL;
+static aarcadecore_open_tab_menu_to_tab_t g_fn_open_tab_menu_to_tab = NULL;
 static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
@@ -301,6 +302,7 @@ void AACoreManager_Init(void)
     LOAD_FN(set_aimed_thing)
     LOAD_FN(has_pending_destroy)
     LOAD_FN(pop_pending_destroy)
+    LOAD_FN(open_tab_menu_to_tab)
     LOAD_FN(toggle_build_context_menu)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
@@ -417,6 +419,7 @@ void AACoreManager_Shutdown(void)
     g_fn_set_aimed_thing = NULL;
     g_fn_has_pending_destroy = NULL;
     g_fn_pop_pending_destroy = NULL;
+    g_fn_open_tab_menu_to_tab = NULL;
     g_fn_toggle_build_context_menu = NULL;
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
@@ -894,6 +897,17 @@ void AACoreManager_ObjectUsed(int thingIdx)
 {
     if (g_fn_object_used)
         g_fn_object_used(thingIdx);
+}
+
+int AACoreManager_GetAimedThingIdx(void)
+{
+    return g_aimedAtThingIdx;
+}
+
+void AACoreManager_OpenTabMenuToTab(int tabIndex)
+{
+    if (g_fn_open_tab_menu_to_tab)
+        g_fn_open_tab_menu_to_tab(tabIndex);
 }
 
 void AACoreManager_ToggleBuildContextMenu(void)

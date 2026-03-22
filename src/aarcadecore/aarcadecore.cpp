@@ -548,6 +548,18 @@ AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
     g_instanceManager.setAimedThing(thingIdx);
 }
 
+void UltralightManager_OpenTabMenu(void);
+void UltralightManager_OpenTabMenuToTab(int tabIndex);
+AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex)
+{
+    if (UltralightManager_IsMainMenuOpen())
+        UltralightManager_ToggleMainMenu();
+    if (tabIndex >= 0)
+        UltralightManager_OpenTabMenuToTab(tabIndex);
+    else
+        UltralightManager_OpenTabMenu();
+}
+
 void UltralightManager_OpenBuildContextMenu(void);
 AARCADECORE_EXPORT void aarcadecore_toggle_build_context_menu(void)
 {
