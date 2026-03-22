@@ -70,6 +70,7 @@ void aarcadecore_removeTask(int taskIndex) {
 void UltralightManager_LoadOverlay(void);
 void UltralightManager_UnloadOverlay(void);
 void UltralightManager_NotifyOverlayMode(const char* mode);
+static void notifyOverlayState(void);
 
 /* Fullscreen instance accessors for InstanceManager */
 void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) {
@@ -267,6 +268,7 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     /* Open the library database and ensure schema is up to date */
     g_library.open("G:/Documents Sym Links/GitHub/aarcade-core/x64/Release/library.db");
     g_library.ensureSchema();
+    g_library.setPlatformKey(OPENJK_PLATFORM_ID);
 
     /* Initialize the image loader (headless Ultralight view for thumbnail caching) */
     g_imageLoader.init();

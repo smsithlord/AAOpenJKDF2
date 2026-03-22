@@ -155,11 +155,21 @@ std::vector<Arcade::Model> SQLiteLibrary::getModels(int offset, int limit)
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title, screen FROM models ORDER BY id LIMIT ? OFFSET ?";
+    const char* sql = platformKey_.empty()
+        ? "SELECT id, title, screen FROM models ORDER BY id LIMIT ? OFFSET ?"
+        : "SELECT DISTINCT m.id, m.title, m.screen FROM models m "
+          "INNER JOIN model_platforms mp ON m.id = mp.model_id "
+          "WHERE mp.platform_key = ? ORDER BY m.id LIMIT ? OFFSET ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
-    sqlite3_bind_int(stmt, 1, limit);
-    sqlite3_bind_int(stmt, 2, offset);
+    if (platformKey_.empty()) {
+        sqlite3_bind_int(stmt, 1, limit);
+        sqlite3_bind_int(stmt, 2, offset);
+    } else {
+        sqlite3_bind_text(stmt, 1, platformKey_.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+        sqlite3_bind_int(stmt, 3, offset);
+    }
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         Arcade::Model m;
@@ -178,12 +188,22 @@ std::vector<Arcade::Model> SQLiteLibrary::searchModels(const std::string& query,
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title, screen FROM models WHERE title LIKE ? LIMIT ?";
+    const char* sql = platformKey_.empty()
+        ? "SELECT id, title, screen FROM models WHERE title LIKE ? LIMIT ?"
+        : "SELECT DISTINCT m.id, m.title, m.screen FROM models m "
+          "INNER JOIN model_platforms mp ON m.id = mp.model_id "
+          "WHERE mp.platform_key = ? AND m.title LIKE ? ORDER BY m.id LIMIT ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     std::string pattern = "%" + query + "%";
-    sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 2, limit);
+    if (platformKey_.empty()) {
+        sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+    } else {
+        sqlite3_bind_text(stmt, 1, platformKey_.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, pattern.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 3, limit);
+    }
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         Arcade::Model m;
@@ -255,11 +275,21 @@ std::vector<Arcade::Map> SQLiteLibrary::getMaps(int offset, int limit)
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title FROM maps ORDER BY id LIMIT ? OFFSET ?";
+    const char* sql = platformKey_.empty()
+        ? "SELECT id, title FROM maps ORDER BY id LIMIT ? OFFSET ?"
+        : "SELECT DISTINCT ma.id, ma.title FROM maps ma "
+          "INNER JOIN map_platforms mp ON ma.id = mp.map_id "
+          "WHERE mp.platform_key = ? ORDER BY ma.id LIMIT ? OFFSET ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
-    sqlite3_bind_int(stmt, 1, limit);
-    sqlite3_bind_int(stmt, 2, offset);
+    if (platformKey_.empty()) {
+        sqlite3_bind_int(stmt, 1, limit);
+        sqlite3_bind_int(stmt, 2, offset);
+    } else {
+        sqlite3_bind_text(stmt, 1, platformKey_.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+        sqlite3_bind_int(stmt, 3, offset);
+    }
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         Arcade::Map m;
@@ -277,12 +307,22 @@ std::vector<Arcade::Map> SQLiteLibrary::searchMaps(const std::string& query, int
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title FROM maps WHERE title LIKE ? LIMIT ?";
+    const char* sql = platformKey_.empty()
+        ? "SELECT id, title FROM maps WHERE title LIKE ? LIMIT ?"
+        : "SELECT DISTINCT ma.id, ma.title FROM maps ma "
+          "INNER JOIN map_platforms mp ON ma.id = mp.map_id "
+          "WHERE mp.platform_key = ? AND ma.title LIKE ? ORDER BY ma.id LIMIT ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     std::string pattern = "%" + query + "%";
-    sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 2, limit);
+    if (platformKey_.empty()) {
+        sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, limit);
+    } else {
+        sqlite3_bind_text(stmt, 1, platformKey_.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, pattern.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 3, limit);
+    }
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         Arcade::Map m;

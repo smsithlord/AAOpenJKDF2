@@ -810,11 +810,10 @@ const arcadeHud = (function() {
 
         function switchType(type) {
             state.type = type;
-            state.isSearchMode = false;
-            state.searchTerm = '';
-            searchInput.value = '';
             saveOpts();
-            if (state.hasLoadedOnce) {
+            if (state.searchTerm) {
+                doSearch(state.searchTerm);
+            } else if (state.hasLoadedOnce) {
                 loadEntries(true);
             }
         }

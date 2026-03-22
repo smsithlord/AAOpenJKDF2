@@ -12,6 +12,8 @@ public:
     SQLiteLibrary() : db_(nullptr) {}
     ~SQLiteLibrary() { close(); }
 
+    void setPlatformKey(const std::string& key) { platformKey_ = key; }
+
     bool open(const char* dbPath);
     void close();
     bool isOpen() const { return db_ != nullptr; }
@@ -60,6 +62,7 @@ public:
 
 private:
     sqlite3* db_;
+    std::string platformKey_;
     static std::string getStr(struct sqlite3_stmt* stmt, int col);
     void execSQL(const char* sql);
 };
