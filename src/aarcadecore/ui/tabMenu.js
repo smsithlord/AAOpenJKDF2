@@ -7,8 +7,8 @@ function initTabMenu() {
         requestedTab = aapi.manager.getRequestedTab();
 
     arcadeHud.ui.createWindow({
-        title: 'AArcade',
-        showBack: true,
+        title: 'Tab Menu',
+        showBack: false,
         showClose: true,
         onBack: function() { if (window.aapi && aapi.manager) aapi.manager.openMainMenu(); },
         onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); },

@@ -280,6 +280,94 @@ const arcadeHud = (function() {
     }
 
     /* ========================================================================
+     * Favorites System
+     * ======================================================================== */
+
+    var favoritesLists = {};
+    var activeFavoritesListId = 'favorites';
+
+    function initFavorites() {
+        try {
+            var stored = localStorage.getItem('favoritesLists');
+            if (stored) favoritesLists = JSON.parse(stored);
+        } catch (e) { favoritesLists = {}; }
+        /* Ensure default list exists */
+        if (!favoritesLists['favorites']) {
+            favoritesLists['favorites'] = { id: 'favorites', title: 'Favorites', screen: '', entries: [] };
+            saveFavoritesLists();
+        }
+        /* Restore active list */
+        var storedActive = localStorage.getItem('activeFavoritesList');
+        if (storedActive && favoritesLists[storedActive]) {
+            activeFavoritesListId = storedActive;
+        } else {
+            activeFavoritesListId = 'favorites';
+        }
+    }
+
+    function saveFavoritesLists() {
+        try { localStorage.setItem('favoritesLists', JSON.stringify(favoritesLists)); } catch (e) {}
+    }
+
+    function getActiveFavoritesList() {
+        return favoritesLists[activeFavoritesListId] || favoritesLists['favorites'];
+    }
+
+    function setActiveFavoritesList(id) {
+        if (favoritesLists[id]) {
+            activeFavoritesListId = id;
+            try { localStorage.setItem('activeFavoritesList', id); } catch (e) {}
+        }
+    }
+
+    function createFavoritesList(id, title, screen) {
+        if (!id) id = 'fav_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        if (favoritesLists[id]) return favoritesLists[id];
+        favoritesLists[id] = { id: id, title: title || 'Untitled', screen: screen || '', entries: [] };
+        saveFavoritesLists();
+        return favoritesLists[id];
+    }
+
+    function addToFavorites(mode, entryId) {
+        var list = getActiveFavoritesList();
+        if (!list) return;
+        var key = (mode === 'items') ? 'item' : 'model';
+        /* Check for duplicates */
+        for (var i = 0; i < list.entries.length; i++) {
+            if (list.entries[i][key] === entryId) return;
+        }
+        var entry = {};
+        entry[key] = entryId;
+        list.entries.push(entry);
+        saveFavoritesLists();
+    }
+
+    function removeFromFavorites(mode, entryId) {
+        var list = getActiveFavoritesList();
+        if (!list) return;
+        var key = (mode === 'items') ? 'item' : 'model';
+        for (var i = list.entries.length - 1; i >= 0; i--) {
+            if (list.entries[i][key] === entryId) {
+                list.entries.splice(i, 1);
+            }
+        }
+        saveFavoritesLists();
+    }
+
+    function isFavorite(mode, entryId) {
+        var list = getActiveFavoritesList();
+        if (!list) return false;
+        var key = (mode === 'items') ? 'item' : 'model';
+        for (var i = 0; i < list.entries.length; i++) {
+            if (list.entries[i][key] === entryId) return true;
+        }
+        return false;
+    }
+
+    /* Initialize favorites on arcadeHud init */
+    initFavorites();
+
+    /* ========================================================================
      * UI Window Framework
      * ======================================================================== */
 
@@ -586,7 +674,7 @@ const arcadeHud = (function() {
         { key: 'instances', icon: '\uD83D\uDCCB', help: 'Browse instances' }
     ];
 
-    var DISPLAY_MODES = ['list', 'square', 'landscape', 'large', 'dynamic'];
+    var DISPLAY_MODES = ['list', 'square', 'landscape', 'large' /*, 'dynamic' */];
 
     function renderLibrary(containerEl) {
         if (!containerEl) return;
@@ -600,6 +688,7 @@ const arcadeHud = (function() {
             hasMore: true,
             loading: false,
             displayMode: 0, /* index into DISPLAY_MODES */
+            itemType: '',   /* type filter for items (empty = all) */
             hasLoadedOnce: false
         };
 
@@ -610,6 +699,7 @@ const arcadeHud = (function() {
                 if (saved.type) state.type = saved.type;
                 if (typeof saved.displayMode === 'number') state.displayMode = saved.displayMode;
                 if (saved.searchTerm) state.searchTerm = saved.searchTerm;
+                if (saved.itemType) state.itemType = saved.itemType;
             }
         } catch (e) {}
 
@@ -618,7 +708,8 @@ const arcadeHud = (function() {
                 localStorage.setItem('libraryOpts', JSON.stringify({
                     type: state.type,
                     displayMode: state.displayMode,
-                    searchTerm: state.searchTerm
+                    searchTerm: state.searchTerm,
+                    itemType: state.itemType
                 }));
             } catch (e) {}
         }
@@ -688,6 +779,117 @@ const arcadeHud = (function() {
 
         bar.appendChild(typesDiv);
 
+        /* Favorites header bar */
+        var favBar = document.createElement('div');
+        favBar.className = 'aa-library-favbar';
+
+        /* Reset button */
+        var resetBtn = document.createElement('button');
+        resetBtn.className = 'aa-library-reset-btn';
+        resetBtn.innerHTML = '&#8634;';
+        resetBtn.title = 'Reset to favorites';
+        resetBtn.addEventListener('click', function() {
+            searchInput.value = '';
+            state.searchTerm = '';
+            state.isSearchMode = false;
+            state.itemType = '';
+            itemTypeSelect.value = '';
+            /* Switch to items mode */
+            state.type = 'items';
+            var btns = typesDiv.querySelectorAll('.aa-library-type-btn');
+            for (var j = 0; j < btns.length; j++) btns[j].classList.toggle('aa-active', btns[j].getAttribute('data-type') === 'items');
+            saveOpts();
+            removeSearchOption();
+            favSelect.value = activeFavoritesListId;
+            showFavorites();
+        });
+        favBar.appendChild(resetBtn);
+
+        /* Favorites list drop-down */
+        var favSelect = document.createElement('select');
+        favSelect.className = 'aa-library-fav-select';
+        function populateFavSelect() {
+            favSelect.innerHTML = '';
+            for (var fid in favoritesLists) {
+                var opt = document.createElement('option');
+                opt.value = fid;
+                opt.textContent = favoritesLists[fid].title;
+                favSelect.appendChild(opt);
+            }
+            favSelect.value = activeFavoritesListId;
+        }
+        function addSearchOption() {
+            if (!favSelect.querySelector('.aa-fav-search-opt')) {
+                var searchOpt = document.createElement('option');
+                searchOpt.value = '__search__';
+                searchOpt.textContent = 'Search results...';
+                searchOpt.className = 'aa-fav-search-opt';
+                favSelect.insertBefore(searchOpt, favSelect.firstChild);
+            }
+            favSelect.value = '__search__';
+        }
+        function removeSearchOption() {
+            var opt = favSelect.querySelector('.aa-fav-search-opt');
+            if (opt) opt.remove();
+        }
+        populateFavSelect();
+        favSelect.addEventListener('change', function() {
+            if (favSelect.value === '__search__') return;
+            setActiveFavoritesList(favSelect.value);
+            state.isSearchMode = false;
+            state.searchTerm = '';
+            searchInput.value = '';
+            removeSearchOption();
+            saveOpts();
+            showFavorites();
+        });
+        favBar.appendChild(favSelect);
+
+        /* Edit favorites button (placeholder) */
+        var editFavBtn = document.createElement('button');
+        editFavBtn.className = 'aa-library-icon-btn';
+        editFavBtn.innerHTML = '&#9998;';
+        editFavBtn.title = 'Edit favorites list';
+        favBar.appendChild(editFavBtn);
+
+        /* Create favorites list button (placeholder) */
+        var createFavBtn = document.createElement('button');
+        createFavBtn.className = 'aa-library-icon-btn';
+        createFavBtn.innerHTML = '&#43;';
+        createFavBtn.title = 'Create new favorites list';
+        favBar.appendChild(createFavBtn);
+
+        /* Item Types drop-down */
+        var itemTypeSelect = document.createElement('select');
+        itemTypeSelect.className = 'aa-library-itemtype-select';
+        var allTypesOpt = document.createElement('option');
+        allTypesOpt.value = '';
+        allTypesOpt.textContent = 'All Types';
+        itemTypeSelect.appendChild(allTypesOpt);
+        try {
+            var api = (window.aapi && aapi.library) ? aapi.library : null;
+            if (api && api.getTypes) {
+                var types = api.getTypes();
+                for (var ti = 0; ti < types.length; ti++) {
+                    var topt = document.createElement('option');
+                    topt.value = types[ti].id;
+                    topt.textContent = types[ti].title || types[ti].id;
+                    itemTypeSelect.appendChild(topt);
+                }
+            }
+        } catch (e) {}
+        itemTypeSelect.addEventListener('change', function() {
+            state.itemType = itemTypeSelect.value;
+            saveOpts();
+            if (state.searchTerm) {
+                doSearch(state.searchTerm);
+            } else if (state.hasLoadedOnce) {
+                loadEntries(true);
+            }
+        });
+        favBar.appendChild(itemTypeSelect);
+
+        wrapper.appendChild(favBar);
         wrapper.appendChild(scrollArea);
         wrapper.appendChild(bar);
         containerEl.appendChild(wrapper);
@@ -703,15 +905,20 @@ const arcadeHud = (function() {
 
         // Restore search term to input and trigger search, or show initial message
         console.log('[renderLibrary] restored state: type=' + state.type + ' searchTerm="' + state.searchTerm + '" displayMode=' + state.displayMode);
+        /* Restore itemType select */
+        itemTypeSelect.value = state.itemType || '';
+
         if (state.searchTerm) {
             searchInput.value = state.searchTerm;
             state.isSearchMode = true;
             state.hasLoadedOnce = true;
-            console.log('[renderLibrary] calling doSearch with term: "' + state.searchTerm + '"');
             doSearch(state.searchTerm);
         } else {
-            console.log('[renderLibrary] no search term, showing initial message');
-            grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
+            /* Default: show favorites, switch to items mode */
+            state.type = 'items';
+            var btns2 = typesDiv.querySelectorAll('.aa-library-type-btn');
+            for (var tb2 = 0; tb2 < btns2.length; tb2++) btns2[tb2].classList.toggle('aa-active', btns2[tb2].getAttribute('data-type') === 'items');
+            showFavorites();
         }
 
         // Search debounce
@@ -732,13 +939,9 @@ const arcadeHud = (function() {
                     state.isSearchMode = false;
                     state.searchTerm = '';
                     saveOpts();
-                    if (state.hasLoadedOnce) {
-                        console.log('[renderLibrary] empty term + hasLoadedOnce -> loadEntries');
-                        loadEntries(true);
-                    } else {
-                        grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
-                        loadMoreBtn.style.display = 'none';
-                    }
+                    removeSearchOption();
+                    favSelect.value = activeFavoritesListId;
+                    showFavorites();
                 }
             }, 300);
         });
@@ -762,7 +965,8 @@ const arcadeHud = (function() {
 
             try {
                 var t = state.type;
-                if (t === 'items') entries = api.getItems(state.offset, PAGE_SIZE);
+                var tf = (t === 'items') ? state.itemType : '';
+                if (t === 'items') entries = api.getItems(state.offset, PAGE_SIZE, tf);
                 else if (t === 'apps') entries = api.getApps(state.offset, PAGE_SIZE);
                 else if (t === 'maps') entries = api.getMaps(state.offset, PAGE_SIZE);
                 else if (t === 'models') entries = api.getModels(state.offset, PAGE_SIZE);
@@ -791,7 +995,8 @@ const arcadeHud = (function() {
 
             try {
                 var t = state.type;
-                if (t === 'items') entries = api.searchItems(term, PAGE_SIZE);
+                var tf = (t === 'items') ? state.itemType : '';
+                if (t === 'items') entries = api.searchItems(term, PAGE_SIZE, tf);
                 else if (t === 'apps') entries = api.searchApps(term, PAGE_SIZE);
                 else if (t === 'maps') entries = api.searchMaps(term, PAGE_SIZE);
                 else if (t === 'models') entries = api.searchModels(term, PAGE_SIZE);
@@ -801,6 +1006,37 @@ const arcadeHud = (function() {
             renderCards(entries || [], false);
             loadMoreBtn.style.display = 'none';
             state.loading = false;
+            addSearchOption();
+        }
+
+        function showFavorites() {
+            var list = getActiveFavoritesList();
+            if (!list || !list.entries || list.entries.length === 0) {
+                grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">No favorites yet. Search for items and click the star to add them.</div>';
+                loadMoreBtn.style.display = 'none';
+                return;
+            }
+            var api = getApi();
+            if (!api) return;
+            var entries = [];
+            for (var i = 0; i < list.entries.length; i++) {
+                var e = list.entries[i];
+                try {
+                    if (e.item && api.getItemById) {
+                        var item = api.getItemById(e.item);
+                        if (item) entries.push(item);
+                    } else if (e.model && api.getModelById) {
+                        var model = api.getModelById(e.model);
+                        if (model) entries.push(model);
+                    }
+                } catch (ex) {}
+            }
+            renderCards(entries, false);
+            loadMoreBtn.style.display = 'none';
+            /* Update favSelect to show this list */
+            var searchOpt = favSelect.querySelector('.aa-fav-search-opt');
+            if (searchOpt) searchOpt.style.display = 'none';
+            favSelect.value = activeFavoritesListId;
         }
 
         function loadMore() {
@@ -810,10 +1046,16 @@ const arcadeHud = (function() {
 
         function switchType(type) {
             state.type = type;
+            if (type !== 'items') {
+                state.itemType = '';
+                itemTypeSelect.value = '';
+            }
             saveOpts();
+            addSearchOption();
             if (state.searchTerm) {
                 doSearch(state.searchTerm);
-            } else if (state.hasLoadedOnce) {
+            } else {
+                state.hasLoadedOnce = true;
                 loadEntries(true);
             }
         }
@@ -847,8 +1089,31 @@ const arcadeHud = (function() {
             titleDiv.className = 'aa-library-card-title';
             titleDiv.textContent = entry.title || entry.id || 'Untitled';
 
+            /* Favorite star button */
+            var favBtn = document.createElement('button');
+            favBtn.className = 'aa-library-fav-btn';
+            var entryMode = (entry.type !== undefined) ? 'items' : 'models';
+            var entryIsFav = isFavorite(entryMode, entry.id);
+            favBtn.textContent = entryIsFav ? '\u2605' : '\u2606'; /* filled/empty star */
+            if (entryIsFav) card.classList.add('aa-fav-tile');
+            (function(eMode, eId, btn, crd) {
+                btn.addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    if (isFavorite(eMode, eId)) {
+                        removeFromFavorites(eMode, eId);
+                        btn.textContent = '\u2606';
+                        crd.classList.remove('aa-fav-tile');
+                    } else {
+                        addToFavorites(eMode, eId);
+                        btn.textContent = '\u2605';
+                        crd.classList.add('aa-fav-tile');
+                    }
+                });
+            })(entryMode, entry.id, favBtn, card);
+
             card.appendChild(imgDiv);
             card.appendChild(titleDiv);
+            card.appendChild(favBtn);
 
             // Click to spawn (items type) or show title
             if (state.type === 'items' && entry.id) {
@@ -868,8 +1133,10 @@ const arcadeHud = (function() {
         }
 
         function isImgUrl(url) {
-            if (!url) return false;
+            if (!url || typeof url !== 'string') return false;
             var lower = url.toLowerCase();
+            /* Accept any http(s) URL as potentially valid image */
+            if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0) return true;
             var exts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
             for (var i = 0; i < exts.length; i++) {
                 if (lower.indexOf(exts[i]) !== -1) return true;
@@ -927,6 +1194,17 @@ const arcadeHud = (function() {
 
         // Database
         getSupportedEntryTypes: getSupportedEntryTypes,
+
+        // Favorites
+        favorites: {
+            addToFavorites: addToFavorites,
+            removeFromFavorites: removeFromFavorites,
+            isFavorite: isFavorite,
+            getActiveFavoritesList: getActiveFavoritesList,
+            setActiveFavoritesList: setActiveFavoritesList,
+            createFavoritesList: createFavoritesList,
+            getLists: function() { return favoritesLists; }
+        },
 
         // UI framework
         ui: {

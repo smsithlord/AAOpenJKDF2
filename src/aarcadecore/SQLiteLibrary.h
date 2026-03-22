@@ -21,15 +21,16 @@ public:
     /* Schema migration — call after open */
     void ensureSchema();
 
-    // Items
+    // Items (typeFilter: empty string = all types, otherwise filter by type column)
     Arcade::Item getItemById(const std::string& id);
-    std::vector<Arcade::Item> getItems(int offset, int limit);
-    std::vector<Arcade::Item> searchItems(const std::string& query, int limit);
+    std::vector<Arcade::Item> getItems(int offset, int limit, const std::string& typeFilter = "");
+    std::vector<Arcade::Item> searchItems(const std::string& query, int limit, const std::string& typeFilter = "");
 
     // Types
     std::vector<Arcade::Type> getTypes();
 
     // Models
+    Arcade::Model getModelById(const std::string& id);
     std::vector<Arcade::Model> getModels(int offset, int limit);
     std::vector<Arcade::Model> searchModels(const std::string& query, int limit);
 

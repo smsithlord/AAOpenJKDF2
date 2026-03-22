@@ -420,13 +420,29 @@ static std::string parseQueryLimit(JSContextRef ctx, size_t argc, const JSValueR
 
 /* --- aapi.library.* callback implementations --- */
 
+AAPI_CALLBACK(js_aapi_getItemById) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string id = jsValueToString(ctx, arguments[0]);
+    Arcade::Item item = g_library.getItemById(id);
+    if (item.id.empty()) return JSValueMakeNull(ctx);
+    return itemToJS(ctx, item);
+}
+AAPI_CALLBACK(js_aapi_getModelById) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string id = jsValueToString(ctx, arguments[0]);
+    Arcade::Model model = g_library.getModelById(id);
+    if (model.id.empty()) return JSValueMakeNull(ctx);
+    return modelToJS(ctx, model);
+}
 AAPI_CALLBACK(js_aapi_getItemsTyped) {
     int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
-    return vectorToJSArray(ctx, g_library.getItems(offset, limit), itemToJS);
+    std::string typeFilter = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
+    return vectorToJSArray(ctx, g_library.getItems(offset, limit, typeFilter), itemToJS);
 }
 AAPI_CALLBACK(js_aapi_searchItemsTyped) {
     int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
-    return vectorToJSArray(ctx, g_library.searchItems(q, limit), itemToJS);
+    std::string typeFilter = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
+    return vectorToJSArray(ctx, g_library.searchItems(q, limit, typeFilter), itemToJS);
 }
 AAPI_CALLBACK(js_aapi_getTypesTyped) {
     return vectorToJSArray(ctx, g_library.getTypes(), typeToJS);
@@ -654,6 +670,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
 
     /* aapi.library — database queries */
     JSObjectRef libraryObj = JSObjectMake(ctx, nullptr, nullptr);
+    addJSMethod(ctx, libraryObj, "getItemById", js_aapi_getItemById);
+    addJSMethod(ctx, libraryObj, "getModelById", js_aapi_getModelById);
     addJSMethod(ctx, libraryObj, "getItems", js_aapi_getItemsTyped);
     addJSMethod(ctx, libraryObj, "searchItems", js_aapi_searchItemsTyped);
     addJSMethod(ctx, libraryObj, "getTypes", js_aapi_getTypesTyped);
