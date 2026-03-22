@@ -120,6 +120,9 @@ static const char *sithControl_aFunctionStrs[INPUT_FUNC_MAX+1] =
     "AATABMENU",
     "AASELECT",
     "AABUILD",
+    "AAREMEMBER",
+    "AAVIRTUALINPUT",
+    "AAINPUTLOCK",
     "INPUT_FUNC_MAX"
 };
 
@@ -258,6 +261,9 @@ void sithControl_InitFuncToControlType()
     sithControl_inputFuncToControlType[INPUT_FUNC_AATABMENU] = 4 | 1;
     sithControl_inputFuncToControlType[INPUT_FUNC_AASELECT] = 4 | 1;
     sithControl_inputFuncToControlType[INPUT_FUNC_AABUILD] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AAREMEMBER] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AAVIRTUALINPUT] = 4 | 1;
+    sithControl_inputFuncToControlType[INPUT_FUNC_AAINPUTLOCK] = 4 | 1;
 }
 
 // MOTS altered
@@ -1871,6 +1877,12 @@ void sithControl_EnsureAADefaults(void)
         sithControl_MapFunc(INPUT_FUNC_AATABMENU, DIK_TAB, 2);
     if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AABUILD].numEntries == 0)
         sithControl_MapFunc(INPUT_FUNC_AABUILD, KEY_MOUSE_B3, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAREMEMBER].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AAREMEMBER, DIK_R, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAVIRTUALINPUT].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AAVIRTUALINPUT, KEY_MOUSE_B2, 2);
+    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAINPUTLOCK].numEntries == 0)
+        sithControl_MapFunc(INPUT_FUNC_AAINPUTLOCK, DIK_G, 2);
 }
 
 void sithControl_InputInit()

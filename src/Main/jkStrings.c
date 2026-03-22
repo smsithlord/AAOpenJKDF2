@@ -38,6 +38,9 @@ int jkStrings_Startup()
             { "AATABMENU",    L"Tab Menu",     0 },
             { "AASELECT",     L"Select",       0 },
             { "AABUILD",      L"Build",        0 },
+            { "AAREMEMBER",      L"Remember",      0 },
+            { "AAVIRTUALINPUT",  L"Virtual Input",  0 },
+            { "AAINPUTLOCK",     L"Input Lock",     0 },
         };
         if (!jkStrings_tableExt.hashtable) {
             jkStrings_tableExt.hashtable = stdHashTable_New(16);

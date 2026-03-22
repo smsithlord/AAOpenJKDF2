@@ -99,6 +99,9 @@ public:
 
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
+    void deselectOnly();
+    void rememberObject(int thingIdx);
+    EmbeddedInstance* getInputTarget() const;
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
 
     /* URL resolution */

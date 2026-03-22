@@ -67,9 +67,17 @@ static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NU
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
+static aarcadecore_enter_input_mode_for_selected_t g_fn_enter_input_mode_for_selected = NULL;
+static aarcadecore_exit_input_mode_t g_fn_exit_input_mode = NULL;
+static aarcadecore_is_input_mode_active_t g_fn_is_input_mode_active = NULL;
+static aarcadecore_deselect_only_t g_fn_deselect_only = NULL;
+static aarcadecore_remember_object_t g_fn_remember_object = NULL;
 static aarcadecore_set_aimed_thing_t g_fn_set_aimed_thing = NULL;
 static aarcadecore_has_pending_destroy_t g_fn_has_pending_destroy = NULL;
 static aarcadecore_pop_pending_destroy_t g_fn_pop_pending_destroy = NULL;
+static aarcadecore_enter_spawn_mode_t g_fn_enter_spawn_mode = NULL;
+static aarcadecore_exit_spawn_mode_t g_fn_exit_spawn_mode = NULL;
+static aarcadecore_is_spawn_mode_active_t g_fn_is_spawn_mode_active = NULL;
 static aarcadecore_open_tab_menu_to_tab_t g_fn_open_tab_menu_to_tab = NULL;
 static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
@@ -108,6 +116,17 @@ static int g_thingTaskCount = 0;
 
 /* Selector ray — which AArcade thing the player is aiming at */
 static int g_aimedAtThingIdx = -1;
+
+/* Selector ray hit data — reused by spawn mode positioning */
+static int g_selectorRayHasHit = 0;
+static rdVector3 g_selectorRayHitPos;
+static rdVector3 g_selectorRayHitNorm;
+static sithSector* g_selectorRayHitSector = NULL;
+
+/* Spawn mode — preview thing follows player aim until confirmed/cancelled */
+static int g_spawnModeActive = 0;
+static int g_spawnPreviewThingIdx = -1;
+static void* g_spawnPreviewThing = NULL; /* sithThing* */
 
 /* Cached dynscreen material and original texture_id for restore */
 static rdMaterial* g_dynscreenMaterial = NULL;
@@ -299,9 +318,17 @@ void AACoreManager_Init(void)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
+    LOAD_FN(enter_input_mode_for_selected)
+    LOAD_FN(exit_input_mode)
+    LOAD_FN(is_input_mode_active)
+    LOAD_FN(deselect_only)
+    LOAD_FN(remember_object)
     LOAD_FN(set_aimed_thing)
     LOAD_FN(has_pending_destroy)
     LOAD_FN(pop_pending_destroy)
+    LOAD_FN(enter_spawn_mode)
+    LOAD_FN(exit_spawn_mode)
+    LOAD_FN(is_spawn_mode_active)
     LOAD_FN(open_tab_menu_to_tab)
     LOAD_FN(toggle_build_context_menu)
     LOAD_FN(is_fullscreen_active)
@@ -416,9 +443,17 @@ void AACoreManager_Shutdown(void)
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
+    g_fn_enter_input_mode_for_selected = NULL;
+    g_fn_exit_input_mode = NULL;
+    g_fn_is_input_mode_active = NULL;
+    g_fn_deselect_only = NULL;
+    g_fn_remember_object = NULL;
     g_fn_set_aimed_thing = NULL;
     g_fn_has_pending_destroy = NULL;
     g_fn_pop_pending_destroy = NULL;
+    g_fn_enter_spawn_mode = NULL;
+    g_fn_exit_spawn_mode = NULL;
+    g_fn_is_spawn_mode_active = NULL;
     g_fn_open_tab_menu_to_tab = NULL;
     g_fn_toggle_build_context_menu = NULL;
     g_fn_is_fullscreen_active = NULL;
@@ -599,11 +634,14 @@ void AACoreManager_Update(void)
     if (g_fn_update)
         g_fn_update();
 
-    /* Selector ray — find which AArcade thing the player is aiming at */
+    /* Selector ray — find which AArcade thing the player is aiming at,
+     * and store the first solid surface hit for spawn mode reuse */
     {
         sithThing* player = sithPlayer_pLocalPlayerThing;
         int newAimedAt = -1;
-        if (player && player->sector && g_thingTaskCount > 0) {
+        g_selectorRayHasHit = 0;
+        g_selectorRayHitSector = NULL;
+        if (player && player->sector) {
             rdMatrix34 aimMatrix;
             _memcpy(&aimMatrix, &player->lookOrientation, sizeof(aimMatrix));
             rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
@@ -613,7 +651,22 @@ void AACoreManager_Update(void)
                 &player->position, &lookDir, 50.0f, 0.0f, 0);
             sithCollisionSearchEntry* hit = sithCollision_NextSearchResult();
             while (hit) {
-                if ((hit->hitType & 0x1) && hit->receiver) { /* SITHCOLLISION_THING */
+                /* Skip adjoin surfaces (portals between sectors) */
+                if (hit->hitType & SITHCOLLISION_ADJOINCROSS) {
+                    hit = sithCollision_NextSearchResult();
+                    continue;
+                }
+                /* Store first solid surface hit for spawn mode */
+                if (!g_selectorRayHasHit && hit->surface) {
+                    g_selectorRayHasHit = 1;
+                    g_selectorRayHitNorm = hit->hitNorm;
+                    g_selectorRayHitPos.x = player->position.x + lookDir.x * hit->distance + hit->hitNorm.x * 0.02f;
+                    g_selectorRayHitPos.y = player->position.y + lookDir.y * hit->distance + hit->hitNorm.y * 0.02f;
+                    g_selectorRayHitPos.z = player->position.z + lookDir.z * hit->distance + hit->hitNorm.z * 0.02f;
+                    g_selectorRayHitSector = hit->surface->parent_sector;
+                }
+                /* Check for tracked AArcade things */
+                if ((hit->hitType & SITHCOLLISION_THING) && hit->receiver && g_thingTaskCount > 0) {
                     int idx = hit->receiver->thingIdx;
                     for (int i = 0; i < g_thingTaskCount; i++) {
                         if (g_thingTaskMap[i].thingIdx == idx) {
@@ -663,6 +716,46 @@ void AACoreManager_Update(void)
         g_taskTexturesReady = count;
     }
 
+    /* Spawn mode: reposition preview thing using selector ray hit data */
+    if (g_spawnModeActive && g_spawnPreviewThing && g_selectorRayHasHit) {
+        sithThing* player = sithPlayer_pLocalPlayerThing;
+        sithThing* preview = (sithThing*)g_spawnPreviewThing;
+        if (player) {
+            /* Build orientation: up = surface normal, facing player */
+            rdVector3 uvec = g_selectorRayHitNorm;
+            rdVector3 toPlayer;
+            rdVector_Sub3(&toPlayer, &player->position, &g_selectorRayHitPos);
+            float dot = rdVector_Dot3(&toPlayer, &uvec);
+            toPlayer.x -= dot * uvec.x;
+            toPlayer.y -= dot * uvec.y;
+            toPlayer.z -= dot * uvec.z;
+            rdVector_Normalize3Acc(&toPlayer);
+
+            rdVector3 lvec, rvec;
+            if (rdVector_Len3(&toPlayer) < 0.001f) {
+                lvec.x = 1.0f; lvec.y = 0.0f; lvec.z = 0.0f;
+            } else {
+                lvec = toPlayer;
+            }
+            rdVector_Cross3(&rvec, &lvec, &uvec);
+            rdVector_Normalize3Acc(&rvec);
+            rdVector_Cross3(&lvec, &uvec, &rvec);
+            rdVector_Normalize3Acc(&lvec);
+
+            rdMatrix34 orient;
+            orient.rvec = rvec;
+            orient.lvec = lvec;
+            orient.uvec = uvec;
+            rdVector_Zero3(&orient.scale);
+
+            rdVector3 hitPos = g_selectorRayHitPos;
+            sithThing_SetPosAndRot(preview, &hitPos, &orient);
+
+            if (g_selectorRayHitSector && preview->sector != g_selectorRayHitSector)
+                sithThing_MoveToSector(preview, g_selectorRayHitSector, 0);
+        }
+    }
+
     /* Process pending spawn requests from the DLL */
     if (g_fn_has_pending_spawn && g_fn_has_pending_spawn()) {
         g_fn_pop_pending_spawn();
@@ -682,17 +775,18 @@ void AACoreManager_Update(void)
 
         if (spawned) {
             AACoreManager_RegisterThingTask(spawned, spawned->thingIdx, 0);
-            if (g_fn_confirm_spawn)
-                g_fn_confirm_spawn(spawned->thingIdx);
-            /* Only save to DB for new user spawns, not restores */
-            if (!isRestore && g_fn_report_thing_transform) {
-                rdVector3 pos = spawned->position;
-                int sector = spawned->sector ? (int)spawned->sector->id : -1;
-                /* Use engine's own ExtractAngles for roundtrip-safe PYR */
-                rdVector3 pyr;
-                rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
-                g_fn_report_thing_transform(spawned->thingIdx,
-                    pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+            if (isRestore) {
+                /* Restoring saved objects: confirm immediately */
+                if (g_fn_confirm_spawn)
+                    g_fn_confirm_spawn(spawned->thingIdx);
+            } else {
+                /* New user spawn: enter spawn mode for positioning */
+                g_spawnModeActive = 1;
+                g_spawnPreviewThingIdx = spawned->thingIdx;
+                g_spawnPreviewThing = spawned;
+                if (g_fn_enter_spawn_mode)
+                    g_fn_enter_spawn_mode();
+                stdPlatform_Printf("AACoreManager: Entered spawn mode for thingIdx=%d\n", spawned->thingIdx);
             }
         } else {
             stdPlatform_Printf("AACoreManager: Spawn failed\n");
@@ -899,6 +993,107 @@ void AACoreManager_ObjectUsed(int thingIdx)
         g_fn_object_used(thingIdx);
 }
 
+void AACoreManager_EnterInputMode(void)
+{
+    if (g_fn_enter_input_mode_for_selected)
+        g_fn_enter_input_mode_for_selected();
+}
+
+void AACoreManager_ExitInputMode(void)
+{
+    if (g_fn_exit_input_mode)
+        g_fn_exit_input_mode();
+}
+
+bool AACoreManager_IsInputModeActive(void)
+{
+    return g_fn_is_input_mode_active && g_fn_is_input_mode_active();
+}
+
+void AACoreManager_RememberObject(void)
+{
+    int aimedIdx = g_aimedAtThingIdx;
+    /* If there's a selected object, deselect without closing its instance */
+    if (g_fn_deselect_only) {
+        /* The DLL checks internally if anything is selected */
+        g_fn_deselect_only();
+    }
+    /* If aiming at an object, activate its instance without selecting */
+    if (aimedIdx >= 0 && g_fn_remember_object) {
+        g_fn_remember_object(aimedIdx);
+    }
+}
+
+bool AACoreManager_IsSpawnModeActive(void)
+{
+    return g_spawnModeActive != 0;
+}
+
+void AACoreManager_ConfirmSpawn(void)
+{
+    if (!g_spawnModeActive || !g_spawnPreviewThing) return;
+
+    sithThing* spawned = (sithThing*)g_spawnPreviewThing;
+    int thingIdx = g_spawnPreviewThingIdx;
+
+    /* Confirm with DLL */
+    if (g_fn_confirm_spawn)
+        g_fn_confirm_spawn(thingIdx);
+
+    /* Save position */
+    if (g_fn_report_thing_transform) {
+        rdVector3 pos = spawned->position;
+        int sector = spawned->sector ? (int)spawned->sector->id : -1;
+        rdVector3 pyr;
+        rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
+        g_fn_report_thing_transform(thingIdx, pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+    }
+
+    /* Exit spawn mode */
+    if (g_fn_exit_spawn_mode)
+        g_fn_exit_spawn_mode();
+    g_spawnModeActive = 0;
+    g_spawnPreviewThingIdx = -1;
+    g_spawnPreviewThing = NULL;
+    stdPlatform_Printf("AACoreManager: Spawn confirmed at thingIdx=%d\n", thingIdx);
+}
+
+void AACoreManager_CancelSpawn(void)
+{
+    if (!g_spawnModeActive) return;
+
+    int thingIdx = g_spawnPreviewThingIdx;
+
+    /* Unregister from thing-task map */
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].thingIdx == thingIdx) {
+            if (g_thingTaskMap[i].glTexture)
+                glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+            if (g_thingTaskMap[i].marqueeGlTexture)
+                glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+            for (int j = i; j < g_thingTaskCount - 1; j++)
+                g_thingTaskMap[j] = g_thingTaskMap[j + 1];
+            g_thingTaskCount--;
+            break;
+        }
+    }
+
+    /* Destroy the sithThing */
+    if (g_spawnPreviewThing) {
+        sithThing* thing = (sithThing*)g_spawnPreviewThing;
+        if (thing->type != SITH_THING_FREE)
+            sithThing_Destroy(thing);
+    }
+
+    /* Exit spawn mode */
+    if (g_fn_exit_spawn_mode)
+        g_fn_exit_spawn_mode();
+    g_spawnModeActive = 0;
+    g_spawnPreviewThingIdx = -1;
+    g_spawnPreviewThing = NULL;
+    stdPlatform_Printf("AACoreManager: Spawn cancelled\n");
+}
+
 int AACoreManager_GetAimedThingIdx(void)
 {
     return g_aimedAtThingIdx;
@@ -1029,8 +1224,11 @@ void AACoreManager_StartLibretro(void)
 
 void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
 {
-    if (!g_fn_is_main_menu_open || !g_fn_is_main_menu_open())
-        return;
+    {
+        int menuOpen = g_fn_is_main_menu_open && g_fn_is_main_menu_open();
+        int spawnMode = g_fn_is_spawn_mode_active && g_fn_is_spawn_mode_active();
+        if (!menuOpen && !spawnMode) return;
+    }
     if (!g_fn_render_overlay)
         return;
 
@@ -1061,21 +1259,5 @@ void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
      * This gets drawn by std3D_DrawUIRenderList() using the engine's shader pipeline. */
     std3D_DrawUITexturedQuad(g_overlayTexture, 0.0f, 0.0f, (float)screenWidth, (float)screenHeight);
 
-    /* Draw cursor wedge */
-    if (!g_cursorTexture) {
-        uint32_t white = 0xFFFFFFFF;
-        glGenTextures(1, &g_cursorTexture);
-        glBindTexture(GL_TEXTURE_2D, g_cursorTexture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &white);
-    }
-    /* Draw a small wedge/triangle as cursor using a tiny quad */
-    {
-        float cx = (float)g_cursorX;
-        float cy = (float)g_cursorY;
-        float cw = 16.0f;
-        float ch = 20.0f;
-        std3D_DrawUITexturedQuad(g_cursorTexture, cx, cy, cw, ch);
-    }
+    /* Cursor is now handled by overlay.html JS — no host-side cursor */
 }

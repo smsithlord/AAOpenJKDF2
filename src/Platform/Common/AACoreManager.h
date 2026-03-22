@@ -52,8 +52,21 @@ void AACoreManager_OnMapUnloaded(void);
 /* Notify DLL that player "used" (activated) an AArcade object */
 void AACoreManager_ObjectUsed(int thingIdx);
 
+/* Remember: deselect without closing instance, or activate aimed-at object without selecting */
+void AACoreManager_RememberObject(void);
+
+/* Input mode — send input to in-world instance without fullscreen overlay */
+void AACoreManager_EnterInputMode(void);
+void AACoreManager_ExitInputMode(void);
+bool AACoreManager_IsInputModeActive(void);
+
 /* Selector ray — get which AArcade thing the player is aiming at */
 int AACoreManager_GetAimedThingIdx(void);
+
+/* Spawn mode */
+bool AACoreManager_IsSpawnModeActive(void);
+void AACoreManager_ConfirmSpawn(void);
+void AACoreManager_CancelSpawn(void);
 
 /* Tab menu — open to specific tab */
 void AACoreManager_OpenTabMenuToTab(int tabIndex);

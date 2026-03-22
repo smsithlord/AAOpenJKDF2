@@ -66,4 +66,10 @@ struct EmbeddedInstance {
 /* Global host callbacks (set during aarcadecore_init) */
 extern AACoreHostCallbacks g_host;
 
+/* Fullscreen / input mode instance pointers (defined in aarcadecore.cpp) */
+EmbeddedInstance* aarcadecore_getFullscreenInstance(void);
+void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst);
+EmbeddedInstance* aarcadecore_getInputModeInstance(void);
+void aarcadecore_setInputModeInstance(EmbeddedInstance* inst);
+
 #endif /* AARCADECORE_INTERNAL_H */

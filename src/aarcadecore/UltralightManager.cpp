@@ -1,12 +1,16 @@
 #include "aarcadecore_internal.h"
+#include <stdlib.h>
+#include <string.h>
 
 /* Forward declarations */
+void UltralightManager_UpdateHudPixelBuffer(void);
 EmbeddedInstance* UltralightInstance_Create(const char* htmlPath, const char* material_name);
 void UltralightInstance_Destroy(EmbeddedInstance* inst);
 bool UltralightInstance_IsCloseRequested(EmbeddedInstance* inst);
 void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
 
 #define UL_BLANK_HTML        "file:///aarcadecore/ui/blank.html"
+#define UL_OVERLAY_HTML      "file:///aarcadecore/ui/overlay.html"
 #define UL_MAINMENU_HTML     "file:///aarcadecore/ui/mainMenu.html"
 #define UL_LIBRARY_HTML      "file:///aarcadecore/ui/library.html"
 #define UL_TASKMENU_HTML     "file:///aarcadecore/ui/taskMenu.html"
@@ -20,6 +24,16 @@ static bool g_mainMenuOpen = false;
 static bool g_engineMenuRequested = false;
 static bool g_startLibretroRequested = false;
 static int g_requestedTabIndex = -1; /* -1 = use localStorage default */
+static bool g_spawnModeOpen = false;
+static bool g_overlayLoaded = false;
+
+/* Persistent HUD pixel buffer — updated each frame the HUD renders */
+#define HUD_BUF_W 1920
+#define HUD_BUF_H 1080
+static uint8_t* g_hudPixelBuffer = NULL;
+static bool g_hudPixelBufferValid = false;
+
+#define UL_SPAWNMODE_HTML    "file:///aarcadecore/ui/spawnMode.html"
 
 /* Forward declarations */
 void UltralightManager_CloseMainMenu(void);
@@ -50,6 +64,9 @@ void UltralightManager_Shutdown(void)
         UltralightInstance_Destroy(g_hudInstance);
         g_hudInstance = NULL;
     }
+    free(g_hudPixelBuffer);
+    g_hudPixelBuffer = NULL;
+    g_hudPixelBufferValid = false;
     g_mainMenuOpen = false;
 }
 
@@ -63,14 +80,16 @@ void UltralightManager_Update(void)
             if (g_host.host_printf) g_host.host_printf("UltralightManager: JS requested menu close\n");
             UltralightManager_CloseMainMenu();
         }
+
+        /* Update persistent HUD pixel buffer for compositing */
+        UltralightManager_UpdateHudPixelBuffer();
     }
 }
 
 EmbeddedInstance* UltralightManager_GetActive(void)
 {
-    /* Only return the instance as "active" when menu is open
-     * (so input mode and overlay rendering activate) */
-    return g_mainMenuOpen ? g_hudInstance : NULL;
+    /* Return HUD instance when menu or spawn mode is open (for overlay rendering) */
+    return (g_mainMenuOpen || g_spawnModeOpen) ? g_hudInstance : NULL;
 }
 
 void UltralightManager_OpenMainMenu(void)
@@ -80,6 +99,7 @@ void UltralightManager_OpenMainMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening main menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_MAINMENU_HTML);
     g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_CloseMainMenu(void)
@@ -89,6 +109,7 @@ void UltralightManager_CloseMainMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Closing main menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_BLANK_HTML);
     g_mainMenuOpen = false;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_ToggleMainMenu(void)
@@ -104,7 +125,8 @@ void UltralightManager_OpenLibraryBrowser(void)
     if (!g_hudInstance) return;
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening library browser\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_LIBRARY_HTML);
-    g_mainMenuOpen = true; /* keep overlay active for input/rendering */
+    g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_OpenTaskMenu(void)
@@ -113,6 +135,7 @@ void UltralightManager_OpenTaskMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening task menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TASKMENU_HTML);
     g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_OpenBuildContextMenu(void)
@@ -121,6 +144,7 @@ void UltralightManager_OpenBuildContextMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening build context menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_BUILDMENU_HTML);
     g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_OpenTabMenu(void)
@@ -129,6 +153,7 @@ void UltralightManager_OpenTabMenu(void)
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening tab menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TABMENU_HTML);
     g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 void UltralightManager_OpenTabMenuToTab(int tabIndex)
@@ -144,12 +169,87 @@ int UltralightManager_ConsumeRequestedTab(void)
     return idx;
 }
 
+void UltralightManager_EnterSpawnMode(void)
+{
+    if (!g_hudInstance || g_spawnModeOpen) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Entering spawn mode\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_SPAWNMODE_HTML);
+    g_spawnModeOpen = true;
+    g_overlayLoaded = false;
+    /* NOTE: g_mainMenuOpen is NOT set — game input stays active */
+}
+
+void UltralightManager_ExitSpawnMode(void)
+{
+    if (!g_hudInstance || !g_spawnModeOpen) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Exiting spawn mode\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_BLANK_HTML);
+    g_spawnModeOpen = false;
+    g_overlayLoaded = false;
+}
+
+bool UltralightManager_IsSpawnModeOpen(void)
+{
+    return g_spawnModeOpen;
+}
+
+void UltralightManager_LoadOverlay(void)
+{
+    if (!g_hudInstance || g_overlayLoaded) return;
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Loading overlay\n");
+    UltralightInstance_LoadURL(g_hudInstance, UL_OVERLAY_HTML);
+    g_overlayLoaded = true;
+}
+
+void UltralightManager_UnloadOverlay(void)
+{
+    if (!g_hudInstance) return;
+    UltralightInstance_LoadURL(g_hudInstance, UL_BLANK_HTML);
+    g_overlayLoaded = false;
+}
+
+void UltralightManager_UpdateHudPixelBuffer(void)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->render) return;
+    if (!g_hudPixelBuffer) {
+        g_hudPixelBuffer = (uint8_t*)malloc(HUD_BUF_W * HUD_BUF_H * 4);
+        if (!g_hudPixelBuffer) return;
+    }
+    memset(g_hudPixelBuffer, 0, HUD_BUF_W * HUD_BUF_H * 4);
+    g_hudInstance->vtable->render(g_hudInstance, g_hudPixelBuffer, HUD_BUF_W, HUD_BUF_H, 0, 32);
+    g_hudPixelBufferValid = true;
+}
+
+const uint8_t* UltralightManager_GetHudPixels(void)
+{
+    return g_hudPixelBufferValid ? g_hudPixelBuffer : NULL;
+}
+
+void UltralightManager_ForwardMouseMove(int x, int y)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->mouse_move) return;
+    g_hudInstance->vtable->mouse_move(g_hudInstance, x, y);
+}
+
+void UltralightManager_ForwardMouseDown(int button)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->mouse_down) return;
+    g_hudInstance->vtable->mouse_down(g_hudInstance, button);
+}
+
+void UltralightManager_ForwardMouseUp(int button)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->mouse_up) return;
+    g_hudInstance->vtable->mouse_up(g_hudInstance, button);
+}
+
 void UltralightManager_OpenMainMenuPage(void)
 {
     if (!g_hudInstance) return;
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Returning to main menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_MAINMENU_HTML);
     g_mainMenuOpen = true;
+    g_overlayLoaded = false;
 }
 
 bool UltralightManager_IsMainMenuOpen(void)

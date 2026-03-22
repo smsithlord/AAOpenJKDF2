@@ -902,6 +902,20 @@ const arcadeHud = (function() {
 
     }
 
+    /* ========================================================================
+     * Overlay Cursor
+     * ======================================================================== */
+    function initOverlayCursor() {
+        var cursor = document.createElement('div');
+        cursor.className = 'aa-overlay-cursor';
+        cursor.textContent = 'Cursor';
+        document.body.appendChild(cursor);
+        document.addEventListener('mousemove', function(e) {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+    }
+
     // Public API
     return {
         initialize: initialize,
@@ -922,6 +936,9 @@ const arcadeHud = (function() {
             renderTaskList: renderTaskList,
             renderLibrary: renderLibrary
         },
+
+        // Overlay cursor
+        initOverlayCursor: initOverlayCursor,
 
         // Direct access to aapi (for advanced usage)
         get aapi() {

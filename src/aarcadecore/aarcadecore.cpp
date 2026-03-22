@@ -34,6 +34,17 @@ static EmbeddedInstance* g_activeInstance = NULL;
  * on its sithThing screen. Game input is suppressed (like main menu). */
 static EmbeddedInstance* g_fullscreenInstance = NULL;
 
+/* When set, this instance receives input but is NOT rendered in the overlay.
+ * The player sees the in-world screen and sends input via "virtual input". */
+static EmbeddedInstance* g_inputModeInstance = NULL;
+
+/* Which instance the overlay.html was loaded for (to detect switches) */
+static EmbeddedInstance* g_overlayForInstance = NULL;
+
+/* Last mouse position in overlay coords (1920x1080) for cursor drawing */
+static int g_lastMouseX = 0;
+static int g_lastMouseY = 0;
+
 /* Task list — all running embedded instances (excluding HUD overlay).
  * The host uses task indices to manage per-thing GL textures. */
 #define MAX_TASKS 16
@@ -55,9 +66,31 @@ void aarcadecore_removeTask(int taskIndex) {
         g_tasks[taskIndex] = NULL;
 }
 
+/* Forward declarations needed by setFullscreenInstance */
+void UltralightManager_LoadOverlay(void);
+void UltralightManager_UnloadOverlay(void);
+
 /* Fullscreen instance accessors for InstanceManager */
-void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) { g_fullscreenInstance = inst; }
+void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) {
+    g_fullscreenInstance = inst;
+    if (inst) {
+        if (inst != g_overlayForInstance) {
+            /* Different instance — force reload overlay */
+            UltralightManager_UnloadOverlay();
+            UltralightManager_LoadOverlay();
+            g_overlayForInstance = inst;
+        } else {
+            UltralightManager_LoadOverlay(); /* no-op if already loaded */
+        }
+    }
+}
 EmbeddedInstance* aarcadecore_getFullscreenInstance(void) { return g_fullscreenInstance; }
+
+void aarcadecore_clearOverlayAssociation(void) { g_overlayForInstance = NULL; }
+
+/* Input mode instance accessors */
+void aarcadecore_setInputModeInstance(EmbeddedInstance* inst) { g_inputModeInstance = inst; }
+EmbeddedInstance* aarcadecore_getInputModeInstance(void) { return g_inputModeInstance; }
 
 static int getActiveTaskIndex(void)
 {
@@ -88,6 +121,12 @@ bool UltralightManager_ShouldOpenEngineMenu(void);
 void UltralightManager_ClearEngineMenuFlag(void);
 bool UltralightManager_ShouldStartLibretro(void);
 void UltralightManager_ClearStartLibretroFlag(void);
+void UltralightManager_LoadOverlay(void);
+void UltralightManager_UnloadOverlay(void);
+const uint8_t* UltralightManager_GetHudPixels(void);
+void UltralightManager_ForwardMouseMove(int x, int y);
+void UltralightManager_ForwardMouseDown(int button);
+void UltralightManager_ForwardMouseUp(int button);
 
 /* ========================================================================
  * Internal helpers
@@ -98,6 +137,8 @@ void UltralightManager_ClearStartLibretroFlag(void);
  * - Otherwise → active instance (e.g., Libretro) */
 static EmbeddedInstance* get_input_target(void)
 {
+    /* Input mode instance gets priority (hidden overlay, input only) */
+    if (g_inputModeInstance) return g_inputModeInstance;
     /* Fullscreen embedded instance gets all input */
     if (g_fullscreenInstance) return g_fullscreenInstance;
     if (UltralightManager_IsMainMenuOpen()) {
@@ -215,9 +256,9 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
 
 AARCADECORE_EXPORT bool aarcadecore_is_active(void)
 {
-    /* "Active" = input mode on = menu or fullscreen overlay is open.
+    /* "Active" = input mode on = menu, fullscreen overlay, or input mode is open.
      * Having an active instance (e.g., Libretro on screens) does NOT mean input mode. */
-    return g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
+    return g_inputModeInstance != NULL || g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
 }
 
 AARCADECORE_EXPORT const char* aarcadecore_get_material_name(void)
@@ -280,15 +321,22 @@ AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modi
 
 AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
 {
+    g_lastMouseX = x;
+    g_lastMouseY = y;
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_move) {
-        /* Scale from overlay coords (1920x1080) to instance native coords when fullscreen */
-        if (g_fullscreenInstance == inst && inst->vtable->get_width && inst->vtable->get_height) {
-            x = x * inst->vtable->get_width(inst) / 1920;
-            y = y * inst->vtable->get_height(inst) / 1080;
+        /* Scale from overlay coords (1920x1080) to instance native coords when fullscreen/input mode */
+        if ((g_fullscreenInstance == inst || g_inputModeInstance == inst) && inst->vtable->get_width && inst->vtable->get_height) {
+            int sx = x * inst->vtable->get_width(inst) / 1920;
+            int sy = y * inst->vtable->get_height(inst) / 1080;
+            inst->vtable->mouse_move(inst, sx, sy);
+        } else {
+            inst->vtable->mouse_move(inst, x, y);
         }
-        inst->vtable->mouse_move(inst, x, y);
     }
+    /* Also forward to HUD overlay for cursor tracking */
+    if (g_fullscreenInstance || g_inputModeInstance)
+        UltralightManager_ForwardMouseMove(x, y);
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
@@ -296,6 +344,8 @@ AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_down)
         inst->vtable->mouse_down(inst, button);
+    if (g_fullscreenInstance || g_inputModeInstance)
+        UltralightManager_ForwardMouseDown(button);
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
@@ -303,6 +353,8 @@ AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_up)
         inst->vtable->mouse_up(inst, button);
+    if (g_fullscreenInstance || g_inputModeInstance)
+        UltralightManager_ForwardMouseUp(button);
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_wheel(int delta)
@@ -323,7 +375,7 @@ AARCADECORE_EXPORT void aarcadecore_toggle_main_menu(void)
 
 AARCADECORE_EXPORT bool aarcadecore_is_main_menu_open(void)
 {
-    return g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
+    return g_inputModeInstance != NULL || g_fullscreenInstance != NULL || UltralightManager_IsMainMenuOpen();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_should_open_engine_menu(void)
@@ -373,19 +425,81 @@ AARCADECORE_EXPORT bool aarcadecore_render_task_texture(
     EmbeddedInstance* inst = g_tasks[taskIndex];
     if (!inst || !inst->vtable->is_active(inst) || !inst->vtable->render) return false;
     inst->vtable->render(inst, pixelData, width, height, is16bit, bpp);
+
+    /* Composite HUD overlay onto task texture in input mode (not fullscreen) */
+    if (g_inputModeInstance && !g_fullscreenInstance && inst == g_inputModeInstance && is16bit) {
+        const uint8_t* hudBuf = UltralightManager_GetHudPixels();
+        if (hudBuf) {
+            uint16_t* pixels = (uint16_t*)pixelData;
+            for (int ty = 0; ty < height; ty++) {
+                int hy = ty * 1080 / height;
+                if (hy >= 1080) hy = 1079;
+                for (int tx = 0; tx < width; tx++) {
+                    int hx = tx * 1920 / width;
+                    if (hx >= 1920) hx = 1919;
+                    int hoff = (hy * 1920 + hx) * 4; /* BGRA */
+                    uint8_t a = hudBuf[hoff + 3];
+                    if (a == 0) continue;
+                    uint8_t b = hudBuf[hoff + 0];
+                    uint8_t g = hudBuf[hoff + 1];
+                    uint8_t r = hudBuf[hoff + 2];
+                    if (a == 255) {
+                        pixels[ty * width + tx] = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+                    } else {
+                        /* Alpha blend with existing RGB565 pixel */
+                        uint16_t existing = pixels[ty * width + tx];
+                        uint8_t er = ((existing >> 11) & 0x1F) << 3;
+                        uint8_t eg = ((existing >> 5) & 0x3F) << 2;
+                        uint8_t eb = (existing & 0x1F) << 3;
+                        float fa = a / 255.0f, inv = 1.0f - fa;
+                        uint8_t or_ = (uint8_t)(r * fa + er * inv);
+                        uint8_t og = (uint8_t)(g * fa + eg * inv);
+                        uint8_t ob = (uint8_t)(b * fa + eb * inv);
+                        pixels[ty * width + tx] = ((or_ >> 3) << 11) | ((og >> 2) << 5) | (ob >> 3);
+                    }
+                }
+            }
+        }
+    }
+
     return true;
+}
+
+static void compositeHudOver(uint8_t* dst, const uint8_t* hud, int pixelCount)
+{
+    for (int i = 0; i < pixelCount; i++) {
+        int off = i * 4;
+        uint8_t a = hud[off + 3];
+        if (a == 0) continue;
+        if (a == 255) { memcpy(dst + off, hud + off, 4); continue; }
+        float fa = a / 255.0f, inv = 1.0f - fa;
+        dst[off + 0] = (uint8_t)(hud[off + 0] * fa + dst[off + 0] * inv);
+        dst[off + 1] = (uint8_t)(hud[off + 1] * fa + dst[off + 1] * inv);
+        dst[off + 2] = (uint8_t)(hud[off + 2] * fa + dst[off + 2] * inv);
+        dst[off + 3] = 255;
+    }
 }
 
 AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, int height)
 {
-    /* Fullscreen embedded instance takes priority over HUD */
-    if (g_fullscreenInstance && g_fullscreenInstance->vtable->is_active(g_fullscreenInstance)
-        && g_fullscreenInstance->vtable->render) {
-        g_fullscreenInstance->vtable->render(g_fullscreenInstance, pixelData, width, height, 0, 32);
+    const uint8_t* hudBuf = UltralightManager_GetHudPixels();
+
+    /* Input mode without fullscreen: no overlay — cursor drawn on per-thing task texture */
+    if (g_inputModeInstance && !g_fullscreenInstance) {
+        memset(pixelData, 0, width * height * 4);
         return true;
     }
 
-    /* Otherwise render HUD overlay as before */
+    /* Fullscreen: render SWB content + composite HUD cursor on top */
+    if (g_fullscreenInstance && g_fullscreenInstance->vtable->is_active(g_fullscreenInstance)
+        && g_fullscreenInstance->vtable->render) {
+        g_fullscreenInstance->vtable->render(g_fullscreenInstance, pixelData, width, height, 0, 32);
+        if (hudBuf)
+            compositeHudOver((uint8_t*)pixelData, hudBuf, width * height);
+        return true;
+    }
+
+    /* HUD-native page (menus) — render directly, no compositing needed */
     EmbeddedInstance* ul = UltralightManager_GetActive();
     if (!ul || !ul->vtable->is_active(ul) || !ul->vtable->render)
         return false;
@@ -533,6 +647,16 @@ AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx)
     g_instanceManager.objectUsed(thingIdx);
 }
 
+AARCADECORE_EXPORT void aarcadecore_deselect_only(void)
+{
+    g_instanceManager.deselectOnly();
+}
+
+AARCADECORE_EXPORT void aarcadecore_remember_object(int thingIdx)
+{
+    g_instanceManager.rememberObject(thingIdx);
+}
+
 AARCADECORE_EXPORT bool aarcadecore_has_pending_destroy(void)
 {
     return g_instanceManager.hasPendingDestroy();
@@ -550,6 +674,26 @@ AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
 
 void UltralightManager_OpenTabMenu(void);
 void UltralightManager_OpenTabMenuToTab(int tabIndex);
+void UltralightManager_EnterSpawnMode(void);
+void UltralightManager_ExitSpawnMode(void);
+bool UltralightManager_IsSpawnModeOpen(void);
+AARCADECORE_EXPORT void aarcadecore_enter_spawn_mode(void)
+{
+    if (UltralightManager_IsMainMenuOpen())
+        UltralightManager_ToggleMainMenu();
+    UltralightManager_EnterSpawnMode();
+}
+
+AARCADECORE_EXPORT void aarcadecore_exit_spawn_mode(void)
+{
+    UltralightManager_ExitSpawnMode();
+}
+
+AARCADECORE_EXPORT bool aarcadecore_is_spawn_mode_active(void)
+{
+    return UltralightManager_IsSpawnModeOpen();
+}
+
 AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex)
 {
     if (UltralightManager_IsMainMenuOpen())
@@ -577,4 +721,35 @@ AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void)
 AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
 {
     g_fullscreenInstance = NULL;
+}
+
+AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void)
+{
+    EmbeddedInstance* target = g_instanceManager.getInputTarget();
+    if (target) {
+        g_inputModeInstance = target;
+        if (target != g_overlayForInstance) {
+            UltralightManager_UnloadOverlay();
+            UltralightManager_LoadOverlay();
+            g_overlayForInstance = target;
+        } else {
+            UltralightManager_LoadOverlay();
+        }
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Entered input mode\n");
+    }
+}
+
+AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void)
+{
+    if (g_inputModeInstance) {
+        g_inputModeInstance = NULL;
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Exited input mode\n");
+    }
+}
+
+AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void)
+{
+    return g_inputModeInstance != NULL;
 }

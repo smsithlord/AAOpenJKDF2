@@ -170,14 +170,30 @@ All embedded content rendering (Libretro emulation, future Steamworks web browse
 See **LLM-AARCADECORE-README.md** for full DLL architecture and implementation details.
 
 ### Host-Side Integration
-- `src/Platform/Common/AACoreManager.h/.c` — Loads `aarcadecore.dll` via `SDL_LoadObject`, provides host callbacks, owns SDL audio device. Per-thing texture rendering via `PreRenderThing`/`PostRenderThing` hooks (flush + texture_id swap on shared compscreen surface).
+- `src/Platform/Common/AACoreManager.h/.c` — Loads `aarcadecore.dll` via `SDL_LoadObject`, provides host callbacks, owns SDL audio device. Per-thing texture rendering via `PreRenderThing`/`PostRenderThing` hooks (flush + texture_id swap on shared compscreen surface). Selector ray (skips adjoins), spawn mode (preview + confirm/cancel), HUD overlay compositing onto per-thing task textures and fullscreen quad.
 - `src/Engine/sithRender.c` — `PreRenderThing`/`PostRenderThing` hooks around `rdThing_Draw` in `sithRender_RenderThing`
-- `src/Main/aaMainMenu.c` — Escape key toggles AArcade menu; dispatches engine menu and Libretro start requests from DLL
+- `src/Main/aaMainMenu.c` — Keybind handlers: Escape (exit input/fullscreen/menu), Select (LMB, objectUsed), Virtual Input (RMB hold), Input Lock (G toggle), Remember (R), Build (middle mouse), Tasks Tab (F4), Library Tab (F6), Tab Menu (TAB hold). Spawn mode confirm/cancel.
+- `src/Devices/sithControl.c` — AA keybind registration (`INPUT_FUNC_AA*`), `EnsureAADefaults` auto-repairs bindings
+- `src/Main/jkStrings.c` — Injects AA keybind labels into string table
+- `src/Cog/sithCog.c` — `AAOJK_ObjectUsed` COG verb for player activation of AA objects
 - `src/Win95/Window.c` — Escape key intercepted (engine's own escape menu suppressed); START/BACK gamepad buttons suppressed when menu open
 - `src/Platform/SDL2/stdControl.c` — Keyboard suppressed when menu open; gamepad still polled (Libretro needs it via `get_key_state`)
 - `src/Main/Main.c` — `AACoreManager_Init()` / `AACoreManager_Shutdown()` at startup/shutdown
 - `src/Main/jkGame.c` — `AACoreManager_Update()` called per frame
-- `src/Main/jkSpawn.c` — Registers spawned things for task-to-thing mapping
+- `src/Main/sithMain.c` — Map lifecycle hooks: `sithMain_Open` → `OnMapLoaded`, `sithMain_Close` → `OnMapUnloaded`
+
+### Input Modes
+- **Normal gameplay**: Player moves, LMB selects/deselects objects, R remembers (activate without selecting)
+- **Input mode** (Virtual Input RMB hold / Input Lock G toggle): Game input suppressed, mouse/keyboard forwarded to SWB. HUD overlay (overlay.html) composited onto per-thing task texture. Escape exits.
+- **Fullscreen mode**: SWB renders to fullscreen overlay quad with HUD composited on top. Escape exits.
+- **Spawn mode**: Preview object follows aim, LMB confirms, Escape cancels.
+
+### HUD Overlay System
+- `overlay.html` — Composited on top of embedded instance content (cursor + browser tab UI)
+- Persistent HUD pixel buffer updated each frame (`UltralightManager_UpdateHudPixelBuffer`)
+- Fullscreen: composited as BGRA32 alpha blend onto fullscreen quad
+- Input mode: scaled + converted from BGRA32 to RGB565 onto per-thing 1024x1024 task texture
+- Overlay stays loaded across input/fullscreen toggles; reloads when switching to different instance; unloads when instance deactivates
 
 ### Gamepad Button Mapping (SNES physical position)
 - Xbox A (bottom) -> SNES B, Xbox B (right) -> SNES A

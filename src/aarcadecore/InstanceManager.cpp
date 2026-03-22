@@ -14,6 +14,10 @@ int aarcadecore_addTask(EmbeddedInstance* inst);
 void aarcadecore_removeTask(int taskIndex);
 void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst);
 EmbeddedInstance* aarcadecore_getFullscreenInstance(void);
+EmbeddedInstance* aarcadecore_getInputModeInstance(void);
+void aarcadecore_setInputModeInstance(EmbeddedInstance* inst);
+void UltralightManager_UnloadOverlay(void);
+void aarcadecore_clearOverlayAssociation(void);
 
 #include "ImageLoader.h"
 #include "SQLiteLibrary.h"
@@ -425,6 +429,21 @@ void InstanceManager::selectObject(int index)
 
 void InstanceManager::objectUsed(int thingIdx)
 {
+    /* thingIdx == -1 means "deselect current" (e.g. LMB on empty space) */
+    if (thingIdx < 0) {
+        if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+            const SpawnedObject& prev = objects_[selectedObjectIndex_];
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: objectUsed — deselecting object #%d (item=%s)\n",
+                                  selectedObjectIndex_, prev.itemId.c_str());
+            if (aarcadecore_getFullscreenInstance())
+                aarcadecore_setFullscreenInstance(NULL);
+            deactivateInstance(prev.itemId);
+            selectedObjectIndex_ = -1;
+        }
+        return;
+    }
+
     /* Find the object by thingIdx */
     int newIndex = -1;
     for (int i = 0; i < (int)objects_.size(); i++) {
@@ -690,6 +709,18 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
 
     inst.active = false;
 
+    /* If this browser was the input/fullscreen target, clear and unload overlay */
+    if (inst.browser) {
+        if (aarcadecore_getInputModeInstance() == inst.browser)
+            aarcadecore_setInputModeInstance(NULL);
+        if (aarcadecore_getFullscreenInstance() == inst.browser)
+            aarcadecore_setFullscreenInstance(NULL);
+        if (!aarcadecore_getInputModeInstance() && !aarcadecore_getFullscreenInstance()) {
+            UltralightManager_UnloadOverlay();
+            aarcadecore_clearOverlayAssociation();
+        }
+    }
+
     /* Remove from task list, then destroy the browser */
     if (inst.taskIndex >= 0) {
         aarcadecore_removeTask(inst.taskIndex);
@@ -703,6 +734,78 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
         g_host.host_printf("InstanceManager: Deactivated instance for item=%s\n", itemId.c_str());
 
     inst.taskIndex = -1;
+
+    /* Clear selection if the deactivated item was the selected object's item */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        if (objects_[selectedObjectIndex_].itemId == itemId)
+            selectedObjectIndex_ = -1;
+    }
+}
+
+void InstanceManager::deselectOnly()
+{
+    if (selectedObjectIndex_ < 0) return;
+
+    if (aarcadecore_getFullscreenInstance())
+        aarcadecore_setFullscreenInstance(NULL);
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: deselectOnly — deselected object #%d (instance kept alive)\n",
+                          selectedObjectIndex_);
+    selectedObjectIndex_ = -1;
+}
+
+void InstanceManager::rememberObject(int thingIdx)
+{
+    /* Find the object */
+    int index = -1;
+    for (int i = 0; i < (int)objects_.size(); i++) {
+        if (objects_[i].thingIdx == thingIdx) {
+            index = i;
+            break;
+        }
+    }
+    if (index < 0) return;
+
+    const SpawnedObject& obj = objects_[index];
+
+    /* Check if it already has an active instance */
+    const EmbeddedItemInstance* existing = getItemInstance(obj.itemId);
+    if (existing && existing->active) return; /* already running */
+
+    /* Look up the item and activate its instance */
+    Arcade::Item item = g_library.getItemById(obj.itemId);
+    if (item.id.empty()) return;
+
+    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+    ensureItemInstance(item, resolvedUrl);
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: rememberObject — activated instance for thingIdx=%d (item=%s) without selecting\n",
+                          thingIdx, obj.itemId.c_str());
+}
+
+EmbeddedInstance* InstanceManager::getInputTarget() const
+{
+    /* Priority 1: selected object's active instance */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        const SpawnedObject& obj = objects_[selectedObjectIndex_];
+        auto it = itemInstances_.find(obj.itemId);
+        if (it != itemInstances_.end() && it->second.active && it->second.browser)
+            return it->second.browser;
+    }
+    /* Priority 2: aimed-at object's active instance */
+    if (aimedThingIdx_ >= 0) {
+        for (const auto& obj : objects_) {
+            if (obj.thingIdx == aimedThingIdx_) {
+                auto it = itemInstances_.find(obj.itemId);
+                if (it != itemInstances_.end() && it->second.active && it->second.browser)
+                    return it->second.browser;
+                break;
+            }
+        }
+    }
+    return nullptr;
 }
 
 std::vector<const EmbeddedItemInstance*> InstanceManager::getActiveInstances() const

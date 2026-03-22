@@ -1,5 +1,18 @@
 /* arcadeHud.css — Shared UI framework styles for AArcade menus */
 
+/* Overlay cursor */
+.aa-overlay-cursor {
+    position: absolute;
+    pointer-events: none;
+    z-index: 99999;
+    background: rgba(30, 30, 30, 0.75);
+    color: #00dd00;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    padding: 4px 16px;
+    border-radius: 4px;
+}
+
 /* Base page styles */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {

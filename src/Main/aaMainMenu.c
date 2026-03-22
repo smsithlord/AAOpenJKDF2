@@ -16,6 +16,9 @@ static int g_tasksTabWasDown = 0;
 static int g_libraryTabWasDown = 0;
 static int g_buildWasDown = 0;
 static int g_selectWasDown = 0;
+static int g_rememberWasDown = 0;
+static int g_virtualInputWasDown = 0;
+static int g_inputLockWasDown = 0;
 
 void aaMainMenu_Update(void)
 {
@@ -24,25 +27,66 @@ void aaMainMenu_Update(void)
 
     const Uint8* keys = SDL_GetKeyboardState(NULL);
 
-    /* Escape: exit fullscreen if active, otherwise toggle the AArcade main menu */
+    /* Spawn mode takes priority over all other input */
+    if (AACoreManager_IsSpawnModeActive()) {
+        int escDown = keys[SDL_SCANCODE_ESCAPE];
+        if (escDown && !g_escKeyWasDown)
+            AACoreManager_CancelSpawn();
+        g_escKeyWasDown = escDown;
+
+        int lmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT);
+        if (lmbDown && !g_selectWasDown)
+            AACoreManager_ConfirmSpawn();
+        g_selectWasDown = lmbDown;
+        return; /* Skip all other AA input while in spawn mode */
+    }
+
+    /* Escape: exit input mode → exit fullscreen → toggle main menu */
     int escDown = keys[SDL_SCANCODE_ESCAPE];
     if (escDown && !g_escKeyWasDown) {
-        if (AACoreManager_IsFullscreenActive())
+        if (AACoreManager_IsInputModeActive())
+            AACoreManager_ExitInputMode();
+        else if (AACoreManager_IsFullscreenActive())
             AACoreManager_ExitFullscreen();
         else
             AACoreManager_ToggleMainMenu();
     }
     g_escKeyWasDown = escDown;
 
-    /* Select (LMB): activate the aimed-at AArcade object — uses raw SDL, not sithControl */
+    /* Select (LMB): activate aimed-at object, or deselect if aiming at nothing */
     {
         int lmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT);
-        if (lmbDown && !g_selectWasDown) {
+        if (lmbDown && !g_selectWasDown && !AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen()) {
             int aimedIdx = AACoreManager_GetAimedThingIdx();
-            if (aimedIdx >= 0 && !AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
-                AACoreManager_ObjectUsed(aimedIdx);
+            AACoreManager_ObjectUsed(aimedIdx); /* -1 = deselect current */
         }
         g_selectWasDown = lmbDown;
+    }
+
+    /* Virtual Input (RMB hold): send input to in-world instance while held.
+     * Uses raw SDL because sithControl is suppressed when input mode is active. */
+    {
+        int rmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT);
+        if (rmbDown && !g_virtualInputWasDown) {
+            if (!AACoreManager_IsInputModeActive() && !AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+                AACoreManager_EnterInputMode();
+        } else if (!rmbDown && g_virtualInputWasDown) {
+            if (AACoreManager_IsInputModeActive())
+                AACoreManager_ExitInputMode();
+        }
+        g_virtualInputWasDown = rmbDown;
+    }
+
+    /* Input Lock (G default): toggle input mode on/off */
+    {
+        int lockDown = keys[SDL_SCANCODE_G];
+        if (lockDown && !g_inputLockWasDown) {
+            if (AACoreManager_IsInputModeActive())
+                AACoreManager_ExitInputMode();
+            else if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+                AACoreManager_EnterInputMode();
+        }
+        g_inputLockWasDown = lockDown;
     }
 
     /* Build (middle mouse default): toggle build context menu */
@@ -53,6 +97,15 @@ void aaMainMenu_Update(void)
             AACoreManager_ToggleBuildContextMenu();
     }
     g_buildWasDown = buildDown;
+
+    /* Remember (R default): deselect-only or activate without selecting */
+    int rememberDown = 0;
+    sithControl_ReadFunctionMap(INPUT_FUNC_AAREMEMBER, &rememberDown);
+    if (rememberDown && !g_rememberWasDown) {
+        if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+            AACoreManager_RememberObject();
+    }
+    g_rememberWasDown = rememberDown;
 
     /* Tasks Tab (F4 default): open tab menu to Tasks tab */
     int tasksTabDown = 0;

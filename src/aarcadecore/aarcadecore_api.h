@@ -159,12 +159,27 @@ AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
  * Selects the object and activates its embedded instance (e.g. starts video). */
 AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
 
+/* Input mode — send input to an in-world instance without fullscreen overlay */
+AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void);
+AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void);
+AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void);
+
+/* Deselect current object without closing its embedded instance */
+AARCADECORE_EXPORT void aarcadecore_deselect_only(void);
+/* Activate the aimed-at object's embedded instance without selecting it */
+AARCADECORE_EXPORT void aarcadecore_remember_object(int thingIdx);
+
 /* Selector ray — notify DLL which AArcade thing the player is aiming at (-1 = none) */
 AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx);
 
 /* Destroy pipeline — DLL cleans up state, host polls to destroy sithThing */
 AARCADECORE_EXPORT bool aarcadecore_has_pending_destroy(void);
 AARCADECORE_EXPORT int  aarcadecore_pop_pending_destroy(void);
+
+/* Spawn mode — preview overlay without blocking game input */
+AARCADECORE_EXPORT void aarcadecore_enter_spawn_mode(void);
+AARCADECORE_EXPORT void aarcadecore_exit_spawn_mode(void);
+AARCADECORE_EXPORT bool aarcadecore_is_spawn_mode_active(void);
 
 /* Open tab menu to a specific tab index (0=Tasks, 1=Library, etc.) */
 AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex);
@@ -222,9 +237,17 @@ typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pix
 typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 typedef void  (*aarcadecore_object_used_t)(int thingIdx);
+typedef void  (*aarcadecore_enter_input_mode_for_selected_t)(void);
+typedef void  (*aarcadecore_exit_input_mode_t)(void);
+typedef bool  (*aarcadecore_is_input_mode_active_t)(void);
+typedef void  (*aarcadecore_deselect_only_t)(void);
+typedef void  (*aarcadecore_remember_object_t)(int thingIdx);
 typedef void  (*aarcadecore_set_aimed_thing_t)(int thingIdx);
 typedef bool  (*aarcadecore_has_pending_destroy_t)(void);
 typedef int   (*aarcadecore_pop_pending_destroy_t)(void);
+typedef void  (*aarcadecore_enter_spawn_mode_t)(void);
+typedef void  (*aarcadecore_exit_spawn_mode_t)(void);
+typedef bool  (*aarcadecore_is_spawn_mode_active_t)(void);
 typedef void  (*aarcadecore_open_tab_menu_to_tab_t)(int tabIndex);
 typedef void  (*aarcadecore_toggle_build_context_menu_t)(void);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
