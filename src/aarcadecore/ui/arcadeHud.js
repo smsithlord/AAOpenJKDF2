@@ -384,6 +384,10 @@ const arcadeHud = (function() {
                 content.innerHTML = '';
                 var tab = options.tabs[index];
                 if (tab && tab.onActivate) tab.onActivate(content);
+                // Persist active tab
+                if (options.tabStorageKey) {
+                    try { localStorage.setItem(options.tabStorageKey, String(index)); } catch(e) {}
+                }
             }
             for (var t = 0; t < options.tabs.length; t++) {
                 (function(idx) {
@@ -424,6 +428,14 @@ const arcadeHud = (function() {
         uiState.wrapperEl = wrapper;
         uiState.hasMoved = false;
 
+        // Dev reload button
+        var reloadBtn = document.createElement('a');
+        reloadBtn.className = 'reloadButton';
+        reloadBtn.textContent = '\u00B7';
+        reloadBtn.href = '#';
+        reloadBtn.addEventListener('click', function(e) { e.preventDefault(); location.reload(); });
+        document.body.appendChild(reloadBtn);
+
         // Append to body
         document.body.appendChild(wrapper);
 
@@ -433,10 +445,17 @@ const arcadeHud = (function() {
         // Set up help text hover
         setupHelpText(helptext);
 
-        // Activate first tab if tabs were provided
+        // Activate saved or first tab
         if (tabsRow && options.tabs && options.tabs.length > 0) {
-            var firstTabBtn = tabsRow.querySelector('.aa-tab');
-            if (firstTabBtn) firstTabBtn.click();
+            var startTab = 0;
+            if (options.tabStorageKey) {
+                try {
+                    var saved = parseInt(localStorage.getItem(options.tabStorageKey));
+                    if (!isNaN(saved) && saved >= 0 && saved < options.tabs.length) startTab = saved;
+                } catch(e) {}
+            }
+            var allTabBtns = tabsRow.querySelectorAll('.aa-tab');
+            if (allTabBtns[startTab]) allTabBtns[startTab].click();
         }
 
         // Call onReady callback if provided (for non-tabbed pages)
@@ -674,18 +693,22 @@ const arcadeHud = (function() {
         // Apply restored state to UI
         grid.className = 'aa-library-grid aa-library-mode-' + DISPLAY_MODES[state.displayMode];
         slider.value = String(state.displayMode);
-        if (state.searchTerm) searchInput.value = state.searchTerm;
         // Highlight the correct type button
         var typeBtns = typesDiv.querySelectorAll('.aa-library-type-btn');
         for (var tb = 0; tb < typeBtns.length; tb++) {
             typeBtns[tb].classList.toggle('aa-active', typeBtns[tb].getAttribute('data-type') === state.type);
         }
 
-        // Show initial content: auto-search if restored term, otherwise show message
+        // Restore search term to input and trigger search, or show initial message
+        console.log('[renderLibrary] restored state: type=' + state.type + ' searchTerm="' + state.searchTerm + '" displayMode=' + state.displayMode);
         if (state.searchTerm) {
+            searchInput.value = state.searchTerm;
             state.isSearchMode = true;
+            state.hasLoadedOnce = true;
+            console.log('[renderLibrary] calling doSearch with term: "' + state.searchTerm + '"');
             doSearch(state.searchTerm);
         } else {
+            console.log('[renderLibrary] no search term, showing initial message');
             grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
         }
 
@@ -693,8 +716,11 @@ const arcadeHud = (function() {
         var searchTimeout = null;
         searchInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
+            var rawVal = searchInput.value;
+            console.log('[renderLibrary] input event fired, value="' + rawVal + '"');
             searchTimeout = setTimeout(function() {
                 var term = searchInput.value.trim();
+                console.log('[renderLibrary] debounce fired, term="' + term + '" hasLoadedOnce=' + state.hasLoadedOnce);
                 if (term) {
                     state.isSearchMode = true;
                     state.searchTerm = term;
@@ -705,6 +731,7 @@ const arcadeHud = (function() {
                     state.searchTerm = '';
                     saveOpts();
                     if (state.hasLoadedOnce) {
+                        console.log('[renderLibrary] empty term + hasLoadedOnce -> loadEntries');
                         loadEntries(true);
                     } else {
                         grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">Type into the SEARCH box or select a favorites list.</div>';
@@ -720,6 +747,8 @@ const arcadeHud = (function() {
         }
 
         function loadEntries(reset) {
+            console.log('[renderLibrary] loadEntries called, reset=' + reset + ' type=' + state.type);
+            console.trace();
             var api = getApi();
             if (!api || state.loading) return;
 
@@ -746,8 +775,12 @@ const arcadeHud = (function() {
         }
 
         function doSearch(term) {
+            console.log('[renderLibrary] doSearch called, term="' + term + '" type=' + state.type);
             var api = getApi();
-            if (!api || state.loading) return;
+            if (!api || state.loading) {
+                console.log('[renderLibrary] doSearch bailed: api=' + !!api + ' loading=' + state.loading);
+                return;
+            }
 
             state.loading = true;
             state.hasLoadedOnce = true;
@@ -865,8 +898,6 @@ const arcadeHud = (function() {
             }
         }
 
-        // Initial load
-        loadEntries(true);
     }
 
     // Public API

@@ -13,6 +13,21 @@ html, body {
     overflow: hidden;
 }
 
+/* Reload button — tiny dot in top-left corner for dev reloads */
+.reloadButton {
+    position: fixed;
+    top: 4px;
+    left: 4px;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 10px;
+    text-decoration: none;
+    cursor: pointer;
+    z-index: 9999;
+}
+.reloadButton:hover {
+    color: rgba(255, 255, 255, 0.6);
+}
+
 /* Window container */
 .aa-window-wrapper {
     position: relative;

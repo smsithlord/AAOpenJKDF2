@@ -385,6 +385,11 @@ void SQLiteLibrary::ensureSchema()
             "FOREIGN KEY (map_id) REFERENCES maps(id) ON DELETE CASCADE, "
             "UNIQUE (map_id, platform_key))");
 
+    /* Model platform files — maps model IDs to platform-specific template names */
+    execSQL("CREATE TABLE IF NOT EXISTS model_platforms (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model_id TEXT NOT NULL, platform_key TEXT NOT NULL, file TEXT, "
+            "UNIQUE (model_id, platform_key))");
+
     /* Ensure instance_objects table exists */
     execSQL("CREATE TABLE IF NOT EXISTS instance_objects (id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "instance_id TEXT NOT NULL, object_key TEXT NOT NULL, "
@@ -491,7 +496,7 @@ std::vector<Arcade::InstanceObject> SQLiteLibrary::getInstanceObjects(const std:
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT instance_id, object_key, item, position, rotation, scale FROM instance_objects WHERE instance_id = ?";
+    const char* sql = "SELECT instance_id, object_key, item, model, position, rotation, scale FROM instance_objects WHERE instance_id = ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
     sqlite3_bind_text(stmt, 1, instanceId.c_str(), -1, SQLITE_TRANSIENT);
 
@@ -500,9 +505,10 @@ std::vector<Arcade::InstanceObject> SQLiteLibrary::getInstanceObjects(const std:
         obj.instance_id = getStr(stmt, 0);
         obj.object_key  = getStr(stmt, 1);
         obj.item        = getStr(stmt, 2);
-        obj.position    = getStr(stmt, 3);
-        obj.rotation    = getStr(stmt, 4);
-        obj.scale       = (float)sqlite3_column_double(stmt, 5);
+        obj.model       = getStr(stmt, 3);
+        obj.position    = getStr(stmt, 4);
+        obj.rotation    = getStr(stmt, 5);
+        obj.scale       = (float)sqlite3_column_double(stmt, 6);
         results.push_back(std::move(obj));
     }
     sqlite3_finalize(stmt);
@@ -514,14 +520,15 @@ void SQLiteLibrary::saveInstanceObject(const Arcade::InstanceObject& obj)
     if (!db_) return;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT OR REPLACE INTO instance_objects (instance_id, object_key, item, position, rotation, scale) VALUES (?, ?, ?, ?, ?, ?)";
+    const char* sql = "INSERT OR REPLACE INTO instance_objects (instance_id, object_key, item, model, position, rotation, scale) VALUES (?, ?, ?, ?, ?, ?, ?)";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
     sqlite3_bind_text(stmt, 1, obj.instance_id.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, obj.object_key.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 3, obj.item.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 4, obj.position.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, obj.rotation.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_double(stmt, 6, obj.scale);
+    sqlite3_bind_text(stmt, 4, obj.model.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, obj.position.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 6, obj.rotation.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(stmt, 7, obj.scale);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 }
@@ -537,4 +544,66 @@ void SQLiteLibrary::deleteInstanceObject(const std::string& instanceId, const st
     sqlite3_bind_text(stmt, 2, objectKey.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+}
+
+std::string SQLiteLibrary::findModelPlatformFile(const std::string& modelId, const std::string& platformKey)
+{
+    if (!db_ || modelId.empty()) return "";
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT file FROM model_platforms WHERE model_id = ? AND platform_key = ? LIMIT 1";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return "";
+    sqlite3_bind_text(stmt, 1, modelId.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, platformKey.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::string result;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        result = getStr(stmt, 0);
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+std::string SQLiteLibrary::findModelByPlatformFile(const std::string& platformKey, const std::string& file)
+{
+    if (!db_) return "";
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT model_id FROM model_platforms WHERE platform_key = ? AND file = ? LIMIT 1";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return "";
+    sqlite3_bind_text(stmt, 1, platformKey.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, file.c_str(), -1, SQLITE_TRANSIENT);
+
+    std::string result;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        result = getStr(stmt, 0);
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+std::string SQLiteLibrary::createModel(const std::string& title, const std::string& platformKey, const std::string& file)
+{
+    if (!db_) return "";
+    std::string modelId = Arcade::generateFirebasePushId();
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql1 = "INSERT INTO models (id, title) VALUES (?, ?)";
+    if (sqlite3_prepare_v2(db_, sql1, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, modelId.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    const char* sql2 = "INSERT INTO model_platforms (model_id, platform_key, file) VALUES (?, ?, ?)";
+    if (sqlite3_prepare_v2(db_, sql2, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, modelId.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, platformKey.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, file.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    if (g_host.host_printf)
+        g_host.host_printf("SQLiteLibrary: Created model '%s' (id=%s) with platform file '%s'\n",
+                          title.c_str(), modelId.c_str(), file.c_str());
+    return modelId;
 }

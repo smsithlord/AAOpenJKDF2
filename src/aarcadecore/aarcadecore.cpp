@@ -509,6 +509,15 @@ AARCADECORE_EXPORT bool aarcadecore_spawn_has_position(float* px, float* py, flo
     return true;
 }
 
+AARCADECORE_EXPORT void aarcadecore_spawn_get_template_name(char* nameOut, int nameSize)
+{
+    if (nameOut && nameSize > 0) {
+        const std::string& name = g_lastPoppedSpawn.templateName;
+        strncpy(nameOut, name.c_str(), nameSize - 1);
+        nameOut[nameSize - 1] = '\0';
+    }
+}
+
 AARCADECORE_EXPORT int aarcadecore_get_active_instance_count(void)
 {
     return g_instanceManager.getActiveInstanceCount();

@@ -143,6 +143,7 @@ AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
 AARCADECORE_EXPORT bool aarcadecore_spawn_has_position(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
+AARCADECORE_EXPORT void aarcadecore_spawn_get_template_name(char* nameOut, int nameSize);
 AARCADECORE_EXPORT void aarcadecore_on_map_loaded(void);
 AARCADECORE_EXPORT void aarcadecore_on_map_unloaded(void);
 AARCADECORE_EXPORT void aarcadecore_report_thing_transform(int thingIdx,
@@ -207,6 +208,7 @@ typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
 typedef void  (*aarcadecore_pop_pending_spawn_t)(void);
 typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
 typedef bool  (*aarcadecore_spawn_has_position_t)(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
+typedef void  (*aarcadecore_spawn_get_template_name_t)(char* nameOut, int nameSize);
 typedef void  (*aarcadecore_on_map_loaded_t)(void);
 typedef void  (*aarcadecore_on_map_unloaded_t)(void);
 typedef void  (*aarcadecore_report_thing_transform_t)(int thingIdx,

@@ -8,6 +8,7 @@ function initTabMenu() {
         onBack: function() { if (window.aapi && aapi.manager) aapi.manager.openMainMenu(); },
         onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); },
         tabPosition: 'bottom',
+        tabStorageKey: 'tabMenuActiveTab',
         tabs: [
             { label: 'Tasks', onActivate: onTasksTab },
             { label: 'Library', onActivate: onLibraryTab }

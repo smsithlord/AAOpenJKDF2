@@ -11,6 +11,8 @@ struct EmbeddedInstance; /* forward decl from aarcadecore_internal.h */
 
 struct SpawnRequest {
     Arcade::Item item;  /* full item data from the library */
+    std::string modelId;      /* model ID from media library */
+    std::string templateName; /* engine template (default: aaojk_movie_stand_standard) */
     bool hasExplicitPosition;
     float posX, posY, posZ;
     int sectorId;
@@ -31,6 +33,7 @@ struct EmbeddedItemInstance {
 /* A spawned object in the game world */
 struct SpawnedObject {
     std::string itemId;       /* links to EmbeddedItemInstance */
+    std::string modelId;      /* model ID from media library */
     std::string objectKey;    /* Firebase push ID for DB storage */
     std::string url;
     int thingIdx;             /* engine sithThing index */

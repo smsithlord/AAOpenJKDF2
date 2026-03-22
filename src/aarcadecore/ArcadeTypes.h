@@ -60,6 +60,7 @@ struct Instance {
 struct InstanceObject {
     std::string instance_id, object_key;
     std::string item;      /* item ID reference */
+    std::string model;     /* model ID reference */
     std::string position;  /* "X Y Z" space-separated */
     std::string rotation;  /* "Pitch Yaw Roll" space-separated */
     float scale = 1.0f;

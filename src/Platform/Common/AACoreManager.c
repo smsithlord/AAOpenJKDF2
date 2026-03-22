@@ -59,6 +59,7 @@ static aarcadecore_pop_pending_spawn_t    g_fn_pop_pending_spawn = NULL;
 static aarcadecore_confirm_spawn_t        g_fn_confirm_spawn = NULL;
 static aarcadecore_get_thing_task_index_t g_fn_get_thing_task_index = NULL;
 static aarcadecore_spawn_has_position_t g_fn_spawn_has_position = NULL;
+static aarcadecore_spawn_get_template_name_t g_fn_spawn_get_template_name = NULL;
 static aarcadecore_on_map_loaded_t g_fn_on_map_loaded = NULL;
 static aarcadecore_on_map_unloaded_t g_fn_on_map_unloaded = NULL;
 static aarcadecore_report_thing_transform_t g_fn_report_thing_transform = NULL;
@@ -289,6 +290,7 @@ void AACoreManager_Init(void)
     LOAD_FN(confirm_spawn)
     LOAD_FN(get_thing_task_index)
     LOAD_FN(spawn_has_position)
+    LOAD_FN(spawn_get_template_name)
     LOAD_FN(on_map_loaded)
     LOAD_FN(on_map_unloaded)
     LOAD_FN(report_thing_transform)
@@ -404,6 +406,7 @@ void AACoreManager_Shutdown(void)
     g_fn_confirm_spawn = NULL;
     g_fn_get_thing_task_index = NULL;
     g_fn_spawn_has_position = NULL;
+    g_fn_spawn_get_template_name = NULL;
     g_fn_on_map_loaded = NULL;
     g_fn_on_map_unloaded = NULL;
     g_fn_report_thing_transform = NULL;
@@ -451,17 +454,36 @@ void AACoreManager_Shutdown(void)
     stdPlatform_Printf("AACoreManager: Shutdown complete\n");
 }
 
-/* Spawn a dynscreen thing at the player's aim point (reuses jkSpawn raycast logic) */
+/* Get the spawn template from the DLL, with fallbacks */
+static sithThing* aacore_get_spawn_template(void)
+{
+    char tmplName[64] = {0};
+    if (g_fn_spawn_get_template_name)
+        g_fn_spawn_get_template_name(tmplName, sizeof(tmplName));
+    if (!tmplName[0])
+        strncpy(tmplName, "dyn_videosign", sizeof(tmplName) - 1);
+
+    sithThing* tmpl = sithTemplate_GetEntryByName(tmplName);
+    if (!tmpl) {
+        stdPlatform_Printf("AACoreManager: Template '%s' not found, trying fallback\n", tmplName);
+        tmpl = sithTemplate_GetEntryByName("dyn_videosign");
+        if (tmpl) strncpy(tmplName, "dyn_videosign", sizeof(tmplName) - 1);
+    }
+    if (!tmpl)
+        stdPlatform_Printf("AACoreManager: No spawn template found\n");
+    else
+        stdPlatform_Printf("AACoreManager: Using template '%s'\n", tmplName);
+    return tmpl;
+}
+
+/* Spawn a thing at the player's aim point */
 static sithThing* aacore_spawn_at_player_aim(void)
 {
     sithThing* player = sithPlayer_pLocalPlayerThing;
     if (!player) return NULL;
 
-    sithThing* tmpl = sithTemplate_GetEntryByName("dyn_videosign");
-    if (!tmpl) {
-        stdPlatform_Printf("AACoreManager: Template 'dyn_videosign' not found\n");
-        return NULL;
-    }
+    sithThing* tmpl = aacore_get_spawn_template();
+    if (!tmpl) return NULL;
 
     /* Get aim direction (player orientation + eye pitch) */
     rdMatrix34 aimMatrix;
@@ -535,11 +557,8 @@ static sithThing* aacore_spawn_at_position(float px, float py, float pz, int sec
     sithThing* player = sithPlayer_pLocalPlayerThing;
     if (!player) return NULL;
 
-    sithThing* tmpl = sithTemplate_GetEntryByName("dyn_videosign");
-    if (!tmpl) {
-        stdPlatform_Printf("AACoreManager: Template 'dyn_videosign' not found\n");
-        return NULL;
-    }
+    sithThing* tmpl = aacore_get_spawn_template();
+    if (!tmpl) return NULL;
 
     rdVector3 pos;
     pos.x = px; pos.y = py; pos.z = pz;

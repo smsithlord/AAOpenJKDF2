@@ -10,6 +10,7 @@
 #include <Ultralight/Ultralight.h>
 #include <Ultralight/MouseEvent.h>
 #include <Ultralight/ScrollEvent.h>
+#include <Ultralight/ConsoleMessage.h>
 #include <AppCore/Platform.h>
 #include <JavaScriptCore/JavaScript.h>
 #ifdef _WIN32
@@ -38,6 +39,17 @@ struct UltralightData : public LoadListener, public ViewListener {
     /* ViewListener override — fires before any page scripts run */
     void OnWindowObjectReady(ultralight::View* caller, uint64_t frame_id,
                              bool is_main_frame, const String& url) override;
+
+    /* ViewListener override — route JS console output to game console */
+    void OnAddConsoleMessage(ultralight::View* caller,
+                             const ultralight::ConsoleMessage& message) override {
+        if (g_host.host_printf) {
+            const char* level = "LOG";
+            if (message.level() == kMessageLevel_Warning) level = "WARN";
+            else if (message.level() == kMessageLevel_Error) level = "ERROR";
+            g_host.host_printf("JS [%s]: %s\n", level, message.message().utf8().data());
+        }
+    }
 };
 
 /* Global pointer for JS callback access */

@@ -269,6 +269,21 @@ void InstanceManager::onMapLoaded()
             /* Parse position and rotation from strings */
             SpawnRequest req;
             req.item = item;
+            /* Resolve model and template */
+            if (!obj.model.empty()) {
+                req.modelId = obj.model;
+                std::string tmpl = g_library.findModelPlatformFile(obj.model, OPENJK_PLATFORM_ID);
+                if (!tmpl.empty()) req.templateName = tmpl;
+            }
+            if (req.modelId.empty()) {
+                /* Old save with no model — find or create the default */
+                std::string defaultTemplate = "dyn_videosign";
+                req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, defaultTemplate);
+                if (req.modelId.empty())
+                    req.modelId = g_library.createModel("Video Sign", OPENJK_PLATFORM_ID, defaultTemplate);
+                req.templateName = defaultTemplate;
+            }
+            if (req.templateName.empty()) req.templateName = "dyn_videosign";
             req.hasExplicitPosition = true;
             req.objectKey = obj.object_key;
 
@@ -295,6 +310,12 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
 
     SpawnRequest req;
     req.item = item;
+    /* Find or create the default model for OpenJK */
+    std::string defaultTemplate = "dyn_videosign";
+    req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, defaultTemplate);
+    if (req.modelId.empty())
+        req.modelId = g_library.createModel("Video Sign", OPENJK_PLATFORM_ID, defaultTemplate);
+    req.templateName = defaultTemplate;
     req.hasExplicitPosition = false;
     req.posX = req.posY = req.posZ = 0;
     req.sectorId = -1;
@@ -322,6 +343,7 @@ void InstanceManager::confirmSpawn(int thingIdx)
     /* Add spawned object */
     SpawnedObject obj;
     obj.itemId = item.id;
+    obj.modelId = lastPopped_.modelId;
     obj.objectKey = lastPopped_.objectKey.empty() ? Arcade::generateFirebasePushId() : lastPopped_.objectKey;
     obj.url = resolvedUrl;
     obj.thingIdx = thingIdx;
@@ -636,6 +658,7 @@ void InstanceManager::reportThingTransform(int thingIdx, float px, float py, flo
             dbObj.instance_id = currentInstanceId_;
             dbObj.object_key = obj.objectKey;
             dbObj.item = obj.itemId;
+            dbObj.model = obj.modelId;
             dbObj.position = posBuf;
             dbObj.rotation = rotBuf;
             dbObj.scale = 1.0f;
