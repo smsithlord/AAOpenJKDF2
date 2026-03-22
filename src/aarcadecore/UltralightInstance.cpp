@@ -178,6 +178,53 @@ AAPI_CALLBACK(js_manager_getOverlayInstanceInfo) {
     return obj;
 }
 
+AAPI_CALLBACK(js_manager_getOverlayMode) {
+    /* Returns "fullscreen", "input", or null */
+    if (aarcadecore_getFullscreenInstance()) {
+        JSStringRef s = JSStringCreateWithUTF8CString("fullscreen");
+        JSValueRef v = JSValueMakeString(ctx, s);
+        JSStringRelease(s);
+        return v;
+    }
+    if (aarcadecore_getInputModeInstance()) {
+        JSStringRef s = JSStringCreateWithUTF8CString("input");
+        JSValueRef v = JSValueMakeString(ctx, s);
+        JSStringRelease(s);
+        return v;
+    }
+    return JSValueMakeNull(ctx);
+}
+
+AAPI_CALLBACK(js_manager_goBack) {
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (target && target->vtable->go_back) { target->vtable->go_back(target); return JSValueMakeBoolean(ctx, true); }
+    return JSValueMakeBoolean(ctx, false);
+}
+
+AAPI_CALLBACK(js_manager_goForward) {
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (target && target->vtable->go_forward) { target->vtable->go_forward(target); return JSValueMakeBoolean(ctx, true); }
+    return JSValueMakeBoolean(ctx, false);
+}
+
+AAPI_CALLBACK(js_manager_reloadInstance) {
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (target && target->vtable->reload) { target->vtable->reload(target); return JSValueMakeBoolean(ctx, true); }
+    return JSValueMakeBoolean(ctx, false);
+}
+
+AAPI_CALLBACK(js_manager_moveAimedObject) {
+    const SpawnedObject* obj = g_instanceManager.getAimedObject();
+    if (obj) {
+        g_instanceManager.requestMove(obj->thingIdx);
+        return JSValueMakeBoolean(ctx, true);
+    }
+    return JSValueMakeBoolean(ctx, false);
+}
+
 AAPI_CALLBACK(js_manager_navigateInstance) {
     if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
     std::string url = jsValueToString(ctx, arguments[0]);
@@ -590,6 +637,11 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "getOverlayInstanceInfo", js_manager_getOverlayInstanceInfo);
     addJSMethod(ctx, managerObj, "setHudInputActive", js_manager_setHudInputActive);
     addJSMethod(ctx, managerObj, "navigateInstance", js_manager_navigateInstance);
+    addJSMethod(ctx, managerObj, "goBack", js_manager_goBack);
+    addJSMethod(ctx, managerObj, "goForward", js_manager_goForward);
+    addJSMethod(ctx, managerObj, "reloadInstance", js_manager_reloadInstance);
+    addJSMethod(ctx, managerObj, "moveAimedObject", js_manager_moveAimedObject);
+    addJSMethod(ctx, managerObj, "getOverlayMode", js_manager_getOverlayMode);
     addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
     addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);
     addJSMethod(ctx, managerObj, "openTabMenu", js_manager_openTabMenu);
@@ -913,7 +965,8 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_mouse_wheel,
     NULL, /* get_title */
     NULL, NULL, /* get_width, get_height */
-    NULL /* navigate */
+    NULL, /* navigate */
+    NULL, NULL, NULL, NULL, NULL /* go_back, go_forward, reload, can_go_back, can_go_forward */
 };
 
 /* ========================================================================
@@ -965,4 +1018,15 @@ void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url)
     data->view->LoadURL(url);
     data->view->Focus();
     if (g_host.host_printf) g_host.host_printf("UL: Loading %s\n", url);
+}
+
+void UltralightInstance_EvaluateScript(EmbeddedInstance* inst, const char* script)
+{
+    if (!inst || !inst->user_data) return;
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return;
+    ultralight::String exception;
+    data->view->EvaluateScript(ultralight::String(script), &exception);
+    if (!exception.empty() && g_host.host_printf)
+        g_host.host_printf("UL EvaluateScript error: %s\n", ultralight::String(exception).utf8().data());
 }

@@ -616,6 +616,22 @@ int InstanceManager::popPendingDestroy()
     return idx;
 }
 
+void InstanceManager::requestMove(int thingIdx)
+{
+    pendingMoves_.push(thingIdx);
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Move requested for thingIdx=%d\n", thingIdx);
+}
+
+bool InstanceManager::hasPendingMove() const { return !pendingMoves_.empty(); }
+
+int InstanceManager::popPendingMove()
+{
+    int idx = pendingMoves_.front();
+    pendingMoves_.pop();
+    return idx;
+}
+
 const SpawnedObject* InstanceManager::getSelectedObject() const
 {
     return getSpawned(selectedObjectIndex_);

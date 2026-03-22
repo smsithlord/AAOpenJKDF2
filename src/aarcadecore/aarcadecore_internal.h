@@ -38,6 +38,11 @@ typedef const char* (*EmbeddedInstance_GetTitleFn)(EmbeddedInstance* inst);
 typedef int (*EmbeddedInstance_GetWidthFn)(EmbeddedInstance* inst);
 typedef int (*EmbeddedInstance_GetHeightFn)(EmbeddedInstance* inst);
 typedef void (*EmbeddedInstance_NavigateFn)(EmbeddedInstance* inst, const char* url);
+typedef void (*EmbeddedInstance_GoBackFn)(EmbeddedInstance* inst);
+typedef void (*EmbeddedInstance_GoForwardFn)(EmbeddedInstance* inst);
+typedef void (*EmbeddedInstance_ReloadFn)(EmbeddedInstance* inst);
+typedef bool (*EmbeddedInstance_CanGoBackFn)(EmbeddedInstance* inst);
+typedef bool (*EmbeddedInstance_CanGoForwardFn)(EmbeddedInstance* inst);
 
 typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_InitFn     init;
@@ -56,6 +61,11 @@ typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_GetWidthFn get_width;
     EmbeddedInstance_GetHeightFn get_height;
     EmbeddedInstance_NavigateFn navigate;
+    EmbeddedInstance_GoBackFn go_back;
+    EmbeddedInstance_GoForwardFn go_forward;
+    EmbeddedInstance_ReloadFn reload;
+    EmbeddedInstance_CanGoBackFn can_go_back;
+    EmbeddedInstance_CanGoForwardFn can_go_forward;
 } EmbeddedInstanceVtable;
 
 struct EmbeddedInstance {

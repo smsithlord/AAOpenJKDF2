@@ -69,19 +69,22 @@ void aarcadecore_removeTask(int taskIndex) {
 /* Forward declarations needed by setFullscreenInstance */
 void UltralightManager_LoadOverlay(void);
 void UltralightManager_UnloadOverlay(void);
+void UltralightManager_NotifyOverlayMode(const char* mode);
 
 /* Fullscreen instance accessors for InstanceManager */
 void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) {
     g_fullscreenInstance = inst;
     if (inst) {
         if (inst != g_overlayForInstance) {
-            /* Different instance — force reload overlay */
             UltralightManager_UnloadOverlay();
             UltralightManager_LoadOverlay();
             g_overlayForInstance = inst;
         } else {
-            UltralightManager_LoadOverlay(); /* no-op if already loaded */
+            UltralightManager_LoadOverlay();
         }
+        notifyOverlayState();
+    } else if (!g_inputModeInstance) {
+        notifyOverlayState();
     }
 }
 EmbeddedInstance* aarcadecore_getFullscreenInstance(void) { return g_fullscreenInstance; }
@@ -135,6 +138,63 @@ void UltralightManager_ForwardMouseUp(int button);
 /* ========================================================================
  * Internal helpers
  * ======================================================================== */
+
+/* Helper to escape a string for JSON (basic — escapes quotes and backslashes) */
+static void jsonEscapeStr(char* dst, int dstSize, const char* src)
+{
+    int j = 0;
+    for (int i = 0; src[i] && j < dstSize - 2; i++) {
+        if (src[i] == '"' || src[i] == '\\') { dst[j++] = '\\'; }
+        dst[j++] = src[i];
+    }
+    dst[j] = '\0';
+}
+
+/* Build and send overlay state notification to HUD JS */
+static void notifyOverlayState(void)
+{
+    const char* mode = "";
+    if (g_inputModeInstance) mode = "input";
+    else if (g_fullscreenInstance) mode = "fullscreen";
+
+    EmbeddedInstance* target = g_inputModeInstance ? g_inputModeInstance : g_fullscreenInstance;
+    const EmbeddedItemInstance* inst = target ? g_instanceManager.getInstanceForBrowser(target) : nullptr;
+
+    const char* instanceType = "";
+    if (target) {
+        switch (target->type) {
+            case EMBEDDED_STEAMWORKS_BROWSER: instanceType = "swb"; break;
+            case EMBEDDED_LIBRETRO: instanceType = "libretro"; break;
+            case EMBEDDED_ULTRALIGHT: instanceType = "ultralight"; break;
+            default: break;
+        }
+    }
+
+    char urlEsc[1024] = "", titleEsc[512] = "", itemIdEsc[128] = "";
+    if (inst) {
+        jsonEscapeStr(urlEsc, sizeof(urlEsc), inst->url.c_str());
+        jsonEscapeStr(titleEsc, sizeof(titleEsc), inst->title.c_str());
+        jsonEscapeStr(itemIdEsc, sizeof(itemIdEsc), inst->itemId.c_str());
+    }
+
+    bool canBack = target && target->vtable->can_go_back ? target->vtable->can_go_back(target) : false;
+    bool canFwd = target && target->vtable->can_go_forward ? target->vtable->can_go_forward(target) : false;
+
+    char json[2048];
+    snprintf(json, sizeof(json),
+        "{\"mode\":\"%s\",\"isFullscreen\":%s,\"isInputMode\":%s,"
+        "\"url\":\"%s\",\"title\":\"%s\",\"itemId\":\"%s\","
+        "\"instanceType\":\"%s\",\"canGoBack\":%s,\"canGoForward\":%s}",
+        mode,
+        g_fullscreenInstance ? "true" : "false",
+        g_inputModeInstance ? "true" : "false",
+        urlEsc, titleEsc, itemIdEsc,
+        instanceType,
+        canBack ? "true" : "false",
+        canFwd ? "true" : "false");
+
+    UltralightManager_NotifyOverlayMode(json);
+}
 
 /* Check if the HUD pixel at overlay coords (x,y) is fully opaque (HUD element) */
 static bool isHudPixelOpaque(int x, int y)
@@ -710,6 +770,16 @@ AARCADECORE_EXPORT int aarcadecore_pop_pending_destroy(void)
     return g_instanceManager.popPendingDestroy();
 }
 
+AARCADECORE_EXPORT bool aarcadecore_has_pending_move(void)
+{
+    return g_instanceManager.hasPendingMove();
+}
+
+AARCADECORE_EXPORT int aarcadecore_pop_pending_move(void)
+{
+    return g_instanceManager.popPendingMove();
+}
+
 AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
 {
     g_instanceManager.setAimedThing(thingIdx);
@@ -778,6 +848,7 @@ AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void)
         } else {
             UltralightManager_LoadOverlay();
         }
+        notifyOverlayState();
         if (g_host.host_printf)
             g_host.host_printf("InstanceManager: Entered input mode\n");
     }
@@ -787,6 +858,7 @@ AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void)
 {
     if (g_inputModeInstance) {
         g_inputModeInstance = NULL;
+        notifyOverlayState();
         if (g_host.host_printf)
             g_host.host_printf("InstanceManager: Exited input mode\n");
     }

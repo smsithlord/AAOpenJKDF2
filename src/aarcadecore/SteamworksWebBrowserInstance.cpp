@@ -35,6 +35,10 @@ struct SteamworksData {
     /* Page title — set by HTML_ChangedTitle_t callback */
     char title[256];
 
+    /* Navigation state — set by HTML_CanGoBackAndForward_t */
+    bool canGoBack;
+    bool canGoForward;
+
     /* Callback helpers */
     CCallResult<SteamworksData, HTML_BrowserReady_t> callResultBrowserReady;
 
@@ -43,6 +47,7 @@ struct SteamworksData {
     STEAM_CALLBACK(SteamworksData, OnNeedsPaint, HTML_NeedsPaint_t);
     STEAM_CALLBACK(SteamworksData, OnStartRequest, HTML_StartRequest_t);
     STEAM_CALLBACK(SteamworksData, OnChangedTitle, HTML_ChangedTitle_t);
+    STEAM_CALLBACK(SteamworksData, OnCanGoBackAndForward, HTML_CanGoBackAndForward_t);
     STEAM_CALLBACK(SteamworksData, OnJSAlert, HTML_JSAlert_t);
     STEAM_CALLBACK(SteamworksData, OnJSConfirm, HTML_JSConfirm_t);
     STEAM_CALLBACK(SteamworksData, OnFileOpenDialog, HTML_FileOpenDialog_t);
@@ -106,6 +111,14 @@ void SteamworksData::OnChangedTitle(HTML_ChangedTitle_t* pParam)
         if (g_host.host_printf)
             g_host.host_printf("SWB: Title changed: \"%s\"\n", title);
     }
+}
+
+void SteamworksData::OnCanGoBackAndForward(HTML_CanGoBackAndForward_t* pParam)
+{
+    if (!pParam || pParam->unBrowserHandle != browserHandle)
+        return;
+    canGoBack = pParam->bCanGoBack;
+    canGoForward = pParam->bCanGoForward;
 }
 
 void SteamworksData::OnJSAlert(HTML_JSAlert_t* pParam)
@@ -361,6 +374,40 @@ static void swb_navigate(EmbeddedInstance* inst, const char* url)
     }
 }
 
+static void swb_go_back(EmbeddedInstance* inst)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface && data->browserHandle != INVALID_HTMLBROWSER)
+        surface->GoBack(data->browserHandle);
+}
+
+static void swb_go_forward(EmbeddedInstance* inst)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface && data->browserHandle != INVALID_HTMLBROWSER)
+        surface->GoForward(data->browserHandle);
+}
+
+static void swb_reload(EmbeddedInstance* inst)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface && data->browserHandle != INVALID_HTMLBROWSER)
+        surface->Reload(data->browserHandle);
+}
+
+static bool swb_can_go_back(EmbeddedInstance* inst)
+{
+    return ((SteamworksData*)inst->user_data)->canGoBack;
+}
+
+static bool swb_can_go_forward(EmbeddedInstance* inst)
+{
+    return ((SteamworksData*)inst->user_data)->canGoForward;
+}
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
@@ -377,7 +424,12 @@ static const EmbeddedInstanceVtable g_swbVtable = {
     swb_get_title,
     swb_get_width,
     swb_get_height,
-    swb_navigate
+    swb_navigate,
+    swb_go_back,
+    swb_go_forward,
+    swb_reload,
+    swb_can_go_back,
+    swb_can_go_forward
 };
 
 /* ========================================================================
@@ -397,6 +449,8 @@ EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const cha
     data->bufferWidth = 0;
     data->bufferHeight = 0;
     data->hasNewFrame = false;
+    data->canGoBack = false;
+    data->canGoForward = false;
     data->title[0] = '\0';
 
     inst->type = EMBEDDED_STEAMWORKS_BROWSER;

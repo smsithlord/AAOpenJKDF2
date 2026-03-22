@@ -67,6 +67,8 @@ static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NU
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
+static aarcadecore_has_pending_move_t g_fn_has_pending_move = NULL;
+static aarcadecore_pop_pending_move_t g_fn_pop_pending_move = NULL;
 static aarcadecore_enter_input_mode_for_selected_t g_fn_enter_input_mode_for_selected = NULL;
 static aarcadecore_exit_input_mode_t g_fn_exit_input_mode = NULL;
 static aarcadecore_is_input_mode_active_t g_fn_is_input_mode_active = NULL;
@@ -123,10 +125,14 @@ static rdVector3 g_selectorRayHitPos;
 static rdVector3 g_selectorRayHitNorm;
 static sithSector* g_selectorRayHitSector = NULL;
 
-/* Spawn mode — preview thing follows player aim until confirmed/cancelled */
+/* Spawn/move mode — preview thing follows player aim until confirmed/cancelled */
 static int g_spawnModeActive = 0;
 static int g_spawnPreviewThingIdx = -1;
 static void* g_spawnPreviewThing = NULL; /* sithThing* */
+static int g_spawnModeIsMove = 0;           /* 0 = spawn, 1 = move */
+static rdVector3 g_moveOrigPos;
+static rdMatrix34 g_moveOrigOrient;
+static sithSector* g_moveOrigSector = NULL;
 
 /* Cached dynscreen material and original texture_id for restore */
 static rdMaterial* g_dynscreenMaterial = NULL;
@@ -318,6 +324,8 @@ void AACoreManager_Init(void)
     LOAD_FN(load_thing_marquee_pixels)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
+    LOAD_FN(has_pending_move)
+    LOAD_FN(pop_pending_move)
     LOAD_FN(enter_input_mode_for_selected)
     LOAD_FN(exit_input_mode)
     LOAD_FN(is_input_mode_active)
@@ -443,6 +451,8 @@ void AACoreManager_Shutdown(void)
     g_fn_load_thing_marquee_pixels = NULL;
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
+    g_fn_has_pending_move = NULL;
+    g_fn_pop_pending_move = NULL;
     g_fn_enter_input_mode_for_selected = NULL;
     g_fn_exit_input_mode = NULL;
     g_fn_is_input_mode_active = NULL;
@@ -827,6 +837,36 @@ void AACoreManager_Update(void)
         }
     }
 
+    /* Process pending move requests from the DLL */
+    while (g_fn_has_pending_move && g_fn_has_pending_move()) {
+        int moveIdx = g_fn_pop_pending_move();
+        if (moveIdx >= 0 && !g_spawnModeActive) {
+            /* Find the thing in our task map */
+            sithThing* thing = NULL;
+            for (int i = 0; i < g_thingTaskCount; i++) {
+                if (g_thingTaskMap[i].thingIdx == moveIdx) {
+                    thing = (sithThing*)g_thingTaskMap[i].thing;
+                    break;
+                }
+            }
+            if (thing) {
+                /* Save original state for cancel */
+                g_moveOrigPos = thing->position;
+                _memcpy(&g_moveOrigOrient, &thing->lookOrientation, sizeof(rdMatrix34));
+                g_moveOrigSector = thing->sector;
+
+                /* Enter spawn mode as move */
+                g_spawnModeActive = 1;
+                g_spawnModeIsMove = 1;
+                g_spawnPreviewThingIdx = moveIdx;
+                g_spawnPreviewThing = thing;
+                if (g_fn_enter_spawn_mode)
+                    g_fn_enter_spawn_mode();
+                stdPlatform_Printf("AACoreManager: Entered move mode for thingIdx=%d\n", moveIdx);
+            }
+        }
+    }
+
     /* Poll for screen images that have been cached by the ImageLoader */
     if (g_fn_load_thing_screen_pixels && g_fn_free_pixels) {
         for (int i = 0; i < g_thingTaskCount; i++) {
@@ -1036,26 +1076,37 @@ void AACoreManager_ConfirmSpawn(void)
     sithThing* spawned = (sithThing*)g_spawnPreviewThing;
     int thingIdx = g_spawnPreviewThingIdx;
 
-    /* Confirm with DLL */
-    if (g_fn_confirm_spawn)
-        g_fn_confirm_spawn(thingIdx);
-
-    /* Save position */
-    if (g_fn_report_thing_transform) {
-        rdVector3 pos = spawned->position;
-        int sector = spawned->sector ? (int)spawned->sector->id : -1;
-        rdVector3 pyr;
-        rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
-        g_fn_report_thing_transform(thingIdx, pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+    if (g_spawnModeIsMove) {
+        /* Move mode: just save the new position */
+        if (g_fn_report_thing_transform) {
+            rdVector3 pos = spawned->position;
+            int sector = spawned->sector ? (int)spawned->sector->id : -1;
+            rdVector3 pyr;
+            rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
+            g_fn_report_thing_transform(thingIdx, pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+        }
+        stdPlatform_Printf("AACoreManager: Move confirmed for thingIdx=%d\n", thingIdx);
+    } else {
+        /* Spawn mode: confirm new object with DLL + save position */
+        if (g_fn_confirm_spawn)
+            g_fn_confirm_spawn(thingIdx);
+        if (g_fn_report_thing_transform) {
+            rdVector3 pos = spawned->position;
+            int sector = spawned->sector ? (int)spawned->sector->id : -1;
+            rdVector3 pyr;
+            rdMatrix_ExtractAngles34(&spawned->lookOrientation, &pyr);
+            g_fn_report_thing_transform(thingIdx, pos.x, pos.y, pos.z, sector, pyr.x, pyr.y, pyr.z);
+        }
+        stdPlatform_Printf("AACoreManager: Spawn confirmed at thingIdx=%d\n", thingIdx);
     }
 
-    /* Exit spawn mode */
+    /* Exit spawn/move mode */
     if (g_fn_exit_spawn_mode)
         g_fn_exit_spawn_mode();
     g_spawnModeActive = 0;
+    g_spawnModeIsMove = 0;
     g_spawnPreviewThingIdx = -1;
     g_spawnPreviewThing = NULL;
-    stdPlatform_Printf("AACoreManager: Spawn confirmed at thingIdx=%d\n", thingIdx);
 }
 
 void AACoreManager_CancelSpawn(void)
@@ -1064,34 +1115,44 @@ void AACoreManager_CancelSpawn(void)
 
     int thingIdx = g_spawnPreviewThingIdx;
 
-    /* Unregister from thing-task map */
-    for (int i = 0; i < g_thingTaskCount; i++) {
-        if (g_thingTaskMap[i].thingIdx == thingIdx) {
-            if (g_thingTaskMap[i].glTexture)
-                glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
-            if (g_thingTaskMap[i].marqueeGlTexture)
-                glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
-            for (int j = i; j < g_thingTaskCount - 1; j++)
-                g_thingTaskMap[j] = g_thingTaskMap[j + 1];
-            g_thingTaskCount--;
-            break;
+    if (g_spawnModeIsMove) {
+        /* Move mode: restore original position/orientation/sector */
+        if (g_spawnPreviewThing) {
+            sithThing* thing = (sithThing*)g_spawnPreviewThing;
+            sithThing_SetPosAndRot(thing, &g_moveOrigPos, &g_moveOrigOrient);
+            if (g_moveOrigSector && thing->sector != g_moveOrigSector)
+                sithThing_MoveToSector(thing, g_moveOrigSector, 0);
         }
+        stdPlatform_Printf("AACoreManager: Move cancelled for thingIdx=%d\n", thingIdx);
+    } else {
+        /* Spawn mode: destroy the preview thing */
+        for (int i = 0; i < g_thingTaskCount; i++) {
+            if (g_thingTaskMap[i].thingIdx == thingIdx) {
+                if (g_thingTaskMap[i].glTexture)
+                    glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+                if (g_thingTaskMap[i].marqueeGlTexture)
+                    glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+                for (int j = i; j < g_thingTaskCount - 1; j++)
+                    g_thingTaskMap[j] = g_thingTaskMap[j + 1];
+                g_thingTaskCount--;
+                break;
+            }
+        }
+        if (g_spawnPreviewThing) {
+            sithThing* thing = (sithThing*)g_spawnPreviewThing;
+            if (thing->type != SITH_THING_FREE)
+                sithThing_Destroy(thing);
+        }
+        stdPlatform_Printf("AACoreManager: Spawn cancelled\n");
     }
 
-    /* Destroy the sithThing */
-    if (g_spawnPreviewThing) {
-        sithThing* thing = (sithThing*)g_spawnPreviewThing;
-        if (thing->type != SITH_THING_FREE)
-            sithThing_Destroy(thing);
-    }
-
-    /* Exit spawn mode */
+    /* Exit spawn/move mode */
     if (g_fn_exit_spawn_mode)
         g_fn_exit_spawn_mode();
     g_spawnModeActive = 0;
+    g_spawnModeIsMove = 0;
     g_spawnPreviewThingIdx = -1;
     g_spawnPreviewThing = NULL;
-    stdPlatform_Printf("AACoreManager: Spawn cancelled\n");
 }
 
 int AACoreManager_GetAimedThingIdx(void)

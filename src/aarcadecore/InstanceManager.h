@@ -97,6 +97,11 @@ public:
     bool hasPendingDestroy() const;
     int popPendingDestroy();
 
+    /* Move mode — queues a thingIdx for the host to enter move mode */
+    void requestMove(int thingIdx);
+    bool hasPendingMove() const;
+    int popPendingMove();
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     void deselectOnly();
@@ -120,6 +125,7 @@ private:
 
     std::queue<SpawnRequest> pendingSpawns_;
     std::queue<int> pendingDestroys_;
+    std::queue<int> pendingMoves_;
     SpawnRequest lastPopped_;
 
     void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);

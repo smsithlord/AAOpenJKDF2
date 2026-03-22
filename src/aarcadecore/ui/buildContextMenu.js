@@ -26,8 +26,10 @@ function initBuildContextMenu() {
 }
 
 function onMoveObject() {
-    /* TODO: implement move mode */
-    if (window.aapi && aapi.manager) aapi.manager.closeMenu();
+    if (window.aapi && aapi.manager) {
+        aapi.manager.moveAimedObject();
+        aapi.manager.closeMenu();
+    }
 }
 
 function onDestroyObject() {

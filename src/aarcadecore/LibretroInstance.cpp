@@ -299,7 +299,8 @@ static const EmbeddedInstanceVtable g_libretroVtable = {
     NULL, NULL, NULL, NULL, /* no mouse */
     NULL, /* get_title */
     NULL, NULL, /* get_width, get_height */
-    NULL /* navigate */
+    NULL, /* navigate */
+    NULL, NULL, NULL, NULL, NULL /* go_back, go_forward, reload, can_go_back, can_go_forward */
 };
 
 /* ========================================================================

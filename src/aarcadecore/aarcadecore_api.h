@@ -164,6 +164,10 @@ AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void);
 AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void);
 AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void);
 
+/* Move mode — queue an object for repositioning */
+AARCADECORE_EXPORT bool aarcadecore_has_pending_move(void);
+AARCADECORE_EXPORT int  aarcadecore_pop_pending_move(void);
+
 /* Deselect current object without closing its embedded instance */
 AARCADECORE_EXPORT void aarcadecore_deselect_only(void);
 /* Activate the aimed-at object's embedded instance without selecting it */
@@ -240,6 +244,8 @@ typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 typedef void  (*aarcadecore_enter_input_mode_for_selected_t)(void);
 typedef void  (*aarcadecore_exit_input_mode_t)(void);
 typedef bool  (*aarcadecore_is_input_mode_active_t)(void);
+typedef bool  (*aarcadecore_has_pending_move_t)(void);
+typedef int   (*aarcadecore_pop_pending_move_t)(void);
 typedef void  (*aarcadecore_deselect_only_t)(void);
 typedef void  (*aarcadecore_remember_object_t)(int thingIdx);
 typedef void  (*aarcadecore_set_aimed_thing_t)(int thingIdx);

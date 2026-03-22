@@ -1346,14 +1346,20 @@ void Window_SdlUpdate()
 
         if (AACoreManager_IsActive()) {
             SDL_SetRelativeMouseMode(SDL_FALSE);
+            /* Hide OS cursor only in input mode (virtual cursor on in-world texture).
+             * Fullscreen and menus use the OS cursor. */
+            if (AACoreManager_IsInputModeActive())
+                SDL_ShowCursor(SDL_DISABLE);
+            else
+                SDL_ShowCursor(SDL_ENABLE);
         }
         else if (!jkQuakeConsole_bOpen && SDL_GetWindowFlags(displayWindow) & SDL_WINDOW_MOUSE_FOCUS) {
             SDL_SetRelativeMouseMode(SDL_TRUE);
-            //SDL_WarpMouseInWindow(displayWindow, 100, 100);
         }
         else
         {
             SDL_SetRelativeMouseMode(SDL_FALSE);
+            SDL_ShowCursor(SDL_ENABLE);
         }
 #endif
     }
@@ -1475,6 +1481,15 @@ void Window_RecreateSDL2Window()
         exit (-1);
     }
     //SDL_SetRenderDrawBlendMode(displayRenderer, SDL_BLENDMODE_BLEND);
+
+    /* AArcade: borderless fullscreen at desktop resolution */
+    {
+        SDL_DisplayMode dm;
+        SDL_GetDesktopDisplayMode(0, &dm);
+        SDL_SetWindowBordered(displayWindow, SDL_FALSE);
+        SDL_SetWindowPosition(displayWindow, 0, 0);
+        SDL_SetWindowSize(displayWindow, dm.w, dm.h);
+    }
 
 #if defined(MACOS) && defined(__aarch64__)
     //SDL_FixWindowMacOS(displayWindow);

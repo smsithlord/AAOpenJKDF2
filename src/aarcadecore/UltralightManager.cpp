@@ -1,6 +1,7 @@
 #include "aarcadecore_internal.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /* Forward declarations */
 void UltralightManager_UpdateHudPixelBuffer(void);
@@ -8,6 +9,7 @@ EmbeddedInstance* UltralightInstance_Create(const char* htmlPath, const char* ma
 void UltralightInstance_Destroy(EmbeddedInstance* inst);
 bool UltralightInstance_IsCloseRequested(EmbeddedInstance* inst);
 void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
+void UltralightInstance_EvaluateScript(EmbeddedInstance* inst, const char* script);
 
 #define UL_BLANK_HTML        "file:///aarcadecore/ui/blank.html"
 #define UL_OVERLAY_HTML      "file:///aarcadecore/ui/overlay.html"
@@ -230,6 +232,17 @@ const uint8_t* UltralightManager_GetHudPixels(void)
 
 void UltralightManager_SetHudInputActive(bool active) { g_hudInputActive = active; }
 bool UltralightManager_IsHudInputActive(void) { return g_hudInputActive; }
+
+void UltralightManager_NotifyOverlayMode(const char* jsonPayload)
+{
+    if (!g_hudInstance || !jsonPayload) return;
+    char script[2048];
+    snprintf(script, sizeof(script),
+        "if(window.onOverlayModeChanged)"
+        "window.onOverlayModeChanged(%s);",
+        jsonPayload);
+    UltralightInstance_EvaluateScript(g_hudInstance, script);
+}
 
 void UltralightManager_ForwardKeyDown(int vk_code, int modifiers)
 {
