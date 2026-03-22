@@ -102,6 +102,7 @@ public:
     void deselectOnly();
     void rememberObject(int thingIdx);
     EmbeddedInstance* getInputTarget() const;
+    const EmbeddedItemInstance* getInstanceForBrowser(EmbeddedInstance* browser) const;
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
 
     /* URL resolution */

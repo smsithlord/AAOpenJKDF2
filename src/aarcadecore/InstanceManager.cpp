@@ -808,6 +808,16 @@ EmbeddedInstance* InstanceManager::getInputTarget() const
     return nullptr;
 }
 
+const EmbeddedItemInstance* InstanceManager::getInstanceForBrowser(EmbeddedInstance* browser) const
+{
+    if (!browser) return nullptr;
+    for (const auto& pair : itemInstances_) {
+        if (pair.second.browser == browser)
+            return &pair.second;
+    }
+    return nullptr;
+}
+
 std::vector<const EmbeddedItemInstance*> InstanceManager::getActiveInstances() const
 {
     std::vector<const EmbeddedItemInstance*> result;

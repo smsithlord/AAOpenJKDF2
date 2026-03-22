@@ -37,6 +37,7 @@ typedef void (*EmbeddedInstance_MouseWheelFn)(EmbeddedInstance* inst, int delta)
 typedef const char* (*EmbeddedInstance_GetTitleFn)(EmbeddedInstance* inst);
 typedef int (*EmbeddedInstance_GetWidthFn)(EmbeddedInstance* inst);
 typedef int (*EmbeddedInstance_GetHeightFn)(EmbeddedInstance* inst);
+typedef void (*EmbeddedInstance_NavigateFn)(EmbeddedInstance* inst, const char* url);
 
 typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_InitFn     init;
@@ -54,6 +55,7 @@ typedef struct EmbeddedInstanceVtable {
     EmbeddedInstance_GetTitleFn get_title;
     EmbeddedInstance_GetWidthFn get_width;
     EmbeddedInstance_GetHeightFn get_height;
+    EmbeddedInstance_NavigateFn navigate;
 } EmbeddedInstanceVtable;
 
 struct EmbeddedInstance {

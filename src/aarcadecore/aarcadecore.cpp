@@ -124,13 +124,25 @@ void UltralightManager_ClearStartLibretroFlag(void);
 void UltralightManager_LoadOverlay(void);
 void UltralightManager_UnloadOverlay(void);
 const uint8_t* UltralightManager_GetHudPixels(void);
+bool UltralightManager_IsHudInputActive(void);
 void UltralightManager_ForwardMouseMove(int x, int y);
+void UltralightManager_ForwardKeyDown(int vk_code, int modifiers);
+void UltralightManager_ForwardKeyUp(int vk_code, int modifiers);
+void UltralightManager_ForwardKeyChar(unsigned int unicode_char, int modifiers);
 void UltralightManager_ForwardMouseDown(int button);
 void UltralightManager_ForwardMouseUp(int button);
 
 /* ========================================================================
  * Internal helpers
  * ======================================================================== */
+
+/* Check if the HUD pixel at overlay coords (x,y) is fully opaque (HUD element) */
+static bool isHudPixelOpaque(int x, int y)
+{
+    const uint8_t* buf = UltralightManager_GetHudPixels();
+    if (!buf || x < 0 || x >= 1920 || y < 0 || y >= 1080) return false;
+    return buf[(y * 1920 + x) * 4 + 3] >= 250;
+}
 
 /* Get the instance that should receive input:
  * - When menu is open → HUD Ultralight (for menu interaction)
@@ -300,6 +312,11 @@ AARCADECORE_EXPORT int aarcadecore_get_audio_samples(int16_t* buffer, int max_fr
 
 AARCADECORE_EXPORT void aarcadecore_key_down(int vk_code, int modifiers)
 {
+    /* When HUD has input focus (form field), send keys to HUD instead */
+    if ((g_fullscreenInstance || g_inputModeInstance) && UltralightManager_IsHudInputActive()) {
+        UltralightManager_ForwardKeyDown(vk_code, modifiers);
+        return;
+    }
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->key_down)
         inst->vtable->key_down(inst, vk_code, modifiers);
@@ -307,6 +324,10 @@ AARCADECORE_EXPORT void aarcadecore_key_down(int vk_code, int modifiers)
 
 AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers)
 {
+    if ((g_fullscreenInstance || g_inputModeInstance) && UltralightManager_IsHudInputActive()) {
+        UltralightManager_ForwardKeyUp(vk_code, modifiers);
+        return;
+    }
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->key_up)
         inst->vtable->key_up(inst, vk_code, modifiers);
@@ -314,6 +335,10 @@ AARCADECORE_EXPORT void aarcadecore_key_up(int vk_code, int modifiers)
 
 AARCADECORE_EXPORT void aarcadecore_key_char(unsigned int unicode_char, int modifiers)
 {
+    if ((g_fullscreenInstance || g_inputModeInstance) && UltralightManager_IsHudInputActive()) {
+        UltralightManager_ForwardKeyChar(unicode_char, modifiers);
+        return;
+    }
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->key_char)
         inst->vtable->key_char(inst, unicode_char, modifiers);
@@ -323,9 +348,18 @@ AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
 {
     g_lastMouseX = x;
     g_lastMouseY = y;
+
+    bool overlayActive = g_fullscreenInstance || g_inputModeInstance;
+
+    /* Always forward mouse_move to HUD for cursor tracking */
+    if (overlayActive)
+        UltralightManager_ForwardMouseMove(x, y);
+
+    /* Forward to instance only if HUD pixel is not opaque (click-through) */
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_move) {
-        /* Scale from overlay coords (1920x1080) to instance native coords when fullscreen/input mode */
+        if (overlayActive && isHudPixelOpaque(x, y))
+            return; /* HUD element under cursor — don't forward to instance */
         if ((g_fullscreenInstance == inst || g_inputModeInstance == inst) && inst->vtable->get_width && inst->vtable->get_height) {
             int sx = x * inst->vtable->get_width(inst) / 1920;
             int sy = y * inst->vtable->get_height(inst) / 1080;
@@ -334,27 +368,36 @@ AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
             inst->vtable->mouse_move(inst, x, y);
         }
     }
-    /* Also forward to HUD overlay for cursor tracking */
-    if (g_fullscreenInstance || g_inputModeInstance)
-        UltralightManager_ForwardMouseMove(x, y);
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
 {
-    EmbeddedInstance* inst = get_input_target();
-    if (inst && inst->vtable->mouse_down)
-        inst->vtable->mouse_down(inst, button);
-    if (g_fullscreenInstance || g_inputModeInstance)
+    bool overlayActive = g_fullscreenInstance || g_inputModeInstance;
+    bool hudOpaque = overlayActive && isHudPixelOpaque(g_lastMouseX, g_lastMouseY);
+
+    if (hudOpaque) {
+        /* Click on opaque HUD element — send only to HUD */
         UltralightManager_ForwardMouseDown(button);
+    } else {
+        /* Click through to instance */
+        EmbeddedInstance* inst = get_input_target();
+        if (inst && inst->vtable->mouse_down)
+            inst->vtable->mouse_down(inst, button);
+    }
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
 {
-    EmbeddedInstance* inst = get_input_target();
-    if (inst && inst->vtable->mouse_up)
-        inst->vtable->mouse_up(inst, button);
-    if (g_fullscreenInstance || g_inputModeInstance)
+    bool overlayActive = g_fullscreenInstance || g_inputModeInstance;
+    bool hudOpaque = overlayActive && isHudPixelOpaque(g_lastMouseX, g_lastMouseY);
+
+    if (hudOpaque) {
         UltralightManager_ForwardMouseUp(button);
+    } else {
+        EmbeddedInstance* inst = get_input_target();
+        if (inst && inst->vtable->mouse_up)
+            inst->vtable->mouse_up(inst, button);
+    }
 }
 
 AARCADECORE_EXPORT void aarcadecore_mouse_wheel(int delta)

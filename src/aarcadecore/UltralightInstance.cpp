@@ -68,6 +68,7 @@ void UltralightManager_RequestStartLibretro(void);
 void UltralightManager_OpenLibraryBrowser(void);
 void UltralightManager_OpenTaskMenu(void);
 void UltralightManager_OpenMainMenuPage(void);
+void UltralightManager_SetHudInputActive(bool active);
 
 /* Helper: extract UTF-8 string from JSValue */
 static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
@@ -150,6 +151,50 @@ AAPI_CALLBACK(js_manager_getActiveInstances) {
     JSObjectRef arr = JSObjectMakeArray(ctx, instances.size(), instances.empty() ? nullptr : vals, nullptr);
     delete[] vals;
     return arr;
+}
+
+AAPI_CALLBACK(js_manager_getOverlayInstanceInfo) {
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    const EmbeddedItemInstance* inst = target ? g_instanceManager.getInstanceForBrowser(target) : nullptr;
+    if (!inst) return JSValueMakeNull(ctx);
+
+    JSObjectRef obj = JSObjectMake(ctx, nullptr, nullptr);
+    JSStringRef uk = JSStringCreateWithUTF8CString("url");
+    JSStringRef uv = JSStringCreateWithUTF8CString(inst->url.c_str());
+    JSObjectSetProperty(ctx, obj, uk, JSValueMakeString(ctx, uv), 0, nullptr);
+    JSStringRelease(uk); JSStringRelease(uv);
+
+    JSStringRef tk = JSStringCreateWithUTF8CString("title");
+    JSStringRef tv = JSStringCreateWithUTF8CString(inst->title.c_str());
+    JSObjectSetProperty(ctx, obj, tk, JSValueMakeString(ctx, tv), 0, nullptr);
+    JSStringRelease(tk); JSStringRelease(tv);
+
+    JSStringRef ik = JSStringCreateWithUTF8CString("itemId");
+    JSStringRef iv = JSStringCreateWithUTF8CString(inst->itemId.c_str());
+    JSObjectSetProperty(ctx, obj, ik, JSValueMakeString(ctx, iv), 0, nullptr);
+    JSStringRelease(ik); JSStringRelease(iv);
+
+    return obj;
+}
+
+AAPI_CALLBACK(js_manager_navigateInstance) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string url = jsValueToString(ctx, arguments[0]);
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (target && target->vtable->navigate) {
+        target->vtable->navigate(target, url.c_str());
+        return JSValueMakeBoolean(ctx, true);
+    }
+    return JSValueMakeBoolean(ctx, false);
+}
+
+AAPI_CALLBACK(js_manager_setHudInputActive) {
+    if (argumentCount < 1) return JSValueMakeUndefined(ctx);
+    bool active = JSValueToBoolean(ctx, arguments[0]);
+    UltralightManager_SetHudInputActive(active);
+    return JSValueMakeUndefined(ctx);
 }
 
 AAPI_CALLBACK(js_manager_deactivateInstance) {
@@ -542,6 +587,9 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
     addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);
     addJSMethod(ctx, managerObj, "deactivateInstance", js_manager_deactivateInstance);
+    addJSMethod(ctx, managerObj, "getOverlayInstanceInfo", js_manager_getOverlayInstanceInfo);
+    addJSMethod(ctx, managerObj, "setHudInputActive", js_manager_setHudInputActive);
+    addJSMethod(ctx, managerObj, "navigateInstance", js_manager_navigateInstance);
     addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
     addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);
     addJSMethod(ctx, managerObj, "openTabMenu", js_manager_openTabMenu);
@@ -864,7 +912,8 @@ static const EmbeddedInstanceVtable g_ulVtable = {
     ul_mouse_up,
     ul_mouse_wheel,
     NULL, /* get_title */
-    NULL, NULL /* get_width, get_height */
+    NULL, NULL, /* get_width, get_height */
+    NULL /* navigate */
 };
 
 /* ========================================================================

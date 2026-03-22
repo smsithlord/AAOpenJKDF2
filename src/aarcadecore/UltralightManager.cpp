@@ -26,6 +26,7 @@ static bool g_startLibretroRequested = false;
 static int g_requestedTabIndex = -1; /* -1 = use localStorage default */
 static bool g_spawnModeOpen = false;
 static bool g_overlayLoaded = false;
+static bool g_hudInputActive = false;
 
 /* Persistent HUD pixel buffer — updated each frame the HUD renders */
 #define HUD_BUF_W 1920
@@ -81,8 +82,9 @@ void UltralightManager_Update(void)
             UltralightManager_CloseMainMenu();
         }
 
-        /* Update persistent HUD pixel buffer for compositing */
-        UltralightManager_UpdateHudPixelBuffer();
+        /* Update persistent HUD pixel buffer only when overlay is active */
+        if (g_overlayLoaded)
+            UltralightManager_UpdateHudPixelBuffer();
     }
 }
 
@@ -206,6 +208,7 @@ void UltralightManager_UnloadOverlay(void)
     if (!g_hudInstance) return;
     UltralightInstance_LoadURL(g_hudInstance, UL_BLANK_HTML);
     g_overlayLoaded = false;
+    g_hudInputActive = false;
 }
 
 void UltralightManager_UpdateHudPixelBuffer(void)
@@ -223,6 +226,27 @@ void UltralightManager_UpdateHudPixelBuffer(void)
 const uint8_t* UltralightManager_GetHudPixels(void)
 {
     return g_hudPixelBufferValid ? g_hudPixelBuffer : NULL;
+}
+
+void UltralightManager_SetHudInputActive(bool active) { g_hudInputActive = active; }
+bool UltralightManager_IsHudInputActive(void) { return g_hudInputActive; }
+
+void UltralightManager_ForwardKeyDown(int vk_code, int modifiers)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->key_down) return;
+    g_hudInstance->vtable->key_down(g_hudInstance, vk_code, modifiers);
+}
+
+void UltralightManager_ForwardKeyUp(int vk_code, int modifiers)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->key_up) return;
+    g_hudInstance->vtable->key_up(g_hudInstance, vk_code, modifiers);
+}
+
+void UltralightManager_ForwardKeyChar(unsigned int unicode_char, int modifiers)
+{
+    if (!g_hudInstance || !g_hudInstance->vtable->key_char) return;
+    g_hudInstance->vtable->key_char(g_hudInstance, unicode_char, modifiers);
 }
 
 void UltralightManager_ForwardMouseMove(int x, int y)

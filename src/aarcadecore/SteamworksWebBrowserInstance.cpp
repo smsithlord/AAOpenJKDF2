@@ -350,6 +350,17 @@ static const char* swb_get_title(EmbeddedInstance* inst)
 static int swb_get_width(EmbeddedInstance* inst) { (void)inst; return SWB_DEFAULT_WIDTH; }
 static int swb_get_height(EmbeddedInstance* inst) { (void)inst; return SWB_DEFAULT_HEIGHT; }
 
+static void swb_navigate(EmbeddedInstance* inst, const char* url)
+{
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    ISteamHTMLSurface* surface = SteamHTMLSurface();
+    if (surface && data->browserHandle != INVALID_HTMLBROWSER) {
+        surface->LoadURL(data->browserHandle, url, NULL);
+        if (g_host.host_printf)
+            g_host.host_printf("SWB: Navigating to %s\n", url);
+    }
+}
+
 static const EmbeddedInstanceVtable g_swbVtable = {
     swb_init,
     swb_shutdown,
@@ -365,7 +376,8 @@ static const EmbeddedInstanceVtable g_swbVtable = {
     swb_mouse_wheel,
     swb_get_title,
     swb_get_width,
-    swb_get_height
+    swb_get_height,
+    swb_navigate
 };
 
 /* ========================================================================
