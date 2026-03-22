@@ -29,6 +29,8 @@ cp -r src/aarcadecore/ui/* build_libretro_host/Release/aarcadecore/ui/
 
 **Time**: Instant. Use this when only editing files in `src/aarcadecore/ui/`.
 
+**Note**: The `/*` glob copies *contents* of the ui folder, not the folder itself. Do NOT use `cp -r src/aarcadecore/ui/icons build_libretro_host/.../icons` — this nests `icons/icons/`. Always use the `ui/*` form above, or let the CMake post-build step handle it (triggered by `--target aarcadecore`).
+
 ### DLL only (aarcadecore.dll)
 
 Rebuilds only the aarcadecore DLL + copies UI files (post-build step):

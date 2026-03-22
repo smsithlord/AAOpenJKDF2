@@ -413,6 +413,11 @@ const arcadeHud = (function() {
         var titlebar = document.createElement('div');
         titlebar.className = 'aa-titlebar aa-draggable';
 
+        var titleIcon = document.createElement('img');
+        titleIcon.className = 'aa-title-icon';
+        titleIcon.src = 'icons/aaicon.png';
+        titlebar.appendChild(titleIcon);
+
         var title = document.createElement('div');
         title.className = 'aa-title';
         title.textContent = options.title || '';
@@ -424,7 +429,7 @@ const arcadeHud = (function() {
         if (options.showBack && options.onBack) {
             var backBtn = document.createElement('button');
             backBtn.className = 'aa-titlebar-btn';
-            backBtn.textContent = 'Back';
+            backBtn.innerHTML = '<img src="icons/backarrow.png" class="aa-titlebar-icon">';
             backBtn.addEventListener('click', function(e) { e.stopPropagation(); options.onBack(); });
             buttons.appendChild(backBtn);
         }
@@ -432,7 +437,7 @@ const arcadeHud = (function() {
         if (options.showClose && options.onClose) {
             var closeBtn = document.createElement('button');
             closeBtn.className = 'aa-titlebar-btn aa-btn-close';
-            closeBtn.textContent = '\u2715';
+            closeBtn.innerHTML = '<img src="icons/close.png" class="aa-titlebar-icon">';
             closeBtn.addEventListener('click', function(e) { e.stopPropagation(); options.onClose(); });
             buttons.appendChild(closeBtn);
         }
@@ -667,11 +672,11 @@ const arcadeHud = (function() {
      * ======================================================================== */
 
     var libraryTypes = [
-        { key: 'items',     icon: '\uD83D\uDCE6', help: 'Browse items' },
-        { key: 'apps',      icon: '\uD83C\uDFAE', help: 'Browse apps' },
-        { key: 'maps',      icon: '\uD83D\uDDFA\uFE0F', help: 'Browse maps' },
-        { key: 'models',    icon: '\uD83E\uDDE9', help: 'Browse models' },
-        { key: 'instances', icon: '\uD83D\uDCCB', help: 'Browse instances' }
+        { key: 'items',     icon: 'icons/itemicon.png', help: 'Browse items' },
+        { key: 'apps',      icon: 'icons/appicon.png', help: 'Browse apps' },
+        { key: 'maps',      icon: 'icons/map.png', help: 'Browse maps' },
+        { key: 'models',    icon: 'icons/3dmodelicon.png', help: 'Browse models' },
+        { key: 'instances', icon: 'icons/instanceicon.png', help: 'Browse instances' }
     ];
 
     var DISPLAY_MODES = ['list', 'square', 'landscape', 'large' /*, 'dynamic' */];
@@ -764,7 +769,7 @@ const arcadeHud = (function() {
             (function(lt, idx) {
                 var btn = document.createElement('button');
                 btn.className = 'aa-library-type-btn' + (idx === 0 ? ' aa-active' : '');
-                btn.textContent = lt.icon;
+                btn.innerHTML = '<img src="' + lt.icon + '" class="aa-library-type-icon">';
                 btn.setAttribute('helpText', lt.help);
                 btn.setAttribute('data-type', lt.key);
                 btn.addEventListener('click', function() {
@@ -786,7 +791,7 @@ const arcadeHud = (function() {
         /* Reset button */
         var resetBtn = document.createElement('button');
         resetBtn.className = 'aa-library-reset-btn';
-        resetBtn.innerHTML = '&#8634;';
+        resetBtn.innerHTML = '<img src="icons/refreshicon.png" class="aa-library-bar-icon">';
         resetBtn.title = 'Reset to favorites';
         resetBtn.addEventListener('click', function() {
             searchInput.value = '';
@@ -848,14 +853,14 @@ const arcadeHud = (function() {
         /* Edit favorites button (placeholder) */
         var editFavBtn = document.createElement('button');
         editFavBtn.className = 'aa-library-icon-btn';
-        editFavBtn.innerHTML = '&#9998;';
+        editFavBtn.innerHTML = '<img src="icons/editicon.png" class="aa-library-bar-icon">';
         editFavBtn.title = 'Edit favorites list';
         favBar.appendChild(editFavBtn);
 
         /* Create favorites list button (placeholder) */
         var createFavBtn = document.createElement('button');
         createFavBtn.className = 'aa-library-icon-btn';
-        createFavBtn.innerHTML = '&#43;';
+        createFavBtn.innerHTML = '<img src="icons/plusicon.png" class="aa-library-bar-icon">';
         createFavBtn.title = 'Create new favorites list';
         favBar.appendChild(createFavBtn);
 
@@ -888,6 +893,10 @@ const arcadeHud = (function() {
             }
         });
         favBar.appendChild(itemTypeSelect);
+
+        /* Enhance selects with custom dropdown */
+        enhanceSelect(favSelect);
+        enhanceSelect(itemTypeSelect);
 
         wrapper.appendChild(favBar);
         wrapper.appendChild(scrollArea);
@@ -1088,32 +1097,53 @@ const arcadeHud = (function() {
             titleDiv.className = 'aa-library-card-title';
             titleDiv.textContent = entry.title || entry.id || 'Untitled';
 
-            /* Favorite star button */
-            var favBtn = document.createElement('button');
-            favBtn.className = 'aa-library-fav-btn';
-            var entryMode = (entry.type !== undefined) ? 'items' : 'models';
-            var entryIsFav = isFavorite(entryMode, entry.id);
-            favBtn.textContent = entryIsFav ? '\u2605' : '\u2606'; /* filled/empty star */
-            if (entryIsFav) card.classList.add('aa-fav-tile');
-            (function(eMode, eId, btn, crd) {
-                btn.addEventListener('click', function(ev) {
-                    ev.stopPropagation();
-                    if (isFavorite(eMode, eId)) {
-                        removeFromFavorites(eMode, eId);
-                        btn.textContent = '\u2606';
-                        crd.classList.remove('aa-fav-tile');
-                    } else {
-                        addToFavorites(eMode, eId);
-                        btn.textContent = '\u2605';
-                        crd.classList.add('aa-fav-tile');
-                    }
-                });
-            })(entryMode, entry.id, favBtn, card);
-
             card.appendChild(imgDiv);
             card.appendChild(titleDiv);
-            if (state.type === 'items' || state.type === 'models')
-                card.appendChild(favBtn);
+
+            /* Action buttons (hover-only): edit + favorite */
+            var actions = document.createElement('div');
+            actions.className = 'aa-library-card-actions';
+
+            /* Edit button — all types */
+            var editBtn = document.createElement('button');
+            editBtn.className = 'aa-library-edit-btn';
+            editBtn.innerHTML = '<img src="icons/editicon.png" class="aa-edit-card-icon">';
+            (function(t, eId) {
+                var editPages = { items: 'editItem', models: 'editModel', apps: 'editApp', maps: 'editMap', instances: 'editInstance' };
+                var page = editPages[t] || 'editItem';
+                editBtn.addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    window.location.href = 'file:///aarcadecore/ui/' + page + '.html?id=' + encodeURIComponent(eId);
+                });
+            })(state.type, entry.id);
+            actions.appendChild(editBtn);
+
+            /* Favorite star — items and models only */
+            if (state.type === 'items' || state.type === 'models') {
+                var favBtn = document.createElement('button');
+                favBtn.className = 'aa-library-fav-btn';
+                var entryMode = (entry.type !== undefined) ? 'items' : 'models';
+                var entryIsFav = isFavorite(entryMode, entry.id);
+                favBtn.innerHTML = entryIsFav ? '<img src="icons/favoriteicon.png" class="aa-fav-icon">' : '<img src="icons/favoriteiconhollow.png" class="aa-fav-icon">';
+                if (entryIsFav) card.classList.add('aa-fav-tile');
+                (function(eMode, eId, btn, crd) {
+                    btn.addEventListener('click', function(ev) {
+                        ev.stopPropagation();
+                        if (isFavorite(eMode, eId)) {
+                            removeFromFavorites(eMode, eId);
+                            btn.innerHTML = '<img src="icons/favoriteiconhollow.png" class="aa-fav-icon">';
+                            crd.classList.remove('aa-fav-tile');
+                        } else {
+                            addToFavorites(eMode, eId);
+                            btn.innerHTML = '<img src="icons/favoriteicon.png" class="aa-fav-icon">';
+                            crd.classList.add('aa-fav-tile');
+                        }
+                    });
+                })(entryMode, entry.id, favBtn, card);
+                actions.appendChild(favBtn);
+            }
+
+            card.appendChild(actions);
 
             // Click to spawn (items type) or show title
             if (state.type === 'items' && entry.id) {
@@ -1169,6 +1199,99 @@ const arcadeHud = (function() {
     }
 
     /* ========================================================================
+     * Enhanced Select Dropdown
+     * ======================================================================== */
+    function enhanceSelect(selectEl) {
+        var overlay = null;
+        var cooldown = false;
+
+        function close() {
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            overlay = null;
+        }
+
+        function open() {
+            close();
+            var rect = selectEl.getBoundingClientRect();
+            overlay = document.createElement('div');
+            overlay.className = 'aa-dropdown-overlay';
+            overlay.style.position = 'absolute';
+            overlay.style.left = rect.left + 'px';
+            overlay.style.top = (rect.bottom + 2) + 'px';
+            overlay.style.width = rect.width + 'px';
+
+            var list = document.createElement('div');
+            list.className = 'aa-dropdown-list';
+            overlay.appendChild(list);
+
+            var search = document.createElement('input');
+            search.className = 'aa-dropdown-search';
+            search.type = 'text';
+            search.placeholder = 'Search...';
+            overlay.appendChild(search);
+
+            function buildItems(filter) {
+                list.innerHTML = '';
+                var opts = selectEl.options;
+                var filterLower = (filter || '').toLowerCase();
+                for (var i = 0; i < opts.length; i++) {
+                    var opt = opts[i];
+                    if (opt.style && opt.style.display === 'none') continue;
+                    var label = opt.textContent || opt.value;
+                    if (filterLower && label.toLowerCase().indexOf(filterLower) !== 0) continue;
+                    (function(val, lbl) {
+                        var item = document.createElement('div');
+                        item.className = 'aa-dropdown-item';
+                        if (val === selectEl.value) item.classList.add('aa-selected');
+                        item.textContent = lbl;
+                        item.addEventListener('mousedown', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            selectEl.value = val;
+                            selectEl.dispatchEvent(new Event('change'));
+                            close();
+                            cooldown = true;
+                            setTimeout(function() { cooldown = false; }, 100);
+                        });
+                        list.appendChild(item);
+                    })(opt.value, label);
+                }
+            }
+
+            buildItems('');
+
+            search.addEventListener('input', function() {
+                buildItems(search.value);
+            });
+            search.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') { close(); e.stopPropagation(); }
+            });
+
+            document.body.appendChild(overlay);
+            search.focus();
+
+            /* Close on click outside (but not on the select itself — that's handled by toggle) */
+            setTimeout(function() {
+                document.addEventListener('mousedown', function handler(e) {
+                    if (!overlay) { document.removeEventListener('mousedown', handler); return; }
+                    if (!overlay.contains(e.target) && e.target !== selectEl) {
+                        close();
+                        document.removeEventListener('mousedown', handler);
+                    }
+                });
+            }, 0);
+        }
+
+        selectEl.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            if (cooldown) return;
+            if (overlay) close(); else open();
+        });
+
+        return { refresh: function() { if (overlay) { close(); open(); } } };
+    }
+
+    /* ========================================================================
      * Overlay Cursor
      * ======================================================================== */
     function initOverlayCursor() {
@@ -1211,7 +1334,8 @@ const arcadeHud = (function() {
             createWindow: createWindow,
             escapeHtml: escapeHtml,
             renderTaskList: renderTaskList,
-            renderLibrary: renderLibrary
+            renderLibrary: renderLibrary,
+            enhanceSelect: enhanceSelect
         },
 
         // Overlay cursor

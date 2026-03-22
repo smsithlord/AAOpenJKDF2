@@ -92,6 +92,18 @@ html, body {
     text-overflow: ellipsis;
 }
 
+.aa-title-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+.aa-titlebar-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.7;
+}
 .aa-titlebar-buttons {
     display: flex;
     gap: 6px;
@@ -512,22 +524,77 @@ html, body {
     color: #ddd;
     background: #2a2a2a;
 }
-/* Favorite star on cards */
-.aa-library-fav-btn {
+/* Card action buttons (hover-only) */
+.aa-library-card-actions {
     position: absolute;
     top: 3px;
     right: 3px;
+    display: none;
+    gap: 2px;
+    z-index: 2;
+}
+.aa-library-card:hover .aa-library-card-actions { display: flex; }
+.aa-library-edit-btn,
+.aa-library-fav-btn {
     background: none;
     border: none;
-    color: rgba(200, 200, 200, 0.6);
-    font-size: 16px;
+    color: rgba(200, 200, 200, 0.5);
     cursor: pointer;
     padding: 0;
     line-height: 1;
-    z-index: 2;
 }
+.aa-library-edit-btn:hover { color: #fff; }
 .aa-library-fav-btn:hover { color: #ffd700; }
 .aa-fav-tile .aa-library-fav-btn { color: #ffd700; }
+/* Enhanced dropdown overlay */
+.aa-dropdown-overlay {
+    z-index: 999999;
+    background: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    max-height: 250px;
+}
+.aa-dropdown-search {
+    background: #2a2a2a;
+    color: #ddd;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 6px;
+    font-size: 11px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    outline: none;
+    flex-shrink: 0;
+}
+.aa-dropdown-list {
+    overflow-y: auto;
+    flex: 1;
+}
+.aa-dropdown-item {
+    padding: 5px 10px;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+.aa-dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+.aa-dropdown-item.aa-selected {
+    background: rgba(15, 157, 88, 0.2);
+    color: #0f9d58;
+}
+
+/* Icon images in library UI */
+.aa-library-type-icon { width: 14px; height: 14px; opacity: 0.7; }
+.aa-library-bar-icon { width: 12px; height: 12px; opacity: 0.7; }
+.aa-fav-icon { width: 14px; height: 14px; }
+.aa-edit-card-icon { width: 14px; height: 14px; opacity: 0.7; }
+.aa-edit-action-icon { width: 12px; height: 12px; opacity: 0.7; }
+
 .aa-library-card { position: relative; }
 
 .aa-library-bar {
@@ -623,5 +690,102 @@ html, body {
 
 .aa-library-loadmore:hover {
     background: rgba(255, 255, 255, 0.06);
+    color: #ccc;
+}
+
+/* ========================================================================
+ * Edit Form Styles
+ * ======================================================================== */
+.aa-edit-form {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 2px;
+    padding: 8px;
+}
+.aa-edit-row td {
+    padding: 4px 4px;
+    vertical-align: middle;
+}
+.aa-edit-row:hover .aa-edit-cell-icon,
+.aa-edit-row:hover .aa-edit-cell-label,
+.aa-edit-row:hover .aa-edit-cell-input {
+    background: rgba(255, 255, 255, 0.03);
+}
+.aa-edit-cell-icon {
+    width: 1px;
+    white-space: nowrap;
+}
+.aa-edit-row-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.6;
+    display: block;
+}
+.aa-edit-cell-label {
+    white-space: nowrap;
+    color: #aaa;
+    font-size: 13px;
+    padding-right: 8px;
+}
+.aa-edit-cell-input {
+    width: 100%;
+}
+.aa-edit-row-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    color: #ccc;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    box-sizing: border-box;
+}
+.aa-edit-row-input:focus {
+    outline: none;
+    border-color: rgba(15, 157, 88, 0.5);
+    color: #fff;
+}
+.aa-edit-row-input {
+    transition: border-color 0.8s ease, background-color 0.8s ease;
+}
+.aa-edit-saved {
+    border-color: rgba(15, 157, 88, 0.8) !important;
+    background-color: rgba(15, 157, 88, 0.15) !important;
+}
+.aa-edit-row-select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+.aa-edit-row-select option {
+    color: #ddd;
+    background: #2a2a2a;
+}
+.aa-edit-cell-actions {
+    white-space: nowrap;
+    visibility: hidden;
+    pointer-events: none;
+}
+.aa-edit-row:hover .aa-edit-cell-actions {
+    visibility: visible;
+    pointer-events: auto;
+}
+.aa-edit-row-action-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #888;
+    font-size: 12px;
+    padding: 3px 8px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.15s;
+}
+.aa-edit-row-action-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
     color: #ccc;
 }
