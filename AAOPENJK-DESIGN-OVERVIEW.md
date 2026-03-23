@@ -182,6 +182,22 @@ Input mode (no fullscreen): render_overlay returns false → no quad drawn
 Spawn mode: HUD rendered directly (no instance underneath)
 ```
 
+### Visibility throttling
+```
+EmbeddedInstance tracks:
+  - lastRenderedFrame: when render() was last called (dedup 16-bit renders)
+  - lastSeenFrame: when thing's material was drawn by engine (set in PreRenderThing)
+
+Per-frame task loop (AACoreManager_Update):
+  - aarcadecore_is_task_visible(taskIndex) checks lastSeenFrame >= engineFrame - 1
+  - Always visible if fullscreen or input mode instance
+  - If not visible: skip render_task_texture + glTexImage2D (reuse stale GL texture)
+
+Libretro update throttling:
+  - libretro_inst_update skips run_frame for off-screen instances
+  - Saves CPU by not emulating frames nobody can see
+```
+
 ### Input routing
 ```
 SDL events → Window.c

@@ -969,6 +969,21 @@ AARCADECORE_EXPORT void aarcadecore_mark_thing_seen(int thingIdx)
         g_tasks[taskIdx]->lastSeenFrame = g_engineFrame;
 }
 
+AARCADECORE_EXPORT bool aarcadecore_is_task_visible(int taskIndex)
+{
+    if (taskIndex < 0 || taskIndex >= g_taskCount || !g_tasks[taskIndex])
+        return false;
+
+    EmbeddedInstance* task = g_tasks[taskIndex];
+
+    /* Always visible if it's the fullscreen or input mode instance */
+    if (task == g_fullscreenInstance || task == g_inputModeInstance)
+        return true;
+
+    /* Visible if seen this frame or last frame */
+    return task->lastSeenFrame >= g_engineFrame - 1;
+}
+
 AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
 {
     if (!cmd) return false;

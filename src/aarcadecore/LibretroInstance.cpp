@@ -119,6 +119,15 @@ static void libretro_inst_update(EmbeddedInstance* inst)
     LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
     if (!data->host) return;
 
+    /* Skip frame processing if not visible and not fullscreen/input target */
+    extern uint32_t aarcadecore_getEngineFrame(void);
+    extern EmbeddedInstance* aarcadecore_getFullscreenInstance(void);
+    extern EmbeddedInstance* aarcadecore_getInputModeInstance(void);
+    if (inst != aarcadecore_getFullscreenInstance() &&
+        inst != aarcadecore_getInputModeInstance() &&
+        inst->lastSeenFrame + 1 < aarcadecore_getEngineFrame())
+        return;
+
     int16_t joypad_buttons = libretro_build_joypad_state();
     /* OR physical gamepad with emulated keyboard joypad */
     joypad_buttons |= data->emulatedJoypad;

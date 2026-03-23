@@ -97,6 +97,7 @@ static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = 
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
 static aarcadecore_mark_thing_seen_t g_fn_mark_thing_seen = NULL;
+static aarcadecore_is_task_visible_t g_fn_is_task_visible = NULL;
 static aarcadecore_action_command_t g_fn_action_command = NULL;
 
 /* Forward declarations */
@@ -370,6 +371,7 @@ void AACoreManager_Init(void)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
     LOAD_FN(mark_thing_seen)
+    LOAD_FN(is_task_visible)
     LOAD_FN(action_command)
     #undef LOAD_FN
 
@@ -511,6 +513,7 @@ void AACoreManager_Shutdown(void)
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
     g_fn_mark_thing_seen = NULL;
+    g_fn_is_task_visible = NULL;
     g_fn_action_command = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
@@ -833,6 +836,10 @@ void AACoreManager_Update(void)
             g_taskPixels = (uint16_t*)malloc(TASK_TEX_WIDTH * TASK_TEX_HEIGHT * 2);
 
         for (int i = 0; i < count; i++) {
+            /* Skip render+upload for tasks not visible on screen */
+            if (g_fn_is_task_visible && !g_fn_is_task_visible(i))
+                continue;
+
             /* Fill with green by default */
             for (int j = 0; j < TASK_TEX_WIDTH * TASK_TEX_HEIGHT; j++)
                 g_taskPixels[j] = (0 << 11) | (63 << 5) | 0;
