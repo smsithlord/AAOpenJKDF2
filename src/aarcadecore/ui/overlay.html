@@ -24,7 +24,7 @@
             color: #ccc;
             font-size: 16px;
             padding: 8px 32px;
-            border-radius: 0 0 8px 8px;
+            border-radius: 0 0 8px 8px;  /* bottom corners rounded */
             cursor: pointer;
             user-select: none;
             transition: background 0.15s, color 0.15s;
@@ -45,7 +45,7 @@
         .address-bar {
             display: flex;
             flex-direction: row;
-            align-items: center;
+            align-items: flex-end;
             background: rgba(35, 35, 35, 1.0);
             padding: 8px 12px;
             border-radius: 0 0 8px 8px;
@@ -53,14 +53,12 @@
             min-width: 800px;
             max-height: 0;
             overflow: hidden;
-            opacity: 0;
-            transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+            transition: max-height 0.25s ease, padding 0.25s ease;
             padding-top: 0;
             padding-bottom: 0;
         }
         .address-bar.open {
             max-height: 80px;
-            opacity: 1;
             padding: 8px 12px;
         }
 
@@ -116,7 +114,6 @@
 <body>
     <div style="position:absolute;top:5px;left:5px;font-size:30px;color:#888;cursor:pointer;pointer-events:auto;z-index:99999" onclick="location.reload()">&#8226;</div>
     <div class="overlay-bar" id="bar">
-        <div class="overlay-tab" id="tab">Web Browser</div>
         <div class="address-bar" id="addressBar">
             <button id="btnBack" title="Back" disabled>&#9664;</button>
             <button id="btnForward" title="Forward" disabled>&#9654;</button>
@@ -129,6 +126,7 @@
             <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
             <input type="text" id="fileInput" readonly style="flex:1;" />
         </div>
+        <div class="overlay-tab" id="tab">Web Browser</div>
     </div>
     <div class="overlay-cursor" id="cursor"><img src="cursors/default.png" alt=""></div>
 <script>
