@@ -141,6 +141,7 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(
 /* Instance Manager — spawn objects from library browser */
 AARCADECORE_EXPORT bool aarcadecore_has_pending_spawn(void);
 AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void);
+AARCADECORE_EXPORT void aarcadecore_init_spawned_object(int thingIdx);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx);
 AARCADECORE_EXPORT bool aarcadecore_spawn_has_position(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
 AARCADECORE_EXPORT void aarcadecore_spawn_get_template_name(char* nameOut, int nameSize);
@@ -163,6 +164,32 @@ AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
 AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void);
 AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void);
 AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void);
+
+/* Spawn transform override (rotation + position offset) */
+AARCADECORE_EXPORT bool aarcadecore_has_spawn_transform(void);
+AARCADECORE_EXPORT void aarcadecore_get_spawn_transform(float* p, float* y, float* r, bool* isWorldRot,
+    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast);
+AARCADECORE_EXPORT void aarcadecore_clear_spawn_transform(void);
+AARCADECORE_EXPORT const char* aarcadecore_get_spawn_model_id(void);
+
+/* Update thingIdx after destroy+recreate */
+AARCADECORE_EXPORT void aarcadecore_update_thing_idx(int oldIdx, int newIdx);
+
+/* Set current spawn preview thingIdx (for model ID lookup) */
+AARCADECORE_EXPORT void aarcadecore_set_spawn_preview_thing(int thingIdx);
+
+/* Re-request images for an existing spawned thing */
+AARCADECORE_EXPORT void aarcadecore_reload_thing_images(int thingIdx);
+
+/* Get the template name for a spawned thing */
+AARCADECORE_EXPORT const char* aarcadecore_get_template_for_thing(int thingIdx);
+
+/* Remove spawned object entry (for spawn cancel cleanup) */
+AARCADECORE_EXPORT void aarcadecore_remove_spawned(int thingIdx);
+
+/* Spawn mode model change — host polls for template swap */
+AARCADECORE_EXPORT bool aarcadecore_has_pending_model_change(void);
+AARCADECORE_EXPORT const char* aarcadecore_pop_pending_model_change(void);
 
 /* Move mode — queue an object for repositioning */
 AARCADECORE_EXPORT bool aarcadecore_has_pending_move(void);
@@ -228,6 +255,7 @@ typedef bool  (*aarcadecore_render_task_texture_t)(int taskIndex, void* pixelDat
 typedef bool  (*aarcadecore_render_overlay_t)(void* pixelData, int width, int height);
 typedef bool  (*aarcadecore_has_pending_spawn_t)(void);
 typedef void  (*aarcadecore_pop_pending_spawn_t)(void);
+typedef void  (*aarcadecore_init_spawned_object_t)(int thingIdx);
 typedef void  (*aarcadecore_confirm_spawn_t)(int thingIdx);
 typedef bool  (*aarcadecore_spawn_has_position_t)(float* px, float* py, float* pz, int* sectorId, float* rx, float* ry, float* rz);
 typedef void  (*aarcadecore_spawn_get_template_name_t)(char* nameOut, int nameSize);
@@ -244,6 +272,16 @@ typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 typedef void  (*aarcadecore_enter_input_mode_for_selected_t)(void);
 typedef void  (*aarcadecore_exit_input_mode_t)(void);
 typedef bool  (*aarcadecore_is_input_mode_active_t)(void);
+typedef bool  (*aarcadecore_has_spawn_transform_t)(void);
+typedef void  (*aarcadecore_get_spawn_transform_t)(float*, float*, float*, bool*, float*, float*, float*, bool*, bool*);
+typedef const char* (*aarcadecore_get_spawn_model_id_t)(void);
+typedef void  (*aarcadecore_update_thing_idx_t)(int oldIdx, int newIdx);
+typedef void  (*aarcadecore_set_spawn_preview_thing_t)(int thingIdx);
+typedef void  (*aarcadecore_reload_thing_images_t)(int thingIdx);
+typedef const char* (*aarcadecore_get_template_for_thing_t)(int thingIdx);
+typedef void  (*aarcadecore_remove_spawned_t)(int thingIdx);
+typedef bool  (*aarcadecore_has_pending_model_change_t)(void);
+typedef const char* (*aarcadecore_pop_pending_model_change_t)(void);
 typedef bool  (*aarcadecore_has_pending_move_t)(void);
 typedef int   (*aarcadecore_pop_pending_move_t)(void);
 typedef void  (*aarcadecore_deselect_only_t)(void);

@@ -216,6 +216,37 @@ AAPI_CALLBACK(js_manager_reloadInstance) {
     return JSValueMakeBoolean(ctx, false);
 }
 
+AAPI_CALLBACK(js_manager_setSpawnTransform) {
+    if (argumentCount < 9) return JSValueMakeBoolean(ctx, false);
+    float pitch = (float)JSValueToNumber(ctx, arguments[0], nullptr);
+    float yaw   = (float)JSValueToNumber(ctx, arguments[1], nullptr);
+    float roll  = (float)JSValueToNumber(ctx, arguments[2], nullptr);
+    bool isWorldRot = JSValueToBoolean(ctx, arguments[3]);
+    float offX = (float)JSValueToNumber(ctx, arguments[4], nullptr);
+    float offY = (float)JSValueToNumber(ctx, arguments[5], nullptr);
+    float offZ = (float)JSValueToNumber(ctx, arguments[6], nullptr);
+    bool isWorldOff = JSValueToBoolean(ctx, arguments[7]);
+    bool useRaycast = JSValueToBoolean(ctx, arguments[8]);
+    g_instanceManager.setSpawnTransform(pitch, yaw, roll, isWorldRot, offX, offY, offZ, isWorldOff, useRaycast);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+AAPI_CALLBACK(js_manager_getSpawnModelId) {
+    std::string id = g_instanceManager.getSpawnModelId();
+    if (id.empty()) return JSValueMakeNull(ctx);
+    JSStringRef s = JSStringCreateWithUTF8CString(id.c_str());
+    JSValueRef v = JSValueMakeString(ctx, s);
+    JSStringRelease(s);
+    return v;
+}
+
+AAPI_CALLBACK(js_manager_setSpawnModeModel) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string modelId = jsValueToString(ctx, arguments[0]);
+    g_instanceManager.requestSpawnModelChange(modelId);
+    return JSValueMakeBoolean(ctx, true);
+}
+
 AAPI_CALLBACK(js_manager_moveAimedObject) {
     const SpawnedObject* obj = g_instanceManager.getAimedObject();
     if (obj) {
@@ -657,6 +688,9 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "goForward", js_manager_goForward);
     addJSMethod(ctx, managerObj, "reloadInstance", js_manager_reloadInstance);
     addJSMethod(ctx, managerObj, "moveAimedObject", js_manager_moveAimedObject);
+    addJSMethod(ctx, managerObj, "setSpawnModeModel", js_manager_setSpawnModeModel);
+    addJSMethod(ctx, managerObj, "setSpawnTransform", js_manager_setSpawnTransform);
+    addJSMethod(ctx, managerObj, "getSpawnModelId", js_manager_getSpawnModelId);
     addJSMethod(ctx, managerObj, "getOverlayMode", js_manager_getOverlayMode);
     addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
     addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);

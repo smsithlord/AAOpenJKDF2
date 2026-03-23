@@ -1149,7 +1149,7 @@ void Window_SdlUpdate()
 
                 break;
             case SDL_MOUSEWHEEL:
-                if (AACoreManager_IsActive()) {
+                if (AACoreManager_IsActive() || AACoreManager_IsSpawnModeActive()) {
                     AACoreManager_MouseWheel(event.wheel.y * 120);
                     break;
                 }
@@ -1348,7 +1348,7 @@ void Window_SdlUpdate()
             SDL_SetRelativeMouseMode(SDL_FALSE);
             /* Hide OS cursor only in input mode (virtual cursor on in-world texture).
              * Fullscreen and menus use the OS cursor. */
-            if (AACoreManager_IsInputModeActive())
+            if (AACoreManager_IsInputModeActive() && !AACoreManager_IsSpawnModeActive())
                 SDL_ShowCursor(SDL_DISABLE);
             else
                 SDL_ShowCursor(SDL_ENABLE);

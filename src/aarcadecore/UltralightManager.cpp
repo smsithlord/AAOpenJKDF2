@@ -262,6 +262,20 @@ void UltralightManager_ForwardKeyChar(unsigned int unicode_char, int modifiers)
     g_hudInstance->vtable->key_char(g_hudInstance, unicode_char, modifiers);
 }
 
+void UltralightManager_NotifySpawnConfirmed(void)
+{
+    if (!g_hudInstance) return;
+    UltralightInstance_EvaluateScript(g_hudInstance, "if(window.onSpawnConfirmed)window.onSpawnConfirmed();");
+}
+
+void UltralightManager_NotifySpawnWheel(int delta)
+{
+    if (!g_hudInstance) return;
+    char script[128];
+    snprintf(script, sizeof(script), "if(window.onSpawnWheel)window.onSpawnWheel(%d);", delta);
+    UltralightInstance_EvaluateScript(g_hudInstance, script);
+}
+
 void UltralightManager_ForwardMouseMove(int x, int y)
 {
     if (!g_hudInstance || !g_hudInstance->vtable->mouse_move) return;

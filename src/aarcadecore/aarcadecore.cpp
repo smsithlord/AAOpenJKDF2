@@ -119,6 +119,8 @@ void UltralightManager_Init(void);
 void UltralightManager_Shutdown(void);
 void UltralightManager_Update(void);
 EmbeddedInstance* UltralightManager_GetActive(void);
+bool UltralightManager_IsSpawnModeOpen(void);
+void UltralightManager_NotifySpawnWheel(int delta);
 void UltralightManager_ToggleMainMenu(void);
 bool UltralightManager_IsMainMenuOpen(void);
 bool UltralightManager_ShouldOpenEngineMenu(void);
@@ -129,6 +131,7 @@ void UltralightManager_LoadOverlay(void);
 void UltralightManager_UnloadOverlay(void);
 const uint8_t* UltralightManager_GetHudPixels(void);
 bool UltralightManager_IsHudInputActive(void);
+void UltralightManager_NotifySpawnWheel(int delta);
 void UltralightManager_ForwardMouseMove(int x, int y);
 void UltralightManager_ForwardKeyDown(int vk_code, int modifiers);
 void UltralightManager_ForwardKeyUp(int vk_code, int modifiers);
@@ -464,6 +467,13 @@ AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
 
 AARCADECORE_EXPORT void aarcadecore_mouse_wheel(int delta)
 {
+    /* During spawn mode, notify HUD JS for model cycling */
+    if (UltralightManager_IsSpawnModeOpen()) {
+        if (g_host.host_printf)
+            g_host.host_printf("AACore: Spawn wheel delta=%d\n", delta);
+        UltralightManager_NotifySpawnWheel(delta);
+        return;
+    }
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_wheel)
         inst->vtable->mouse_wheel(inst, delta);
@@ -589,8 +599,8 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, i
 {
     const uint8_t* hudBuf = UltralightManager_GetHudPixels();
 
-    /* Input mode without fullscreen: no overlay — cursor drawn on per-thing task texture */
-    if (g_inputModeInstance && !g_fullscreenInstance) {
+    /* Input mode without fullscreen (and not spawn mode): no overlay — cursor on task texture */
+    if (g_inputModeInstance && !g_fullscreenInstance && !UltralightManager_IsSpawnModeOpen()) {
         memset(pixelData, 0, width * height * 4);
         return true;
     }
@@ -629,9 +639,16 @@ AARCADECORE_EXPORT void aarcadecore_pop_pending_spawn(void)
     g_lastPoppedSpawn = g_instanceManager.popPendingSpawn();
 }
 
+AARCADECORE_EXPORT void aarcadecore_init_spawned_object(int thingIdx)
+{
+    g_instanceManager.initSpawnedObject(thingIdx);
+}
+
+void UltralightManager_NotifySpawnConfirmed(void);
 AARCADECORE_EXPORT void aarcadecore_confirm_spawn(int thingIdx)
 {
     g_instanceManager.confirmSpawn(thingIdx);
+    UltralightManager_NotifySpawnConfirmed();
 }
 
 AARCADECORE_EXPORT int aarcadecore_get_selected_thing_idx(void)
@@ -772,6 +789,69 @@ AARCADECORE_EXPORT int aarcadecore_pop_pending_destroy(void)
     return g_instanceManager.popPendingDestroy();
 }
 
+AARCADECORE_EXPORT bool aarcadecore_has_spawn_transform(void)
+{
+    return g_instanceManager.hasSpawnTransform();
+}
+
+AARCADECORE_EXPORT void aarcadecore_get_spawn_transform(float* p, float* y, float* r, bool* isWorldRot,
+    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast)
+{
+    g_instanceManager.getSpawnTransform(p, y, r, isWorldRot, ox, oy, oz, isWorldOff, useRaycast);
+}
+
+AARCADECORE_EXPORT void aarcadecore_clear_spawn_transform(void)
+{
+    g_instanceManager.clearSpawnTransform();
+}
+
+AARCADECORE_EXPORT const char* aarcadecore_get_spawn_model_id(void)
+{
+    static std::string s;
+    s = g_instanceManager.getSpawnModelId();
+    return s.c_str();
+}
+
+AARCADECORE_EXPORT void aarcadecore_update_thing_idx(int oldIdx, int newIdx)
+{
+    g_instanceManager.updateThingIdx(oldIdx, newIdx);
+}
+
+AARCADECORE_EXPORT void aarcadecore_set_spawn_preview_thing(int thingIdx)
+{
+    g_instanceManager.setSpawnPreviewThingIdx(thingIdx);
+}
+
+AARCADECORE_EXPORT void aarcadecore_reload_thing_images(int thingIdx)
+{
+    g_instanceManager.reloadImagesForThing(thingIdx);
+}
+
+static std::string g_lastTemplateForThing;
+AARCADECORE_EXPORT const char* aarcadecore_get_template_for_thing(int thingIdx)
+{
+    g_lastTemplateForThing = g_instanceManager.getTemplateForThing(thingIdx);
+    return g_lastTemplateForThing.c_str();
+}
+
+AARCADECORE_EXPORT void aarcadecore_remove_spawned(int thingIdx)
+{
+    g_instanceManager.removeSpawnedByThingIdx(thingIdx);
+}
+
+static std::string g_lastPoppedModelChange;
+
+AARCADECORE_EXPORT bool aarcadecore_has_pending_model_change(void)
+{
+    return g_instanceManager.hasPendingModelChange();
+}
+
+AARCADECORE_EXPORT const char* aarcadecore_pop_pending_model_change(void)
+{
+    g_lastPoppedModelChange = g_instanceManager.popPendingModelChange();
+    return g_lastPoppedModelChange.c_str();
+}
+
 AARCADECORE_EXPORT bool aarcadecore_has_pending_move(void)
 {
     return g_instanceManager.hasPendingMove();
@@ -841,14 +921,21 @@ AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
 AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void)
 {
     EmbeddedInstance* target = g_instanceManager.getInputTarget();
+    /* During spawn mode, use HUD instance as input target for transform panel */
+    if (!target && UltralightManager_IsSpawnModeOpen()) {
+        target = UltralightManager_GetActive();
+    }
     if (target) {
         g_inputModeInstance = target;
-        if (target != g_overlayForInstance) {
-            UltralightManager_UnloadOverlay();
-            UltralightManager_LoadOverlay();
-            g_overlayForInstance = target;
-        } else {
-            UltralightManager_LoadOverlay();
+        /* During spawn mode, don't load overlay.html — keep spawnMode.html */
+        if (!UltralightManager_IsSpawnModeOpen()) {
+            if (target != g_overlayForInstance) {
+                UltralightManager_UnloadOverlay();
+                UltralightManager_LoadOverlay();
+                g_overlayForInstance = target;
+            } else {
+                UltralightManager_LoadOverlay();
+            }
         }
         notifyOverlayState();
         if (g_host.host_printf)

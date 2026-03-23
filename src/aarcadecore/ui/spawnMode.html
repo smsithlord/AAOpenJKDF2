@@ -9,6 +9,7 @@
             background: transparent;
             width: 100%; height: 100vh;
             overflow: hidden;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
         .spawn-label {
             position: absolute;
@@ -17,7 +18,6 @@
             transform: translateX(-50%);
             background: rgba(15, 157, 88, 0.7);
             color: #fff;
-            font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 18px;
             font-weight: 600;
             letter-spacing: 2px;
@@ -30,13 +30,333 @@
             left: 50%;
             transform: translateX(-50%);
             color: rgba(255, 255, 255, 0.5);
-            font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 13px;
+        }
+        .model-selector {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 6px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            min-width: 180px;
+        }
+        .model-item {
+            padding: 4px 14px;
+            color: #999;
+            font-size: 12px;
+            white-space: nowrap;
+            cursor: default;
+        }
+        .model-item.active {
+            background: rgba(15, 157, 88, 0.3);
+            color: #fff;
+        }
+        /* Transform panel */
+        .transform-panel {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 20, 20, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 10px 14px;
+            display: none;
+            min-width: 200px;
+        }
+        .transform-panel.visible { display: block; }
+        .transform-panel h3 {
+            color: #ccc;
+            font-size: 13px;
+            margin: 0 0 8px;
+            font-weight: 600;
+        }
+        .transform-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .transform-row label {
+            color: #999;
+            font-size: 11px;
+            width: 35px;
+            flex-shrink: 0;
+        }
+        .transform-row input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            outline: none;
+        }
+        .transform-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: #0f9d58;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .transform-row .val {
+            color: #aaa;
+            font-size: 10px;
+            width: 30px;
+            text-align: right;
+        }
+        .transform-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            color: #999;
+            font-size: 11px;
+        }
+        .transform-toggle input { cursor: pointer; }
+        .model-name {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 3px 12px;
+            border-radius: 4px;
         }
     </style>
 </head>
 <body>
     <div class="spawn-label">SPAWN MODE</div>
-    <div class="spawn-hint">Click to place &middot; Escape to cancel</div>
+    <div class="model-name" id="modelName"></div>
+    <div class="model-selector" id="modelList"></div>
+    <div class="transform-panel" id="transformPanel">
+        <h3>Transform</h3>
+        <div class="transform-row">
+            <label class="axis-label" data-slider="pitchSlider">Pitch:</label>
+            <input type="range" id="pitchSlider" min="-180" max="180" value="0" step="1">
+            <span class="val" id="pitchVal">0</span>
+        </div>
+        <div class="transform-row">
+            <label class="axis-label" data-slider="yawSlider">Yaw:</label>
+            <input type="range" id="yawSlider" min="-180" max="180" value="0" step="1">
+            <span class="val" id="yawVal">0</span>
+        </div>
+        <div class="transform-row">
+            <label class="axis-label" data-slider="rollSlider">Roll:</label>
+            <input type="range" id="rollSlider" min="-180" max="180" value="0" step="1">
+            <span class="val" id="rollVal">0</span>
+        </div>
+        <div class="transform-toggle">
+            <input type="checkbox" id="worldRotation">
+            <label for="worldRotation">Use World Rotation</label>
+        </div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:6px 0">
+        <div class="transform-row">
+            <label class="axis-label" data-slider="offXSlider">X:</label>
+            <input type="range" id="offXSlider" min="-2" max="2" value="0" step="0.01">
+            <span class="val" id="offXVal">0</span>
+        </div>
+        <div class="transform-row">
+            <label class="axis-label" data-slider="offYSlider">Y:</label>
+            <input type="range" id="offYSlider" min="-2" max="2" value="0" step="0.01">
+            <span class="val" id="offYVal">0</span>
+        </div>
+        <div class="transform-row">
+            <label class="axis-label" data-slider="offZSlider">Z:</label>
+            <input type="range" id="offZSlider" min="-2" max="2" value="0" step="0.01">
+            <span class="val" id="offZVal">0</span>
+        </div>
+        <div class="transform-toggle">
+            <input type="checkbox" id="worldOffset">
+            <label for="worldOffset">Use World Offset</label>
+        </div>
+        <div class="transform-toggle">
+            <input type="checkbox" id="raycastOffset">
+            <label for="raycastOffset">Use Raycast Offset</label>
+        </div>
+    </div>
+    <div class="spawn-hint">Click to place &middot; Escape to cancel &middot; Scroll to change model &middot; RMB for transform</div>
+<script>
+    var models = [];
+    var currentIndex = 0;
+    var dwellTimer = null;
+    var modelListEl = document.getElementById('modelList');
+    var modelNameEl = document.getElementById('modelName');
+
+    /* Load available models from bridge */
+    try {
+        if (typeof aapi !== 'undefined' && aapi.library && aapi.library.getModels) {
+            models = aapi.library.getModels(0, 500) || [];
+        }
+    } catch (e) {}
+
+    /* Build the visible list (show ~5 items around current) */
+    function renderList() {
+        modelListEl.innerHTML = '';
+        if (models.length === 0) return;
+
+        var visible = 7;
+        var half = Math.floor(visible / 2);
+        var start = currentIndex - half;
+
+        for (var i = 0; i < visible; i++) {
+            var idx = ((start + i) % models.length + models.length) % models.length;
+            var item = document.createElement('div');
+            item.className = 'model-item' + (idx === currentIndex ? ' active' : '');
+            item.textContent = models[idx].title || models[idx].id;
+            modelListEl.appendChild(item);
+        }
+
+        modelNameEl.textContent = models[currentIndex].title || models[currentIndex].id;
+    }
+
+    function applyModel() {
+        if (models.length === 0) return;
+        var model = models[currentIndex];
+        try {
+            if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.setSpawnModeModel) {
+                aapi.manager.setSpawnModeModel(model.id);
+            }
+        } catch (e) {}
+    }
+
+    /* Mouse wheel cycling — called from C++ via EvaluateScript */
+    window.onSpawnWheel = function(delta) {
+        console.log('[spawnMode] onSpawnWheel delta=' + delta + ' models=' + models.length);
+        if (models.length === 0) return;
+        if (delta > 0) {
+            currentIndex = (currentIndex - 1 + models.length) % models.length;
+        } else if (delta < 0) {
+            currentIndex = (currentIndex + 1) % models.length;
+        }
+        renderList();
+
+        /* Dwell timer: apply after 500ms without scrolling */
+        clearTimeout(dwellTimer);
+        dwellTimer = setTimeout(function() {
+            applyModel();
+        }, 500);
+    };
+
+    renderList();
+
+    /* Transform panel */
+    var transformPanel = document.getElementById('transformPanel');
+    var pitchSlider = document.getElementById('pitchSlider');
+    var yawSlider = document.getElementById('yawSlider');
+    var rollSlider = document.getElementById('rollSlider');
+    var pitchVal = document.getElementById('pitchVal');
+    var yawVal = document.getElementById('yawVal');
+    var rollVal = document.getElementById('rollVal');
+    var worldRotation = document.getElementById('worldRotation');
+    var offXSlider = document.getElementById('offXSlider');
+    var offYSlider = document.getElementById('offYSlider');
+    var offZSlider = document.getElementById('offZSlider');
+    var offXVal = document.getElementById('offXVal');
+    var offYVal = document.getElementById('offYVal');
+    var offZVal = document.getElementById('offZVal');
+    var worldOffset = document.getElementById('worldOffset');
+    var raycastOffset = document.getElementById('raycastOffset');
+
+    function getModelId() {
+        try {
+            if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnModelId)
+                return aapi.manager.getSpawnModelId() || '';
+        } catch (e) {}
+        return '';
+    }
+
+    function sendTransform() {
+        var p = parseInt(pitchSlider.value);
+        var y = parseInt(yawSlider.value);
+        var r = parseInt(rollSlider.value);
+        var ox = parseFloat(offXSlider.value);
+        var oy = parseFloat(offYSlider.value);
+        var oz = parseFloat(offZSlider.value);
+        pitchVal.textContent = p;
+        yawVal.textContent = y;
+        rollVal.textContent = r;
+        offXVal.textContent = ox.toFixed(2);
+        offYVal.textContent = oy.toFixed(2);
+        offZVal.textContent = oz.toFixed(2);
+        try {
+            if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.setSpawnTransform)
+                aapi.manager.setSpawnTransform(p, y, r, worldRotation.checked,
+                    ox, oy, oz, worldOffset.checked, raycastOffset.checked);
+        } catch (e) {}
+    }
+
+    function loadTransformForModel() {
+        var mid = getModelId();
+        if (!mid) return;
+        try {
+            var saved = JSON.parse(localStorage.getItem('spawnTransform_' + mid));
+            if (saved) {
+                pitchSlider.value = saved.pitch || 0;
+                yawSlider.value = saved.yaw || 0;
+                rollSlider.value = saved.roll || 0;
+                offXSlider.value = saved.offX || 0;
+                offYSlider.value = saved.offY || 0;
+                offZSlider.value = saved.offZ || 0;
+                sendTransform();
+            }
+        } catch (e) {}
+    }
+
+    function saveTransformForModel() {
+        var mid = getModelId();
+        if (!mid) return;
+        try {
+            localStorage.setItem('spawnTransform_' + mid, JSON.stringify({
+                pitch: parseInt(pitchSlider.value), yaw: parseInt(yawSlider.value), roll: parseInt(rollSlider.value),
+                offX: parseFloat(offXSlider.value), offY: parseFloat(offYSlider.value), offZ: parseFloat(offZSlider.value)
+            }));
+        } catch (e) {}
+    }
+
+    /* Attach listeners */
+    var allSliders = [pitchSlider, yawSlider, rollSlider, offXSlider, offYSlider, offZSlider];
+    for (var s = 0; s < allSliders.length; s++) allSliders[s].addEventListener('input', sendTransform);
+    worldRotation.addEventListener('change', sendTransform);
+    worldOffset.addEventListener('change', sendTransform);
+    raycastOffset.addEventListener('change', sendTransform);
+
+    /* Click label to zero the slider */
+    var axisLabels = document.querySelectorAll('.axis-label');
+    for (var al = 0; al < axisLabels.length; al++) {
+        (function(label) {
+            label.style.cursor = 'pointer';
+            label.addEventListener('click', function() {
+                var slider = document.getElementById(label.getAttribute('data-slider'));
+                if (slider) { slider.value = 0; sendTransform(); }
+            });
+        })(axisLabels[al]);
+    }
+
+    /* Load saved transform for current model */
+    loadTransformForModel();
+
+    /* Called from C++ via EvaluateScript when spawn is confirmed */
+    window.onSpawnConfirmed = function() {
+        saveTransformForModel();
+    };
+
+    /* Show/hide transform panel based on input mode */
+    window.onOverlayModeChanged = function(state) {
+        if (!state) return;
+        if (state.mode === 'input') {
+            transformPanel.classList.add('visible');
+        } else {
+            transformPanel.classList.remove('visible');
+        }
+    };
+</script>
 </body>
 </html>

@@ -45,7 +45,11 @@ struct SpawnedObject {
 
 class InstanceManager {
 public:
-    InstanceManager() : selectedObjectIndex_(-1), aimedThingIdx_(-1) {}
+    InstanceManager() : selectedObjectIndex_(-1), aimedThingIdx_(-1),
+        spawnPreviewThingIdx_(-1),
+        spawnPitch_(0), spawnYaw_(0), spawnRoll_(0), spawnRotIsWorld_(false),
+        spawnOffX_(0), spawnOffY_(0), spawnOffZ_(0), spawnOffIsWorld_(false),
+        spawnUseRaycast_(false), spawnTransformSet_(false) {}
 
     /* Map lifecycle — called by host when maps load/unload */
     void onMapLoaded();
@@ -56,6 +60,7 @@ public:
     void requestSpawn(const Arcade::Item& item);
     bool hasPendingSpawn() const;
     SpawnRequest popPendingSpawn();
+    void initSpawnedObject(int thingIdx);
     void confirmSpawn(int thingIdx);
 
     /* Selection */
@@ -102,6 +107,35 @@ public:
     bool hasPendingMove() const;
     int popPendingMove();
 
+    /* Spawn transform override (rotation + position offset) */
+    void setSpawnTransform(float pitch, float yaw, float roll, bool isWorldRot,
+                           float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset);
+    bool hasSpawnTransform() const { return spawnTransformSet_; }
+    void getSpawnTransform(float* p, float* y, float* r, bool* isWorldRot,
+                           float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast) const;
+    void clearSpawnTransform() { spawnTransformSet_ = false; }
+
+    /* Current spawn model ID (for localStorage persistence in JS) */
+    void setSpawnPreviewThingIdx(int thingIdx) { spawnPreviewThingIdx_ = thingIdx; }
+    std::string getSpawnModelId() const;
+
+    /* Update thingIdx after destroy+recreate (template swap) */
+    void updateThingIdx(int oldIdx, int newIdx);
+
+    /* Re-request images for an existing SpawnedObject */
+    void reloadImagesForThing(int thingIdx);
+
+    /* Get the template name for a spawned object by thingIdx */
+    std::string getTemplateForThing(int thingIdx) const;
+
+    /* Remove a spawned object by thingIdx (for spawn cancel cleanup) */
+    void removeSpawnedByThingIdx(int thingIdx);
+
+    /* Spawn mode model change — queues a template name for the host */
+    void requestSpawnModelChange(const std::string& modelId);
+    bool hasPendingModelChange() const;
+    std::string popPendingModelChange();
+
     /* Deactivate/manage instances */
     void deactivateInstance(const std::string& itemId);
     void deselectOnly();
@@ -126,6 +160,14 @@ private:
     std::queue<SpawnRequest> pendingSpawns_;
     std::queue<int> pendingDestroys_;
     std::queue<int> pendingMoves_;
+    std::queue<std::string> pendingModelChanges_; /* template names for spawn mode */
+    int spawnPreviewThingIdx_;
+    float spawnPitch_, spawnYaw_, spawnRoll_;
+    bool spawnRotIsWorld_;
+    float spawnOffX_, spawnOffY_, spawnOffZ_;
+    bool spawnOffIsWorld_;
+    bool spawnUseRaycast_;
+    bool spawnTransformSet_;
     SpawnRequest lastPopped_;
 
     void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);

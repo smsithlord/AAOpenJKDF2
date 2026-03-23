@@ -30,14 +30,33 @@ void aaMainMenu_Update(void)
     /* Spawn mode takes priority over all other input */
     if (AACoreManager_IsSpawnModeActive()) {
         int escDown = keys[SDL_SCANCODE_ESCAPE];
-        if (escDown && !g_escKeyWasDown)
-            AACoreManager_CancelSpawn();
+        if (escDown && !g_escKeyWasDown) {
+            if (AACoreManager_IsInputModeActive())
+                AACoreManager_ExitInputMode();
+            else
+                AACoreManager_CancelSpawn();
+        }
         g_escKeyWasDown = escDown;
 
+        /* LMB: only confirm spawn when not in input mode (avoid accidental confirm while using sliders) */
         int lmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT);
-        if (lmbDown && !g_selectWasDown)
+        if (lmbDown && !g_selectWasDown && !AACoreManager_IsInputModeActive())
             AACoreManager_ConfirmSpawn();
         g_selectWasDown = lmbDown;
+
+        /* RMB: virtual input for transform panel */
+        {
+            int rmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT);
+            if (rmbDown && !g_virtualInputWasDown) {
+                if (!AACoreManager_IsInputModeActive())
+                    AACoreManager_EnterInputMode();
+            } else if (!rmbDown && g_virtualInputWasDown) {
+                if (AACoreManager_IsInputModeActive())
+                    AACoreManager_ExitInputMode();
+            }
+            g_virtualInputWasDown = rmbDown;
+        }
+
         return; /* Skip all other AA input while in spawn mode */
     }
 
@@ -68,7 +87,8 @@ void aaMainMenu_Update(void)
     {
         int rmbDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT);
         if (rmbDown && !g_virtualInputWasDown) {
-            if (!AACoreManager_IsInputModeActive() && !AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+            if (!AACoreManager_IsInputModeActive() && !AACoreManager_IsFullscreenActive()
+                && (!AACoreManager_IsMainMenuOpen() || AACoreManager_IsSpawnModeActive()))
                 AACoreManager_EnterInputMode();
         } else if (!rmbDown && g_virtualInputWasDown) {
             if (AACoreManager_IsInputModeActive())

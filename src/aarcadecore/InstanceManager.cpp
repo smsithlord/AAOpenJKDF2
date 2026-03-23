@@ -315,10 +315,10 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
     SpawnRequest req;
     req.item = item;
     /* Find or create the default model for OpenJK */
-    std::string defaultTemplate = "dyn_videosign";
+    std::string defaultTemplate = "aaojk_movie_stand_standard";
     req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, defaultTemplate);
     if (req.modelId.empty())
-        req.modelId = g_library.createModel("Video Sign", OPENJK_PLATFORM_ID, defaultTemplate);
+        req.modelId = g_library.createModel("Movie Stand Standard", OPENJK_PLATFORM_ID, defaultTemplate);
     req.templateName = defaultTemplate;
     req.hasExplicitPosition = false;
     req.posX = req.posY = req.posZ = 0;
@@ -339,7 +339,7 @@ SpawnRequest InstanceManager::popPendingSpawn()
     return lastPopped_;
 }
 
-void InstanceManager::confirmSpawn(int thingIdx)
+void InstanceManager::initSpawnedObject(int thingIdx)
 {
     const Arcade::Item& item = lastPopped_.item;
     std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
@@ -397,10 +397,16 @@ void InstanceManager::confirmSpawn(int thingIdx)
     int newIndex = (int)objects_.size() - 1;
 
     if (g_host.host_printf)
-        g_host.host_printf("InstanceManager: Spawn confirmed - thingIdx=%d item=%s url=%s (total objects: %d)\n",
+        g_host.host_printf("InstanceManager: initSpawnedObject - thingIdx=%d item=%s url=%s (total objects: %d)\n",
                           thingIdx, obj.itemId.c_str(), obj.url.c_str(), (int)objects_.size());
+}
 
-    /* Don't auto-select or auto-activate — that will be done in "spawn mode" later */
+void InstanceManager::confirmSpawn(int thingIdx)
+{
+    /* Called when user actually confirms placement (LMB) — just logs for now.
+     * Position saving is handled by report_thing_transform from the host. */
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Spawn confirmed - thingIdx=%d\n", thingIdx);
 }
 
 /* --- Selection --- */
@@ -630,6 +636,144 @@ int InstanceManager::popPendingMove()
     int idx = pendingMoves_.front();
     pendingMoves_.pop();
     return idx;
+}
+
+void InstanceManager::setSpawnTransform(float pitch, float yaw, float roll, bool isWorldRot,
+                                         float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset)
+{
+    spawnPitch_ = pitch; spawnYaw_ = yaw; spawnRoll_ = roll; spawnRotIsWorld_ = isWorldRot;
+    spawnOffX_ = offX; spawnOffY_ = offY; spawnOffZ_ = offZ;
+    spawnOffIsWorld_ = isWorldOffset; spawnUseRaycast_ = useRaycastOffset;
+    spawnTransformSet_ = true;
+}
+
+void InstanceManager::getSpawnTransform(float* p, float* y, float* r, bool* isWorldRot,
+                                         float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast) const
+{
+    if (p) *p = spawnPitch_; if (y) *y = spawnYaw_; if (r) *r = spawnRoll_;
+    if (isWorldRot) *isWorldRot = spawnRotIsWorld_;
+    if (ox) *ox = spawnOffX_; if (oy) *oy = spawnOffY_; if (oz) *oz = spawnOffZ_;
+    if (isWorldOff) *isWorldOff = spawnOffIsWorld_;
+    if (useRaycast) *useRaycast = spawnUseRaycast_;
+}
+
+std::string InstanceManager::getSpawnModelId() const
+{
+    /* Look up by current preview thingIdx if available */
+    if (spawnPreviewThingIdx_ >= 0) {
+        for (const auto& obj : objects_) {
+            if (obj.thingIdx == spawnPreviewThingIdx_)
+                return obj.modelId;
+        }
+    }
+    return lastPopped_.modelId;
+}
+
+void InstanceManager::updateThingIdx(int oldIdx, int newIdx)
+{
+    for (auto& obj : objects_) {
+        if (obj.thingIdx == oldIdx) {
+            obj.thingIdx = newIdx;
+            /* Reset image loaded state so images reload for new thing */
+            obj.screenImageRequested = false;
+            obj.marqueeImageRequested = false;
+            obj.screenImagePath.clear();
+            obj.marqueeImagePath.clear();
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Updated thingIdx %d -> %d\n", oldIdx, newIdx);
+            return;
+        }
+    }
+}
+
+void InstanceManager::reloadImagesForThing(int thingIdx)
+{
+    int objIdx = -1;
+    for (int i = 0; i < (int)objects_.size(); i++) {
+        if (objects_[i].thingIdx == thingIdx) { objIdx = i; break; }
+    }
+    if (objIdx < 0) return;
+
+    SpawnedObject& obj = objects_[objIdx];
+    Arcade::Item item = g_library.getItemById(obj.itemId);
+    if (item.id.empty()) return;
+
+    std::string screenUrl = getBestScreenUrl(item);
+    if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
+        obj.screenImageRequested = true;
+        obj.screenImagePath.clear();
+        g_imageLoader.loadAndCacheImage(screenUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
+            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
+                objects_[objIdx].screenImagePath = result.filePath;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: Screen image ready for thingIdx=%d: %s\n",
+                                      thingIdx, result.filePath.c_str());
+            }
+        });
+    }
+
+    std::string marqueeUrl = getBestMarqueeUrl(item);
+    if (!marqueeUrl.empty() && g_imageLoader.isInitialized()) {
+        obj.marqueeImageRequested = true;
+        obj.marqueeImagePath.clear();
+        g_imageLoader.loadAndCacheImage(marqueeUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
+            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
+                objects_[objIdx].marqueeImagePath = result.filePath;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: Marquee image ready for thingIdx=%d: %s\n",
+                                      thingIdx, result.filePath.c_str());
+            }
+        });
+    }
+}
+
+std::string InstanceManager::getTemplateForThing(int thingIdx) const
+{
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx) {
+            return g_library.findModelPlatformFile(obj.modelId, OPENJK_PLATFORM_ID);
+        }
+    }
+    return "";
+}
+
+void InstanceManager::removeSpawnedByThingIdx(int thingIdx)
+{
+    for (auto it = objects_.begin(); it != objects_.end(); ++it) {
+        if (it->thingIdx == thingIdx) {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Removed spawned object for thingIdx=%d\n", thingIdx);
+            objects_.erase(it);
+            return;
+        }
+    }
+}
+
+void InstanceManager::requestSpawnModelChange(const std::string& modelId)
+{
+    /* Look up the platform file (template name) for this model */
+    std::string tmpl = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);
+    if (tmpl.empty()) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: No OpenJK template for model %s\n", modelId.c_str());
+        return;
+    }
+    /* Update lastPopped_ so confirmSpawn uses the correct model */
+    lastPopped_.modelId = modelId;
+    lastPopped_.templateName = tmpl;
+    pendingModelChanges_.push(tmpl);
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Queued model change to template '%s' (model=%s)\n",
+            tmpl.c_str(), modelId.c_str());
+}
+
+bool InstanceManager::hasPendingModelChange() const { return !pendingModelChanges_.empty(); }
+
+std::string InstanceManager::popPendingModelChange()
+{
+    std::string tmpl = pendingModelChanges_.front();
+    pendingModelChanges_.pop();
+    return tmpl;
 }
 
 const SpawnedObject* InstanceManager::getSelectedObject() const
