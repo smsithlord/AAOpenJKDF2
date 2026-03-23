@@ -18,6 +18,7 @@ struct SpawnRequest {
     int sectorId;
     float rotX, rotY, rotZ;
     float scale;
+    int slave;
     std::string objectKey; /* for restored objects */
 };
 
@@ -38,6 +39,7 @@ struct SpawnedObject {
     std::string objectKey;    /* Firebase push ID for DB storage */
     std::string url;
     float scale;              /* uniform scale factor (1.0 = normal) */
+    bool slave;               /* mirrors another instance's screen */
     int thingIdx;             /* engine sithThing index */
     std::string screenImagePath;
     std::string marqueeImagePath;
@@ -157,6 +159,9 @@ public:
     void deactivateInstance(const std::string& itemId);
     void deselectOnly();
     void rememberObject(int thingIdx);
+    void setRememberedItemId(const std::string& itemId) { rememberedItemId_ = itemId; }
+    int getSlaveTaskIndex() const;
+    bool toggleSlave(int thingIdx);
     EmbeddedInstance* getInputTarget() const;
     const EmbeddedItemInstance* getInstanceForBrowser(EmbeddedInstance* browser) const;
     std::vector<const EmbeddedItemInstance*> getActiveInstances() const;
@@ -173,6 +178,7 @@ private:
 
     std::string currentInstanceId_;
     std::string currentMapId_;
+    std::string rememberedItemId_;
 
     std::queue<SpawnRequest> pendingSpawns_;
     std::queue<int> pendingDestroys_;

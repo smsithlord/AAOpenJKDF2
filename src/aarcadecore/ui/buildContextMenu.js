@@ -17,18 +17,31 @@ function initBuildContextMenu() {
         return;
     }
 
+    var isSlave = false;
+    if (window.aapi && aapi.manager && aapi.manager.isAimedObjectSlave)
+        isSlave = aapi.manager.isAimedObjectSlave();
+
     var title = info.title || info.itemId || 'Unknown';
     content.innerHTML =
         '<div class="aa-object-title">' + arcadeHud.ui.escapeHtml(title) + '</div>' +
         '<div class="aa-object-info">' + arcadeHud.ui.escapeHtml(info.url || '') + '</div>' +
-        '<button class="aa-btn" helpText="Move this object to a new position." onclick="onMoveObject()">Move Object</button>' +
-        '<button class="aa-btn aa-btn-danger" helpText="Permanently remove this object from the instance." onclick="onDestroyObject()">Destroy Object</button>';
+        '<button class="aa-btn" onclick="onMoveObject()">Move Object</button>' +
+        '<button class="aa-btn" id="mirrorBtn" onclick="onToggleMirror()">' + (isSlave ? 'Disable Mirror' : 'Enable Mirror') + '</button>' +
+        '<button class="aa-btn aa-btn-danger" onclick="onDestroyObject()">Destroy Object</button>';
 }
 
 function onMoveObject() {
     if (window.aapi && aapi.manager) {
         aapi.manager.moveAimedObject();
         aapi.manager.closeMenu();
+    }
+}
+
+function onToggleMirror() {
+    if (window.aapi && aapi.manager && aapi.manager.toggleSlaveAimedObject) {
+        var newState = aapi.manager.toggleSlaveAimedObject();
+        var btn = document.getElementById('mirrorBtn');
+        if (btn) btn.textContent = newState ? 'Disable Mirror' : 'Enable Mirror';
     }
 }
 

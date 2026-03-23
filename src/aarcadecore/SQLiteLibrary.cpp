@@ -668,7 +668,7 @@ std::vector<Arcade::InstanceObject> SQLiteLibrary::getInstanceObjects(const std:
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT instance_id, object_key, item, model, position, rotation, scale FROM instance_objects WHERE instance_id = ?";
+    const char* sql = "SELECT instance_id, object_key, item, model, position, rotation, scale, slave FROM instance_objects WHERE instance_id = ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
     sqlite3_bind_text(stmt, 1, instanceId.c_str(), -1, SQLITE_TRANSIENT);
 
@@ -681,6 +681,7 @@ std::vector<Arcade::InstanceObject> SQLiteLibrary::getInstanceObjects(const std:
         obj.position    = getStr(stmt, 4);
         obj.rotation    = getStr(stmt, 5);
         obj.scale       = (float)sqlite3_column_double(stmt, 6);
+        obj.slave       = sqlite3_column_int(stmt, 7);
         results.push_back(std::move(obj));
     }
     sqlite3_finalize(stmt);
@@ -692,7 +693,7 @@ void SQLiteLibrary::saveInstanceObject(const Arcade::InstanceObject& obj)
     if (!db_) return;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "INSERT OR REPLACE INTO instance_objects (instance_id, object_key, item, model, position, rotation, scale) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    const char* sql = "INSERT OR REPLACE INTO instance_objects (instance_id, object_key, item, model, position, rotation, scale, slave) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
     sqlite3_bind_text(stmt, 1, obj.instance_id.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, obj.object_key.c_str(), -1, SQLITE_TRANSIENT);
@@ -701,6 +702,7 @@ void SQLiteLibrary::saveInstanceObject(const Arcade::InstanceObject& obj)
     sqlite3_bind_text(stmt, 5, obj.position.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 6, obj.rotation.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(stmt, 7, obj.scale);
+    sqlite3_bind_int(stmt, 8, obj.slave);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 }

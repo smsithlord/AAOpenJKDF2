@@ -69,6 +69,7 @@ struct InstanceObject {
     std::string position;  /* "X Y Z" space-separated */
     std::string rotation;  /* "Pitch Yaw Roll" space-separated */
     float scale = 1.0f;
+    int slave = 0;
 };
 
 } // namespace Arcade

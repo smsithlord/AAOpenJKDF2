@@ -330,6 +330,7 @@ void InstanceManager::onMapLoaded()
             req.sectorId = sector;
             req.rotX = rx; req.rotY = ry; req.rotZ = rz;
             req.scale = obj.scale;
+            req.slave = obj.slave;
 
             pendingSpawns_.push(req);
         }
@@ -380,6 +381,7 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
     req.sectorId = -1;
     req.rotX = req.rotY = req.rotZ = 0;
     req.scale = 1.0f;
+    req.slave = 0;
     pendingSpawns_.push(req);
 }
 
@@ -406,6 +408,7 @@ void InstanceManager::requestSpawn(const Arcade::Item& item, const std::string& 
     req.sectorId = -1;
     req.rotX = req.rotY = req.rotZ = 0;
     req.scale = scale;
+    req.slave = 0;
     pendingSpawns_.push(req);
 }
 
@@ -433,6 +436,7 @@ void InstanceManager::initSpawnedObject(int thingIdx)
     obj.objectKey = lastPopped_.objectKey.empty() ? Arcade::generateFirebasePushId() : lastPopped_.objectKey;
     obj.url = resolvedUrl;
     obj.scale = lastPopped_.scale;
+    obj.slave = lastPopped_.slave != 0;
     obj.thingIdx = thingIdx;
     obj.screenImageRequested = false;
     obj.marqueeImageRequested = false;
@@ -1018,6 +1022,7 @@ void InstanceManager::reportThingTransform(int thingIdx, float px, float py, flo
             dbObj.position = posBuf;
             dbObj.rotation = rotBuf;
             dbObj.scale = obj.scale;
+            dbObj.slave = obj.slave ? 1 : 0;
 
             g_library.saveInstanceObject(dbObj);
 
@@ -1110,6 +1115,8 @@ void InstanceManager::rememberObject(int thingIdx)
     std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
     ensureItemInstance(item, resolvedUrl);
 
+    rememberedItemId_ = obj.itemId;
+
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: rememberObject — activated instance for thingIdx=%d (item=%s) without selecting\n",
                           thingIdx, obj.itemId.c_str());
@@ -1176,14 +1183,55 @@ std::string InstanceManager::getMarqueeImagePath(int thingIdx) const
     return "";
 }
 
+bool InstanceManager::toggleSlave(int thingIdx)
+{
+    for (auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx) {
+            obj.slave = !obj.slave;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: toggleSlave thingIdx=%d → slave=%d\n", thingIdx, obj.slave ? 1 : 0);
+            return obj.slave;
+        }
+    }
+    return false;
+}
+
+int InstanceManager::getSlaveTaskIndex() const
+{
+    /* Priority 1: selected object's instance */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        const SpawnedObject& sel = objects_[selectedObjectIndex_];
+        const EmbeddedItemInstance* inst = getItemInstance(sel.itemId);
+        if (inst && inst->active && inst->taskIndex >= 0) return inst->taskIndex;
+    }
+
+    /* Priority 2: remembered instance */
+    if (!rememberedItemId_.empty()) {
+        const EmbeddedItemInstance* inst = getItemInstance(rememberedItemId_);
+        if (inst && inst->active && inst->taskIndex >= 0) return inst->taskIndex;
+    }
+
+    /* Priority 3: first active instance */
+    for (const auto& pair : itemInstances_) {
+        if (pair.second.active && pair.second.taskIndex >= 0)
+            return pair.second.taskIndex;
+    }
+
+    return -1;
+}
+
 int InstanceManager::getTaskIndexForThing(int thingIdx) const
 {
     /* Find the object with this thingIdx */
     for (const auto& obj : objects_) {
         if (obj.thingIdx == thingIdx) {
-            /* Find its item instance */
+            /* Check own item instance first (highest priority even for slaves) */
             const EmbeddedItemInstance* inst = getItemInstance(obj.itemId);
             if (inst && inst->active) return inst->taskIndex;
+
+            /* If slave and no own instance, mirror another */
+            if (obj.slave) return getSlaveTaskIndex();
+
             return -1;
         }
     }

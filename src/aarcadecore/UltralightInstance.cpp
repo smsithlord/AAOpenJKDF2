@@ -322,6 +322,19 @@ AAPI_CALLBACK(js_manager_destroyAimedObject) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+AAPI_CALLBACK(js_manager_toggleSlaveAimedObject) {
+    const SpawnedObject* obj = g_instanceManager.getAimedObject();
+    if (!obj) return JSValueMakeBoolean(ctx, false);
+    bool newState = g_instanceManager.toggleSlave(obj->thingIdx);
+    return JSValueMakeBoolean(ctx, newState);
+}
+
+AAPI_CALLBACK(js_manager_isAimedObjectSlave) {
+    const SpawnedObject* obj = g_instanceManager.getAimedObject();
+    if (!obj) return JSValueMakeBoolean(ctx, false);
+    return JSValueMakeBoolean(ctx, obj->slave);
+}
+
 AAPI_CALLBACK(js_manager_importDefaultLibrary) {
     int created = g_instanceManager.importDefaultLibrary();
     /* Return { created: N, total: 3 } */
@@ -879,6 +892,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openTabMenu", js_manager_openTabMenu);
     addJSMethod(ctx, managerObj, "getRequestedTab", js_manager_getRequestedTab);
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
+    addJSMethod(ctx, managerObj, "toggleSlaveAimedObject", js_manager_toggleSlaveAimedObject);
+    addJSMethod(ctx, managerObj, "isAimedObjectSlave", js_manager_isAimedObjectSlave);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
     addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
     addJSMethod(ctx, managerObj, "getAllLibretroCores", js_manager_getAllLibretroCores);
