@@ -307,6 +307,19 @@ AAPI_CALLBACK(js_manager_destroyAimedObject) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+AAPI_CALLBACK(js_manager_importDefaultLibrary) {
+    int created = g_instanceManager.importDefaultLibrary();
+    /* Return { created: N, total: 3 } */
+    JSObjectRef result = JSObjectMake(ctx, nullptr, nullptr);
+    JSStringRef createdKey = JSStringCreateWithUTF8CString("created");
+    JSStringRef totalKey = JSStringCreateWithUTF8CString("total");
+    JSObjectSetProperty(ctx, result, createdKey, JSValueMakeNumber(ctx, created), 0, nullptr);
+    JSObjectSetProperty(ctx, result, totalKey, JSValueMakeNumber(ctx, 3), 0, nullptr);
+    JSStringRelease(createdKey);
+    JSStringRelease(totalKey);
+    return result;
+}
+
 void UltralightManager_OpenTabMenu(void);
 int UltralightManager_ConsumeRequestedTab(void);
 AAPI_CALLBACK(js_manager_openTabMenu) {
@@ -697,6 +710,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openTabMenu", js_manager_openTabMenu);
     addJSMethod(ctx, managerObj, "getRequestedTab", js_manager_getRequestedTab);
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
+    addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);

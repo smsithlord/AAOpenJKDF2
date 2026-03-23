@@ -1,7 +1,10 @@
 #include "aarcadecore_internal.h"
+#include "InstanceManager.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+extern InstanceManager g_instanceManager;
 
 /* Forward declarations */
 void UltralightManager_UpdateHudPixelBuffer(void);
@@ -99,6 +102,7 @@ EmbeddedInstance* UltralightManager_GetActive(void)
 void UltralightManager_OpenMainMenu(void)
 {
     if (g_mainMenuOpen || !g_hudInstance) return;
+    g_instanceManager.deselectOnly();
 
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening main menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_MAINMENU_HTML);
@@ -127,6 +131,7 @@ void UltralightManager_ToggleMainMenu(void)
 void UltralightManager_OpenLibraryBrowser(void)
 {
     if (!g_hudInstance) return;
+    g_instanceManager.deselectOnly();
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening library browser\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_LIBRARY_HTML);
     g_mainMenuOpen = true;
@@ -136,6 +141,7 @@ void UltralightManager_OpenLibraryBrowser(void)
 void UltralightManager_OpenTaskMenu(void)
 {
     if (!g_hudInstance) return;
+    g_instanceManager.deselectOnly();
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening task menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TASKMENU_HTML);
     g_mainMenuOpen = true;
@@ -145,6 +151,7 @@ void UltralightManager_OpenTaskMenu(void)
 void UltralightManager_OpenBuildContextMenu(void)
 {
     if (!g_hudInstance) return;
+    g_instanceManager.deselectOnly();
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening build context menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_BUILDMENU_HTML);
     g_mainMenuOpen = true;
@@ -154,6 +161,7 @@ void UltralightManager_OpenBuildContextMenu(void)
 void UltralightManager_OpenTabMenu(void)
 {
     if (!g_hudInstance) return;
+    g_instanceManager.deselectOnly();
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening tab menu\n");
     UltralightInstance_LoadURL(g_hudInstance, UL_TABMENU_HTML);
     g_mainMenuOpen = true;

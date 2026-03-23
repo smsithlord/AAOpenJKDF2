@@ -131,6 +131,9 @@ public:
     /* Remove a spawned object by thingIdx (for spawn cancel cleanup) */
     void removeSpawnedByThingIdx(int thingIdx);
 
+    /* Import default model entries into the library */
+    int importDefaultLibrary();
+
     /* Spawn mode model change — queues a template name for the host */
     void requestSpawnModelChange(const std::string& modelId);
     bool hasPendingModelChange() const;

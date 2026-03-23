@@ -749,6 +749,29 @@ void InstanceManager::removeSpawnedByThingIdx(int thingIdx)
     }
 }
 
+int InstanceManager::importDefaultLibrary()
+{
+    struct { const char* tmpl; const char* title; } defaults[] = {
+        { "aaojk_movie_stand_standard", "Movie Stand Standard" },
+        { "aaojk_movie_display_wallmount", "Movie Display Wallmount" },
+        { "dyn_videosign", "Video Sign" },
+    };
+    int created = 0;
+    for (auto& d : defaults) {
+        std::string existing = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, d.tmpl);
+        if (existing.empty()) {
+            g_library.createModel(d.title, OPENJK_PLATFORM_ID, d.tmpl);
+            created++;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Created default model '%s' (%s)\n", d.title, d.tmpl);
+        }
+    }
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: importDefaultLibrary created %d of %d models\n",
+            created, (int)(sizeof(defaults) / sizeof(defaults[0])));
+    return created;
+}
+
 void InstanceManager::requestSpawnModelChange(const std::string& modelId)
 {
     /* Look up the platform file (template name) for this model */

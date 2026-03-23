@@ -587,9 +587,22 @@ static sithThing* aacore_spawn_at_player_aim(void)
 
     /* Raycast forward from player */
     sithCollision_SearchRadiusForThings(player->sector, player, &player->position,
-                                        &lookDir, 10.0f, 0.0f, 0x1);
+                                        &lookDir, 10.0f, 0.0f, 0);
     sithCollisionSearchEntry* searchResult = sithCollision_NextSearchResult();
-    if (!searchResult || !searchResult->surface) {
+    sithSector* spawnRaySector = player->sector;
+    /* Track sector through adjoins to find first solid hit */
+    while (searchResult) {
+        if (searchResult->hitType & SITHCOLLISION_ADJOINCROSS) {
+            if (searchResult->surface && searchResult->surface->adjoin)
+                spawnRaySector = searchResult->surface->adjoin->sector;
+            searchResult = sithCollision_NextSearchResult();
+            continue;
+        }
+        if (searchResult->surface || (searchResult->hitType & SITHCOLLISION_THING))
+            break;
+        searchResult = sithCollision_NextSearchResult();
+    }
+    if (!searchResult) {
         sithCollision_SearchClose();
         stdPlatform_Printf("AACoreManager: No surface hit for spawn\n");
         return NULL;
@@ -598,7 +611,7 @@ static sithThing* aacore_spawn_at_player_aim(void)
     rdVector3 hitPos, hitNorm;
     hitNorm = searchResult->hitNorm;
     float dist = searchResult->distance;
-    sithSector* hitSector = searchResult->surface->parent_sector;
+    sithSector* hitSector = spawnRaySector;
     sithCollision_SearchClose();
 
     /* Hit position = player + lookDir * distance */
@@ -704,22 +717,27 @@ void AACoreManager_Update(void)
             rdVector3 lookDir = aimMatrix.lvec;
 
             sithCollision_SearchRadiusForThings(player->sector, player,
-                &player->position, &lookDir, 50.0f, 0.0f, 0);
+                &player->position, &lookDir, 50.0f, 0.025f, 0);
+                /* 0.025f radius = sphere sweep for easier selection; 0.0f would be pixel-accurate */
             sithCollisionSearchEntry* hit = sithCollision_NextSearchResult();
+            sithSector* raySector = player->sector;
             while (hit) {
-                /* Skip adjoin surfaces (portals between sectors) */
+                /* Track sector as ray traverses adjoins */
                 if (hit->hitType & SITHCOLLISION_ADJOINCROSS) {
+                    if (hit->surface && hit->surface->adjoin)
+                        raySector = hit->surface->adjoin->sector;
                     hit = sithCollision_NextSearchResult();
                     continue;
                 }
-                /* Store first solid surface hit for spawn mode */
-                if (!g_selectorRayHasHit && hit->surface) {
+                /* Store first solid hit for spawn mode (world surface or thing) */
+                if (!g_selectorRayHasHit &&
+                    (hit->surface || ((hit->hitType & SITHCOLLISION_THING) && hit->receiver))) {
                     g_selectorRayHasHit = 1;
                     g_selectorRayHitNorm = hit->hitNorm;
                     g_selectorRayHitPos.x = player->position.x + lookDir.x * hit->distance;
                     g_selectorRayHitPos.y = player->position.y + lookDir.y * hit->distance;
                     g_selectorRayHitPos.z = player->position.z + lookDir.z * hit->distance;
-                    g_selectorRayHitSector = hit->surface->parent_sector;
+                    g_selectorRayHitSector = raySector;
                 }
                 /* Check for tracked AArcade things */
                 if ((hit->hitType & SITHCOLLISION_THING) && hit->receiver && g_thingTaskCount > 0) {
@@ -777,26 +795,39 @@ void AACoreManager_Update(void)
         sithThing* player = sithPlayer_pLocalPlayerThing;
         sithThing* preview = (sithThing*)g_spawnPreviewThing;
         if (player) {
-            /* Build orientation: up = surface normal, facing outward (away from player) */
-            rdVector3 uvec = g_selectorRayHitNorm;
-            rdVector3 toPlayer;
-            rdVector_Sub3(&toPlayer, &g_selectorRayHitPos, &player->position);
-            float dot = rdVector_Dot3(&toPlayer, &uvec);
-            toPlayer.x -= dot * uvec.x;
-            toPlayer.y -= dot * uvec.y;
-            toPlayer.z -= dot * uvec.z;
-            rdVector_Normalize3Acc(&toPlayer);
-
-            rdVector3 lvec, rvec;
-            if (rdVector_Len3(&toPlayer) < 0.001f) {
-                lvec.x = 1.0f; lvec.y = 0.0f; lvec.z = 0.0f;
+            /* Build orientation from surface normal */
+            rdVector3 uvec, lvec, rvec;
+            if (fabsf(g_selectorRayHitNorm.z) < 0.1f) {
+                /* Vertical wall: upright with yaw facing outward from wall */
+                uvec.x = 0.0f; uvec.y = 0.0f; uvec.z = 1.0f;
+                lvec.x = -g_selectorRayHitNorm.x;
+                lvec.y = -g_selectorRayHitNorm.y;
+                lvec.z = -g_selectorRayHitNorm.z;
+                rdVector_Cross3(&rvec, &lvec, &uvec);
+                rdVector_Normalize3Acc(&rvec);
+                rdVector_Cross3(&lvec, &uvec, &rvec);
+                rdVector_Normalize3Acc(&lvec);
             } else {
-                lvec = toPlayer;
+                /* Non-vertical: up = surface normal, facing away from player */
+                uvec = g_selectorRayHitNorm;
+                rdVector3 toPlayer;
+                rdVector_Sub3(&toPlayer, &g_selectorRayHitPos, &player->position);
+                float dot = rdVector_Dot3(&toPlayer, &uvec);
+                toPlayer.x -= dot * uvec.x;
+                toPlayer.y -= dot * uvec.y;
+                toPlayer.z -= dot * uvec.z;
+                rdVector_Normalize3Acc(&toPlayer);
+
+                if (rdVector_Len3(&toPlayer) < 0.001f) {
+                    lvec.x = 1.0f; lvec.y = 0.0f; lvec.z = 0.0f;
+                } else {
+                    lvec = toPlayer;
+                }
+                rdVector_Cross3(&rvec, &lvec, &uvec);
+                rdVector_Normalize3Acc(&rvec);
+                rdVector_Cross3(&lvec, &uvec, &rvec);
+                rdVector_Normalize3Acc(&lvec);
             }
-            rdVector_Cross3(&rvec, &lvec, &uvec);
-            rdVector_Normalize3Acc(&rvec);
-            rdVector_Cross3(&lvec, &uvec, &rvec);
-            rdVector_Normalize3Acc(&lvec);
 
             rdMatrix34 orient;
             orient.rvec = rvec;
@@ -836,22 +867,27 @@ void AACoreManager_Update(void)
                         if (rayLen > 0.001f) {
                             rdVector_Normalize3Acc(&rayDir);
                             sithCollision_SearchRadiusForThings(player->sector, player,
-                                &player->position, &rayDir, rayLen + 0.1f, 0.0f, 0x1);
+                                &player->position, &rayDir, rayLen + 0.1f, 0.0f, 0);
                             sithCollisionSearchEntry* hit2 = sithCollision_NextSearchResult();
                             int foundHit = 0;
+                            rdVector3 secHitNorm = {0};
+                            sithSector* raySector2 = player->sector;
                             while (hit2) {
+                                /* Track sector as ray traverses adjoins */
                                 if (hit2->hitType & SITHCOLLISION_ADJOINCROSS) {
+                                    if (hit2->surface && hit2->surface->adjoin)
+                                        raySector2 = hit2->surface->adjoin->sector;
                                     hit2 = sithCollision_NextSearchResult();
                                     continue;
                                 }
-                                /* Hit a solid surface before reaching target */
+                                /* Hit a solid surface or thing before reaching target */
                                 if (hit2->distance < rayLen) {
                                     hitPos.x = player->position.x + rayDir.x * hit2->distance;
                                     hitPos.y = player->position.y + rayDir.y * hit2->distance;
                                     hitPos.z = player->position.z + rayDir.z * hit2->distance;
                                 }
-                                if (hit2->surface && hit2->surface->parent_sector)
-                                    finalSector = hit2->surface->parent_sector;
+                                finalSector = raySector2;
+                                secHitNorm = hit2->hitNorm;
                                 foundHit = 1;
                                 break;
                             }
@@ -859,6 +895,40 @@ void AACoreManager_Update(void)
                             if (!foundHit && sithWorld_pCurrentWorld) {
                                 sithSector* found = sithSector_sub_4F8D00(sithWorld_pCurrentWorld, &hitPos);
                                 if (found) finalSector = found;
+                            }
+                            /* Rebuild orientation from secondary hit normal */
+                            if (foundHit) {
+                                if (fabsf(secHitNorm.z) < 0.1f) {
+                                    /* Vertical wall */
+                                    orient.uvec.x = 0.0f; orient.uvec.y = 0.0f; orient.uvec.z = 1.0f;
+                                    orient.lvec.x = -secHitNorm.x;
+                                    orient.lvec.y = -secHitNorm.y;
+                                    orient.lvec.z = -secHitNorm.z;
+                                    rdVector_Cross3(&orient.rvec, &orient.lvec, &orient.uvec);
+                                    rdVector_Normalize3Acc(&orient.rvec);
+                                    rdVector_Cross3(&orient.lvec, &orient.uvec, &orient.rvec);
+                                    rdVector_Normalize3Acc(&orient.lvec);
+                                } else {
+                                    /* Non-vertical: up = hit normal, face away from player */
+                                    orient.uvec = secHitNorm;
+                                    rdVector3 toP;
+                                    rdVector_Sub3(&toP, &hitPos, &player->position);
+                                    float d2 = rdVector_Dot3(&toP, &orient.uvec);
+                                    toP.x -= d2 * orient.uvec.x;
+                                    toP.y -= d2 * orient.uvec.y;
+                                    toP.z -= d2 * orient.uvec.z;
+                                    rdVector_Normalize3Acc(&toP);
+                                    if (rdVector_Len3(&toP) < 0.001f) {
+                                        orient.lvec.x = 1.0f; orient.lvec.y = 0.0f; orient.lvec.z = 0.0f;
+                                    } else {
+                                        orient.lvec = toP;
+                                    }
+                                    rdVector_Cross3(&orient.rvec, &orient.lvec, &orient.uvec);
+                                    rdVector_Normalize3Acc(&orient.rvec);
+                                    rdVector_Cross3(&orient.lvec, &orient.uvec, &orient.rvec);
+                                    rdVector_Normalize3Acc(&orient.lvec);
+                                }
+                                rdVector_Zero3(&orient.scale);
                             }
                         }
                     } else {
@@ -1355,37 +1425,49 @@ void AACoreManager_CancelSpawn(void)
     int thingIdx = g_spawnPreviewThingIdx;
 
     if (g_spawnModeIsMove) {
-        /* Move mode: always destroy+recreate with original template at original position */
         if (g_spawnPreviewThing && g_moveOrigTemplate[0]) {
             sithThing* thing = (sithThing*)g_spawnPreviewThing;
 
-            /* Unregister old thing */
-            for (int i = 0; i < g_thingTaskCount; i++) {
-                if (g_thingTaskMap[i].thingIdx == thingIdx) {
-                    if (g_thingTaskMap[i].glTexture) glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
-                    if (g_thingTaskMap[i].marqueeGlTexture) glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
-                    for (int j = i; j < g_thingTaskCount - 1; j++)
-                        g_thingTaskMap[j] = g_thingTaskMap[j + 1];
-                    g_thingTaskCount--;
-                    break;
-                }
-            }
-            if (thing->type != SITH_THING_FREE)
-                sithThing_Destroy(thing);
+            /* Check if model changed during move */
+            const char* curTemplate = g_fn_get_template_for_thing
+                ? g_fn_get_template_for_thing(thingIdx) : NULL;
+            int templateChanged = !curTemplate || strcmp(curTemplate, g_moveOrigTemplate) != 0;
 
-            /* Recreate with original template at original position */
-            sithThing* tmpl = aacore_get_spawn_template_by_name(g_moveOrigTemplate);
-            if (tmpl) {
-                sithThing* restored = sithThing_Create(tmpl, &g_moveOrigPos, &g_moveOrigOrient, g_moveOrigSector, NULL);
-                if (restored) {
-                    AACoreManager_RegisterThingTask(restored, restored->thingIdx, 0);
-                    restored->collide = g_spawnOrigCollide;
-                    if (g_fn_update_thing_idx)
-                        g_fn_update_thing_idx(thingIdx, restored->thingIdx);
-                    if (g_fn_reload_thing_images)
-                        g_fn_reload_thing_images(restored->thingIdx);
-                    stdPlatform_Printf("AACoreManager: Restored to '%s' (thingIdx=%d)\n",
-                        g_moveOrigTemplate, restored->thingIdx);
+            if (!templateChanged) {
+                /* Same model: just restore position/orientation/sector */
+                sithThing_SetPosAndRot(thing, &g_moveOrigPos, &g_moveOrigOrient);
+                if (g_moveOrigSector && thing->sector != g_moveOrigSector)
+                    sithThing_MoveToSector(thing, g_moveOrigSector, 0);
+                thing->collide = g_spawnOrigCollide;
+                stdPlatform_Printf("AACoreManager: Move cancelled, position restored (thingIdx=%d)\n", thingIdx);
+            } else {
+                /* Model changed: destroy+recreate with original template */
+                for (int i = 0; i < g_thingTaskCount; i++) {
+                    if (g_thingTaskMap[i].thingIdx == thingIdx) {
+                        if (g_thingTaskMap[i].glTexture) glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+                        if (g_thingTaskMap[i].marqueeGlTexture) glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+                        for (int j = i; j < g_thingTaskCount - 1; j++)
+                            g_thingTaskMap[j] = g_thingTaskMap[j + 1];
+                        g_thingTaskCount--;
+                        break;
+                    }
+                }
+                if (thing->type != SITH_THING_FREE)
+                    sithThing_Destroy(thing);
+
+                sithThing* tmpl = aacore_get_spawn_template_by_name(g_moveOrigTemplate);
+                if (tmpl) {
+                    sithThing* restored = sithThing_Create(tmpl, &g_moveOrigPos, &g_moveOrigOrient, g_moveOrigSector, NULL);
+                    if (restored) {
+                        AACoreManager_RegisterThingTask(restored, restored->thingIdx, 0);
+                        restored->collide = g_spawnOrigCollide;
+                        if (g_fn_update_thing_idx)
+                            g_fn_update_thing_idx(thingIdx, restored->thingIdx);
+                        if (g_fn_reload_thing_images)
+                            g_fn_reload_thing_images(restored->thingIdx);
+                        stdPlatform_Printf("AACoreManager: Restored to '%s' (thingIdx=%d)\n",
+                            g_moveOrigTemplate, restored->thingIdx);
+                    }
                 }
             }
         }

@@ -12,6 +12,7 @@ function initMainMenu() {
         '<button class="aa-btn" helpText="Browse and spawn items from the media library." onclick="onLibraryBrowser()">Library Browser</button>' +
         '<button class="aa-btn" helpText="View and manage active embedded instances." onclick="onTaskMenu()">Task Menu</button>' +
         '<button class="aa-btn" helpText="Start a test Libretro emulator instance." onclick="onTestLibretro()">Test Libretro</button>' +
+        '<button class="aa-btn" helpText="Configure settings and import library data." onclick="onOptions()">Options</button>' +
         '<button class="aa-btn" helpText="Open the engine\'s built-in main menu." onclick="onEngineMenu()">Engine Main Menu</button>';
 }
 
@@ -29,6 +30,10 @@ function onTaskMenu() {
 
 function onTestLibretro() {
     if (window.aapi && aapi.manager) aapi.manager.startLibretro();
+}
+
+function onOptions() {
+    window.location.href = 'file:///aarcadecore/ui/options.html';
 }
 
 function onEngineMenu() {
