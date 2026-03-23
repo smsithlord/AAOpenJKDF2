@@ -34,6 +34,17 @@ function initOptions() {
         content.appendChild(status);
     }
 
+    function onEmbeddedTab(content) {
+        content.innerHTML = '';
+        var btn = document.createElement('button');
+        btn.className = 'aa-btn';
+        btn.textContent = 'Libretro Config';
+        btn.addEventListener('click', function() {
+            window.location.href = 'file:///aarcadecore/ui/libretroConfig.html';
+        });
+        content.appendChild(btn);
+    }
+
     arcadeHud.ui.createWindow({
         title: 'Options',
         showBack: true,
@@ -42,7 +53,8 @@ function initOptions() {
         onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); },
         tabs: [
             { label: 'General', onActivate: onGeneralTab },
-            { label: 'Import', onActivate: onImportTab }
+            { label: 'Import', onActivate: onImportTab },
+            { label: 'Embedded', onActivate: onEmbeddedTab }
         ]
     });
 }
