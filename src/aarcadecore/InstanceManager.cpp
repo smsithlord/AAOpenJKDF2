@@ -762,6 +762,15 @@ void InstanceManager::requestSpawnModelChange(const std::string& modelId)
     lastPopped_.modelId = modelId;
     lastPopped_.templateName = tmpl;
     pendingModelChanges_.push(tmpl);
+
+    /* Also update the actual SpawnedObject in objects_ so reportThingTransform saves the new model */
+    int previewIdx = spawnPreviewThingIdx_;
+    for (auto& obj : objects_) {
+        if (obj.thingIdx == previewIdx) {
+            obj.modelId = modelId;
+            break;
+        }
+    }
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: Queued model change to template '%s' (model=%s)\n",
             tmpl.c_str(), modelId.c_str());

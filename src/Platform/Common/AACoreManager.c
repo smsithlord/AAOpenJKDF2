@@ -1221,6 +1221,40 @@ void AACoreManager_OnMapLoaded(void)
 
 void AACoreManager_OnMapUnloaded(void)
 {
+    /* Clean up per-thing GL textures and reset task map */
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].glTexture)
+            glDeleteTextures(1, &g_thingTaskMap[i].glTexture);
+        if (g_thingTaskMap[i].marqueeGlTexture)
+            glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
+    }
+    memset(g_thingTaskMap, 0, sizeof(g_thingTaskMap));
+    g_thingTaskCount = 0;
+
+    /* Reset selector ray */
+    g_aimedAtThingIdx = -1;
+    g_selectorRayHasHit = 0;
+    g_selectorRayHitSector = NULL;
+
+    /* Reset spawn/move mode */
+    g_spawnModeActive = 0;
+    g_spawnPreviewThingIdx = -1;
+    g_spawnPreviewThing = NULL;
+    g_spawnOrigCollide = 0;
+    g_spawnModeIsMove = 0;
+    g_moveOrigSector = NULL;
+    g_moveOrigTemplate[0] = '\0';
+
+    /* Invalidate cached material pointers (freed with the map) */
+    g_dynscreenMaterial = NULL;
+    g_dynmarqueeMaterial = NULL;
+    g_origMarqueeTextures = NULL;
+    g_origMarqueeAlphaTexId = -1;
+    g_origMarqueeOpaqueTexId = -1;
+    g_originalTextures = NULL;
+    g_origAlphaTexId = -1;
+    g_origOpaqueTexId = -1;
+
     if (g_fn_on_map_unloaded) g_fn_on_map_unloaded();
 }
 
