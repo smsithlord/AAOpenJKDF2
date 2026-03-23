@@ -124,6 +124,35 @@ Library Browser (JS) → aapi.manager.spawnItemObject(itemId)
     → Mouse wheel: cycle models (destroy+recreate thing)
     → RMB: transform panel (PYR + XYZ sliders)
   → LMB: confirmSpawn + report_thing_transform (saves to SQLite)
+  → Model remembered in localStorage for next spawn
+```
+
+### Action commands (weapon slot hotkeys)
+```
+sithWeapon.c → AACoreManager_OnWeaponSlotPressed(slot)
+  → g_fn_action_command("ObjectMove" | "ObjectRemove" | "ObjectClone" | "TaskClose")
+  → aarcadecore.cpp dispatches to InstanceManager methods
+  → Returns true to swallow the weapon switch keypress
+Slot mapping: 0=TaskClose, 2=ObjectRemove, 3=ObjectClone, 4=ObjectMove
+```
+
+### Uniform scale
+```
+Per-object scale stored in SpawnedObject.scale and instance_objects.scale (SQLite).
+PreRenderThing: scales lookOrientation axes by object scale factor.
+PostRenderThing: restores by 1/scale.
+Live preview during spawn/move mode via spawnScale_ in spawn transform.
+Clone copies source object's scale. Scale slider in spawnMode.html (0.1–10x).
+```
+
+### Remembered model (localStorage)
+```
+On spawn confirm: spawnMode.html saves model ID to localStorage:
+  - lastSpawnModelId (global)
+  - lastSpawnModelId_ITEMID (per-item)
+On new spawn: InstanceManager.requestSpawn reads localStorage via
+  UltralightManager_EvalLocalStorage → EvaluateScript on HUD view.
+  Uses remembered model instead of default template.
 ```
 
 ### Rendering per-thing content
@@ -162,6 +191,7 @@ SDL events → Window.c
 | Ultralight HUD | `src/aarcadecore/UltralightManager.cpp`, `UltralightInstance.cpp` |
 | SWB | `src/aarcadecore/SteamworksWebBrowserInstance.cpp` |
 | Libretro | `src/aarcadecore/LibretroInstance.cpp` |
+| Libretro core config | `src/aarcadecore/LibretroCoreConfig.cpp/.h` |
 | SQLite | `src/aarcadecore/SQLiteLibrary.cpp/.h` |
 | Image cache | `src/aarcadecore/ImageLoader.cpp/.h` |
 | UI pages | `src/aarcadecore/ui/*.html/*.js/*.css` |

@@ -125,6 +125,7 @@ AAPI_CALLBACK(js_manager_openMainMenu) {
 
 #include "InstanceManager.h"
 #include "SQLiteLibrary.h"
+#include "LibretroCoreConfig.h"
 extern InstanceManager g_instanceManager;
 extern SQLiteLibrary g_library;
 
@@ -241,6 +242,19 @@ AAPI_CALLBACK(js_manager_getSpawnModelId) {
     return v;
 }
 
+AAPI_CALLBACK(js_manager_getInitialSpawnScale) {
+    return JSValueMakeNumber(ctx, g_instanceManager.getInitialSpawnScale());
+}
+
+AAPI_CALLBACK(js_manager_getSpawnItemId) {
+    std::string id = g_instanceManager.getSpawnItemId();
+    if (id.empty()) return JSValueMakeNull(ctx);
+    JSStringRef s = JSStringCreateWithUTF8CString(id.c_str());
+    JSValueRef v = JSValueMakeString(ctx, s);
+    JSStringRelease(s);
+    return v;
+}
+
 AAPI_CALLBACK(js_manager_setSpawnModeModel) {
     if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
     std::string modelId = jsValueToString(ctx, arguments[0]);
@@ -336,6 +350,76 @@ AAPI_CALLBACK(js_manager_mergeLibrary) {
     JSObjectSetProperty(ctx, result, k, JSValueMakeString(ctx, v), 0, nullptr);
     JSStringRelease(v); JSStringRelease(k);
     return result;
+}
+
+/* Libretro core config JS bridge */
+AAPI_CALLBACK(js_manager_getAllLibretroCores) {
+    g_coreConfigMgr.scanCores();
+    std::string json = g_coreConfigMgr.toJson();
+    JSStringRef str = JSStringCreateWithUTF8CString(json.c_str());
+    JSValueRef parsed = JSValueMakeFromJSONString(ctx, str);
+    JSStringRelease(str);
+    return parsed ? parsed : JSValueMakeNull(ctx);
+}
+
+AAPI_CALLBACK(js_manager_updateLibretroCore) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    /* Argument is a JSON object: {file, enabled, cartSaves, stateSaves, priority, paths:[{path,extensions}]} */
+    JSStringRef jsonStr = JSValueCreateJSONString(ctx, arguments[0], 0, nullptr);
+    if (!jsonStr) return JSValueMakeBoolean(ctx, false);
+    size_t len = JSStringGetMaximumUTF8CStringSize(jsonStr);
+    std::string json(len, '\0');
+    JSStringGetUTF8CString(jsonStr, &json[0], len);
+    JSStringRelease(jsonStr);
+    json.resize(strlen(json.c_str()));
+
+    /* Extract fields from the JS object directly */
+    JSObjectRef obj = JSValueToObject(ctx, arguments[0], nullptr);
+    if (!obj) return JSValueMakeBoolean(ctx, false);
+
+    auto getProp = [&](const char* name) -> JSValueRef {
+        JSStringRef k = JSStringCreateWithUTF8CString(name);
+        JSValueRef v = JSObjectGetProperty(ctx, obj, k, nullptr);
+        JSStringRelease(k);
+        return v;
+    };
+
+    std::string file = jsValueToString(ctx, getProp("file"));
+    bool enabled = JSValueToBoolean(ctx, getProp("enabled"));
+    bool cartSaves = JSValueToBoolean(ctx, getProp("cartSaves"));
+    bool stateSaves = JSValueToBoolean(ctx, getProp("stateSaves"));
+    int priority = (int)JSValueToNumber(ctx, getProp("priority"), nullptr);
+
+    std::vector<CoreContentPath> paths;
+    JSValueRef pathsVal = getProp("paths");
+    if (pathsVal && JSValueIsObject(ctx, pathsVal)) {
+        JSObjectRef pathsArr = JSValueToObject(ctx, pathsVal, nullptr);
+        JSStringRef lenKey = JSStringCreateWithUTF8CString("length");
+        int pathCount = (int)JSValueToNumber(ctx, JSObjectGetProperty(ctx, pathsArr, lenKey, nullptr), nullptr);
+        JSStringRelease(lenKey);
+        for (int i = 0; i < pathCount; i++) {
+            JSObjectRef pObj = JSValueToObject(ctx, JSObjectGetPropertyAtIndex(ctx, pathsArr, i, nullptr), nullptr);
+            if (!pObj) continue;
+            CoreContentPath cp;
+            JSStringRef pk = JSStringCreateWithUTF8CString("path");
+            cp.path = jsValueToString(ctx, JSObjectGetProperty(ctx, pObj, pk, nullptr));
+            JSStringRelease(pk);
+            pk = JSStringCreateWithUTF8CString("extensions");
+            cp.extensions = jsValueToString(ctx, JSObjectGetProperty(ctx, pObj, pk, nullptr));
+            JSStringRelease(pk);
+            paths.push_back(cp);
+        }
+    }
+
+    g_coreConfigMgr.updateCore(file, enabled, cartSaves, stateSaves, priority, paths);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+AAPI_CALLBACK(js_manager_resetLibretroCoreOptions) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string coreFile = jsValueToString(ctx, arguments[0]);
+    g_coreConfigMgr.resetCoreOptions(coreFile);
+    return JSValueMakeBoolean(ctx, true);
 }
 
 void UltralightManager_OpenTabMenu(void);
@@ -722,6 +806,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "setSpawnModeModel", js_manager_setSpawnModeModel);
     addJSMethod(ctx, managerObj, "setSpawnTransform", js_manager_setSpawnTransform);
     addJSMethod(ctx, managerObj, "getSpawnModelId", js_manager_getSpawnModelId);
+    addJSMethod(ctx, managerObj, "getInitialSpawnScale", js_manager_getInitialSpawnScale);
+    addJSMethod(ctx, managerObj, "getSpawnItemId", js_manager_getSpawnItemId);
     addJSMethod(ctx, managerObj, "getOverlayMode", js_manager_getOverlayMode);
     addJSMethod(ctx, managerObj, "getAimedObjectInfo", js_manager_getAimedObjectInfo);
     addJSMethod(ctx, managerObj, "openBuildContextMenu", js_manager_openBuildContextMenu);
@@ -730,6 +816,9 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
     addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
+    addJSMethod(ctx, managerObj, "getAllLibretroCores", js_manager_getAllLibretroCores);
+    addJSMethod(ctx, managerObj, "updateLibretroCore", js_manager_updateLibretroCore);
+    addJSMethod(ctx, managerObj, "resetLibretroCoreOptions", js_manager_resetLibretroCoreOptions);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);
@@ -1114,4 +1203,19 @@ void UltralightInstance_EvaluateScript(EmbeddedInstance* inst, const char* scrip
     data->view->EvaluateScript(ultralight::String(script), &exception);
     if (!exception.empty() && g_host.host_printf)
         g_host.host_printf("UL EvaluateScript error: %s\n", ultralight::String(exception).utf8().data());
+}
+
+std::string UltralightInstance_EvalScriptString(EmbeddedInstance* inst, const char* script)
+{
+    if (!inst || !inst->user_data) return "";
+    UltralightData* data = (UltralightData*)inst->user_data;
+    if (!data->initialized || !data->view) return "";
+    ultralight::String exception;
+    ultralight::String result = data->view->EvaluateScript(ultralight::String(script), &exception);
+    if (!exception.empty()) return "";
+    if (result.empty()) return "";
+    /* "null" and "undefined" come back as literal strings */
+    std::string out = result.utf8().data();
+    if (out == "null" || out == "undefined") return "";
+    return out;
 }

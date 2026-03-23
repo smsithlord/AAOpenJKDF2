@@ -284,6 +284,15 @@ void UltralightManager_NotifySpawnWheel(int delta)
     UltralightInstance_EvaluateScript(g_hudInstance, script);
 }
 
+std::string UltralightInstance_EvalScriptString(EmbeddedInstance* inst, const char* script);
+std::string UltralightManager_EvalLocalStorage(const char* key)
+{
+    if (!g_hudInstance) return "";
+    char script[512];
+    snprintf(script, sizeof(script), "localStorage.getItem('%s')", key);
+    return UltralightInstance_EvalScriptString(g_hudInstance, script);
+}
+
 void UltralightManager_ForwardMouseMove(int x, int y)
 {
     if (!g_hudInstance || !g_hudInstance->vtable->mouse_move) return;

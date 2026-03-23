@@ -11,6 +11,7 @@
 #include "SQLiteLibrary.h"
 #include "ImageLoader.h"
 #include "InstanceManager.h"
+#include "LibretroCoreConfig.h"
 #include <string.h>
 #include <steam_api.h>
 
@@ -272,6 +273,10 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     g_library.open("library.db");
     g_library.ensureSchema();
     g_library.setPlatformKey(OPENJK_PLATFORM_ID);
+
+    /* Load Libretro core configurations and scan for DLLs */
+    g_coreConfigMgr.loadConfig();
+    g_coreConfigMgr.scanCores();
 
     /* Initialize the image loader (headless Ultralight view for thumbnail caching) */
     g_imageLoader.init();
@@ -921,6 +926,57 @@ AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void)
 AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
 {
     g_fullscreenInstance = NULL;
+}
+
+AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
+{
+    if (!cmd) return false;
+
+    if (strcmp(cmd, "ObjectMove") == 0) {
+        int aimed = g_instanceManager.getAimedThingIdx();
+        if (aimed < 0) return false;
+        g_instanceManager.requestMove(aimed);
+        return true;
+    }
+
+    if (strcmp(cmd, "ObjectRemove") == 0) {
+        int aimed = g_instanceManager.getAimedThingIdx();
+        if (aimed < 0) return false;
+        g_instanceManager.destroyObject(aimed);
+        return true;
+    }
+
+    if (strcmp(cmd, "ObjectClone") == 0) {
+        const SpawnedObject* obj = g_instanceManager.getAimedObject();
+        if (!obj) return false;
+        Arcade::Item item = g_library.getItemById(obj->itemId);
+        if (item.id.empty()) return false;
+        g_instanceManager.requestSpawn(item, obj->modelId, obj->scale);
+        return true;
+    }
+
+    if (strcmp(cmd, "TaskClose") == 0) {
+        /* Try aimed object's task first */
+        const SpawnedObject* aimed = g_instanceManager.getAimedObject();
+        if (aimed && !aimed->itemId.empty()) {
+            const EmbeddedItemInstance* inst = g_instanceManager.getItemInstance(aimed->itemId);
+            if (inst && inst->active) {
+                g_instanceManager.deactivateInstance(aimed->itemId);
+                return true;
+            }
+        }
+        /* Fall back to first active task */
+        auto active = g_instanceManager.getActiveInstances();
+        if (!active.empty()) {
+            g_instanceManager.deactivateInstance(active[0]->itemId);
+            return true;
+        }
+        return false;
+    }
+
+    if (g_host.host_printf)
+        g_host.host_printf("AACore: Unknown action command '%s'\n", cmd);
+    return false;
 }
 
 AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void)

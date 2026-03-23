@@ -23,6 +23,7 @@ void aarcadecore_clearOverlayAssociation(void);
 #include "SQLiteLibrary.h"
 extern ImageLoader g_imageLoader;
 extern SQLiteLibrary g_library;
+std::string UltralightManager_EvalLocalStorage(const char* key);
 
 /* YouTube URL patterns:
  *   https://www.youtube.com/watch?v=VIDEO_ID
@@ -315,17 +316,66 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
 
     SpawnRequest req;
     req.item = item;
-    /* Find or create the default model for OpenJK */
-    std::string defaultTemplate = "aaojk_movie_stand_standard";
-    req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, defaultTemplate);
-    if (req.modelId.empty())
-        req.modelId = g_library.createModel("Movie Stand Standard", OPENJK_PLATFORM_ID, defaultTemplate);
-    req.templateName = defaultTemplate;
+
+    /* Check localStorage for best model: per-item first, then global, then default */
+    std::string bestModelId;
+    if (!item.id.empty()) {
+        std::string key = std::string("lastSpawnModelId_") + item.id;
+        bestModelId = UltralightManager_EvalLocalStorage(key.c_str());
+    }
+    if (bestModelId.empty())
+        bestModelId = UltralightManager_EvalLocalStorage("lastSpawnModelId");
+
+    if (!bestModelId.empty()) {
+        std::string tmpl = g_library.findModelPlatformFile(bestModelId, OPENJK_PLATFORM_ID);
+        if (!tmpl.empty()) {
+            req.modelId = bestModelId;
+            req.templateName = tmpl;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Using remembered model %s (%s)\n",
+                                  bestModelId.c_str(), tmpl.c_str());
+        }
+    }
+
+    /* Fallback to default if no remembered model found */
+    if (req.templateName.empty()) {
+        std::string defaultTemplate = "aaojk_movie_stand_standard";
+        req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, defaultTemplate);
+        if (req.modelId.empty())
+            req.modelId = g_library.createModel("Movie Stand Standard", OPENJK_PLATFORM_ID, defaultTemplate);
+        req.templateName = defaultTemplate;
+    }
     req.hasExplicitPosition = false;
     req.posX = req.posY = req.posZ = 0;
     req.sectorId = -1;
     req.rotX = req.rotY = req.rotZ = 0;
     req.scale = 1.0f;
+    pendingSpawns_.push(req);
+}
+
+void InstanceManager::requestSpawn(const Arcade::Item& item, const std::string& modelId, float scale)
+{
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Clone spawn - item=%s model=%s scale=%.1f\n",
+                          item.id.c_str(), modelId.c_str(), scale);
+
+    SpawnRequest req;
+    req.item = item;
+    req.modelId = modelId;
+    std::string tmpl = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);
+    if (tmpl.empty()) {
+        /* Fallback to default if model template not found */
+        tmpl = "aaojk_movie_stand_standard";
+        req.modelId = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, tmpl);
+        if (req.modelId.empty())
+            req.modelId = g_library.createModel("Movie Stand Standard", OPENJK_PLATFORM_ID, tmpl);
+    }
+    req.templateName = tmpl;
+    req.hasExplicitPosition = false;
+    req.posX = req.posY = req.posZ = 0;
+    req.sectorId = -1;
+    req.rotX = req.rotY = req.rotZ = 0;
+    req.scale = scale;
     pendingSpawns_.push(req);
 }
 
@@ -671,6 +721,18 @@ void InstanceManager::getSpawnTransform(float* p, float* y, float* r, bool* isWo
     if (scale) *scale = spawnScale_;
 }
 
+float InstanceManager::getInitialSpawnScale() const
+{
+    /* For move mode: return the scale of the object being moved */
+    if (spawnPreviewThingIdx_ >= 0) {
+        for (const auto& obj : objects_) {
+            if (obj.thingIdx == spawnPreviewThingIdx_) return obj.scale;
+        }
+    }
+    /* For clone/new spawn: use the lastPopped scale */
+    return lastPopped_.scale;
+}
+
 float InstanceManager::getObjectScale(int thingIdx) const
 {
     /* During spawn/move mode, use live slider value for the preview thing */
@@ -685,7 +747,6 @@ float InstanceManager::getObjectScale(int thingIdx) const
 
 std::string InstanceManager::getSpawnModelId() const
 {
-    /* Look up by current preview thingIdx if available */
     if (spawnPreviewThingIdx_ >= 0) {
         for (const auto& obj : objects_) {
             if (obj.thingIdx == spawnPreviewThingIdx_)
@@ -693,6 +754,17 @@ std::string InstanceManager::getSpawnModelId() const
         }
     }
     return lastPopped_.modelId;
+}
+
+std::string InstanceManager::getSpawnItemId() const
+{
+    if (spawnPreviewThingIdx_ >= 0) {
+        for (const auto& obj : objects_) {
+            if (obj.thingIdx == spawnPreviewThingIdx_)
+                return obj.itemId;
+        }
+    }
+    return lastPopped_.item.id;
 }
 
 void InstanceManager::updateThingIdx(int oldIdx, int newIdx)

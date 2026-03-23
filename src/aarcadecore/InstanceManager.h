@@ -60,6 +60,7 @@ public:
 
     /* Spawn pipeline */
     void requestSpawn(const Arcade::Item& item);
+    void requestSpawn(const Arcade::Item& item, const std::string& modelId, float scale);
     bool hasPendingSpawn() const;
     SpawnRequest popPendingSpawn();
     void initSpawnedObject(int thingIdx);
@@ -122,9 +123,11 @@ public:
     float getObjectScale(int thingIdx) const;
     void clearSpawnTransform() { spawnTransformSet_ = false; }
 
-    /* Current spawn model ID (for localStorage persistence in JS) */
+    /* Current spawn model ID and initial scale (for localStorage persistence in JS) */
     void setSpawnPreviewThingIdx(int thingIdx) { spawnPreviewThingIdx_ = thingIdx; }
     std::string getSpawnModelId() const;
+    std::string getSpawnItemId() const;
+    float getInitialSpawnScale() const;
 
     /* Update thingIdx after destroy+recreate (template swap) */
     void updateThingIdx(int oldIdx, int newIdx);

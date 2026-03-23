@@ -96,6 +96,7 @@ static aarcadecore_open_tab_menu_to_tab_t g_fn_open_tab_menu_to_tab = NULL;
 static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
+static aarcadecore_action_command_t g_fn_action_command = NULL;
 
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
@@ -367,6 +368,7 @@ void AACoreManager_Init(void)
     LOAD_FN(toggle_build_context_menu)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
+    LOAD_FN(action_command)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -506,6 +508,7 @@ void AACoreManager_Shutdown(void)
     g_fn_toggle_build_context_menu = NULL;
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
+    g_fn_action_command = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -1572,6 +1575,19 @@ void AACoreManager_ExitFullscreen(void)
 {
     if (g_fn_exit_fullscreen)
         g_fn_exit_fullscreen();
+}
+
+bool AACoreManager_OnWeaponSlotPressed(int slot)
+{
+    if (!g_fn_action_command) return false;
+
+    switch (slot) {
+        case 0: return g_fn_action_command("TaskClose");
+        case 2: return g_fn_action_command("ObjectRemove");
+        case 3: return g_fn_action_command("ObjectClone");
+        case 4: return g_fn_action_command("ObjectMove");
+        default: return false;
+    }
 }
 
 /* Host callback: DLL queries current map key (e.g., "smhq.gob-01nf.jkl") */

@@ -227,6 +227,9 @@ AARCADECORE_EXPORT bool aarcadecore_is_fullscreen_active(void);
 /* Exit fullscreen overlay mode (instance stays active on its sithThing screen) */
 AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void);
 
+/* Action command dispatch — returns true if command was handled */
+AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -300,6 +303,7 @@ typedef void  (*aarcadecore_open_tab_menu_to_tab_t)(int tabIndex);
 typedef void  (*aarcadecore_toggle_build_context_menu_t)(void);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);
+typedef bool  (*aarcadecore_action_command_t)(const char* cmd);
 
 #ifdef __cplusplus
 }

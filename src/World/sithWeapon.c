@@ -24,6 +24,7 @@
 #include "Dss/sithDSSThing.h"
 #include "General/stdMath.h"
 #include "jk.h"
+#include "Platform/Common/AACoreManager.h"
 
 // MOTS added
 int sithWeapon_mots_5a3258 = -1;
@@ -1145,6 +1146,9 @@ int sithWeapon_HandleWeaponKeys(sithThing *player, flex_t a2)
             sithControl_ReadFunctionMap(inputFunc, &readInput);
             if ( readInput && sithThing_MotsTick(7,0,inputFunc))
             {
+                int slot = (inputFunc == INPUT_FUNC_SELECT0) ? 0 : (inputFunc - INPUT_FUNC_SELECT1 + 1);
+                if (AACoreManager_OnWeaponSlotPressed(slot))
+                    goto next_slot;
                 if (!Main_bMotsCompat) {
                     if ( sithWeapon_SelectWeapon(player, sithInventory_SelectWeaponFollowing(inputFunc - INPUT_FUNC_ACTIVATE), 0) )
                         break;
@@ -1187,6 +1191,7 @@ int sithWeapon_HandleWeaponKeys(sithThing *player, flex_t a2)
                 }
             }
 
+            next_slot:
             if ( ++inputFunc <= INPUT_FUNC_SELECT0 )
                 continue;
 

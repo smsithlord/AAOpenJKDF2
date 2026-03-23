@@ -203,6 +203,18 @@
         }
     } catch (e) {}
 
+    /* Set initial model index from current spawn/move object */
+    try {
+        if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnModelId) {
+            var initModelId = aapi.manager.getSpawnModelId();
+            if (initModelId) {
+                for (var mi = 0; mi < models.length; mi++) {
+                    if (models[mi].id === initModelId) { currentIndex = mi; break; }
+                }
+            }
+        }
+    } catch (e) {}
+
     /* Build the visible list (show ~5 items around current) */
     function renderList() {
         modelListEl.innerHTML = '';
@@ -352,12 +364,32 @@
         })(axisLabels[al]);
     }
 
-    /* Load saved transform for current model */
+    /* Load saved transform for current model, with initial scale override for clones */
     loadTransformForModel();
+    try {
+        if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getInitialSpawnScale) {
+            var initScale = aapi.manager.getInitialSpawnScale();
+            if (initScale && initScale !== 1.0) {
+                scaleSlider.value = initScale;
+                sendTransform();
+            }
+        }
+    } catch (e) {}
 
     /* Called from C++ via EvaluateScript when spawn is confirmed */
     window.onSpawnConfirmed = function() {
         saveTransformForModel();
+        /* Remember last confirmed model globally and per-item */
+        if (models.length > 0 && models[currentIndex]) {
+            var mid = models[currentIndex].id;
+            try {
+                localStorage.setItem('lastSpawnModelId', mid);
+                if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnItemId) {
+                    var itemId = aapi.manager.getSpawnItemId();
+                    if (itemId) localStorage.setItem('lastSpawnModelId_' + itemId, mid);
+                }
+            } catch (e) {}
+        }
     };
 
     /* Show/hide transform panel based on input mode */
