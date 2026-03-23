@@ -148,6 +148,15 @@ static void libretro_inst_render(EmbeddedInstance* inst,
 
     if (!data->host) return;
 
+    /* Skip duplicate 16-bit renders in same frame (per-thing texture cached by host).
+     * 32-bit fullscreen renders always proceed — different buffer/format. */
+    extern uint32_t aarcadecore_getEngineFrame(void);
+    uint32_t frame = aarcadecore_getEngineFrame();
+    if (is16bit && inst->lastRenderedFrame == frame)
+        return;
+    if (is16bit)
+        inst->lastRenderedFrame = frame;
+
     frame_data = libretro_host_get_frame(data->host,
                                           &frame_width, &frame_height,
                                           &frame_pitch, &is_xrgb8888);
@@ -229,6 +238,7 @@ static void libretro_inst_render(EmbeddedInstance* inst,
             }
         }
     }
+
 }
 
 /* ========================================================================
@@ -348,8 +358,8 @@ EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* gam
     LibretroInstanceData* data = (LibretroInstanceData*)calloc(1, sizeof(LibretroInstanceData));
     if (!inst || !data) { free(inst); free(data); return NULL; }
 
-    data->core_path = core_path;
-    data->game_path = game_path;
+    data->core_path = _strdup(core_path);
+    data->game_path = _strdup(game_path);
 
     inst->type = EMBEDDED_LIBRETRO;
     inst->vtable = &g_libretroVtable;
@@ -362,6 +372,11 @@ void LibretroInstance_Destroy(EmbeddedInstance* inst)
 {
     if (!inst) return;
     if (inst->vtable && inst->vtable->shutdown) inst->vtable->shutdown(inst);
+    if (inst->user_data) {
+        LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
+        free((void*)data->core_path);
+        free((void*)data->game_path);
+    }
     free(inst->user_data);
     free(inst);
 }

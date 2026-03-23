@@ -73,6 +73,8 @@ struct EmbeddedInstance {
     const EmbeddedInstanceVtable* vtable;
     const char* target_material;
     void* user_data;
+    uint32_t lastRenderedFrame;  /* frame when render() was last called */
+    uint32_t lastSeenFrame;      /* frame when thing's material was seen in engine render */
 };
 
 /* Global host callbacks (set during aarcadecore_init) */

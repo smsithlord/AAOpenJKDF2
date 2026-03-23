@@ -529,6 +529,9 @@ void InstanceManager::selectObject(int index)
 
 void InstanceManager::objectUsed(int thingIdx)
 {
+    /* Redirect slave objects to their master */
+    if (thingIdx >= 0) thingIdx = resolveMasterThingIdx(thingIdx);
+
     /* thingIdx == -1 means "deselect current" (e.g. LMB on empty space) */
     if (thingIdx < 0) {
         if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
@@ -1095,6 +1098,9 @@ void InstanceManager::deselectOnly()
 
 void InstanceManager::rememberObject(int thingIdx)
 {
+    /* Redirect slave objects to their master */
+    thingIdx = resolveMasterThingIdx(thingIdx);
+
     /* Find the object */
     int index = -1;
     for (int i = 0; i < (int)objects_.size(); i++) {
@@ -1107,6 +1113,9 @@ void InstanceManager::rememberObject(int thingIdx)
 
     const SpawnedObject& obj = objects_[index];
 
+    /* Always update remembered item for mirror priority */
+    rememberedItemId_ = obj.itemId;
+
     /* Check if it already has an active instance */
     const EmbeddedItemInstance* existing = getItemInstance(obj.itemId);
     if (existing && existing->active) return; /* already running */
@@ -1118,8 +1127,6 @@ void InstanceManager::rememberObject(int thingIdx)
     std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
     ensureItemInstance(item, resolvedUrl);
 
-    rememberedItemId_ = obj.itemId;
-
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: rememberObject — activated instance for thingIdx=%d (item=%s) without selecting\n",
                           thingIdx, obj.itemId.c_str());
@@ -1127,23 +1134,29 @@ void InstanceManager::rememberObject(int thingIdx)
 
 EmbeddedInstance* InstanceManager::getInputTarget() const
 {
-    /* Priority 1: selected object's active instance */
-    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
-        const SpawnedObject& obj = objects_[selectedObjectIndex_];
-        auto it = itemInstances_.find(obj.itemId);
-        if (it != itemInstances_.end() && it->second.active && it->second.browser)
-            return it->second.browser;
-    }
-    /* Priority 2: aimed-at object's active instance */
-    if (aimedThingIdx_ >= 0) {
+    /* Helper: find browser for a thingIdx, resolving slave→master */
+    auto findBrowserForThing = [this](int thingIdx) -> EmbeddedInstance* {
+        int resolved = resolveMasterThingIdx(thingIdx);
         for (const auto& obj : objects_) {
-            if (obj.thingIdx == aimedThingIdx_) {
+            if (obj.thingIdx == resolved) {
                 auto it = itemInstances_.find(obj.itemId);
                 if (it != itemInstances_.end() && it->second.active && it->second.browser)
                     return it->second.browser;
                 break;
             }
         }
+        return nullptr;
+    };
+
+    /* Priority 1: selected object's active instance (with slave resolve) */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        EmbeddedInstance* b = findBrowserForThing(objects_[selectedObjectIndex_].thingIdx);
+        if (b) return b;
+    }
+    /* Priority 2: aimed-at object's active instance (with slave resolve) */
+    if (aimedThingIdx_ >= 0) {
+        EmbeddedInstance* b = findBrowserForThing(aimedThingIdx_);
+        if (b) return b;
     }
     return nullptr;
 }
@@ -1184,6 +1197,54 @@ std::string InstanceManager::getMarqueeImagePath(int thingIdx) const
             return obj.marqueeImagePath;
     }
     return "";
+}
+
+int InstanceManager::resolveMasterThingIdx(int thingIdx) const
+{
+    /* Find the object */
+    const SpawnedObject* obj = nullptr;
+    for (const auto& o : objects_) {
+        if (o.thingIdx == thingIdx) { obj = &o; break; }
+    }
+    if (!obj || !obj->slave) return thingIdx;
+
+    /* Slave with own active instance — no redirect */
+    const EmbeddedItemInstance* ownInst = getItemInstance(obj->itemId);
+    if (ownInst && ownInst->active) return thingIdx;
+
+    /* Find the master: same priority as getSlaveTaskIndex */
+    auto findThingForItem = [this](const std::string& itemId) -> int {
+        for (const auto& o : objects_) {
+            if (o.itemId == itemId) return o.thingIdx;
+        }
+        return -1;
+    };
+
+    /* Priority 1: selected object */
+    if (selectedObjectIndex_ >= 0 && selectedObjectIndex_ < (int)objects_.size()) {
+        const SpawnedObject& sel = objects_[selectedObjectIndex_];
+        const EmbeddedItemInstance* inst = getItemInstance(sel.itemId);
+        if (inst && inst->active) return sel.thingIdx;
+    }
+
+    /* Priority 2: remembered instance */
+    if (!rememberedItemId_.empty()) {
+        const EmbeddedItemInstance* inst = getItemInstance(rememberedItemId_);
+        if (inst && inst->active) {
+            int t = findThingForItem(rememberedItemId_);
+            if (t >= 0) return t;
+        }
+    }
+
+    /* Priority 3: first active instance */
+    for (const auto& pair : itemInstances_) {
+        if (pair.second.active) {
+            int t = findThingForItem(pair.first);
+            if (t >= 0) return t;
+        }
+    }
+
+    return thingIdx;
 }
 
 bool InstanceManager::toggleSlave(int thingIdx)

@@ -1215,6 +1215,11 @@ void Window_SdlUpdate()
                         && !AACoreManager_IsActive()) {
                         stdControl_bControllerEscapeKey = (event.cbutton.state == SDL_PRESSED);
                     }
+                    else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_START && AACoreManager_IsActive()) {
+                        /* When AACore is active, don't trigger escape — let normal input path
+                         * handle it so Libretro can read START via get_key_state polling */
+                        break;
+                    }
                     else if (jkCutscene_isRendering && event.type == SDL_CONTROLLERBUTTONDOWN && event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) { // y
                         Window_msg_main_handler(g_hWnd, WM_KEYFIRST, VK_SPACE, 0);
                         Window_msg_main_handler(g_hWnd, WM_CHAR, VK_SPACE, 0);

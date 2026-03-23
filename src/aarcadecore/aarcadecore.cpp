@@ -67,6 +67,9 @@ void aarcadecore_removeTask(int taskIndex) {
         g_tasks[taskIndex] = NULL;
 }
 
+static bool g_overlayDirty = true; /* Set when overlay content changes */
+static uint32_t g_engineFrame = 0; /* Incremented each update for per-frame render tracking */
+
 /* Forward declarations needed by setFullscreenInstance */
 void UltralightManager_LoadOverlay(void);
 void UltralightManager_UnloadOverlay(void);
@@ -76,6 +79,7 @@ static void notifyOverlayState(void);
 /* Fullscreen instance accessors for InstanceManager */
 void aarcadecore_setFullscreenInstance(EmbeddedInstance* inst) {
     g_fullscreenInstance = inst;
+    g_overlayDirty = true;
     if (inst) {
         if (inst != g_overlayForInstance) {
             UltralightManager_UnloadOverlay();
@@ -94,7 +98,7 @@ EmbeddedInstance* aarcadecore_getFullscreenInstance(void) { return g_fullscreenI
 void aarcadecore_clearOverlayAssociation(void) { g_overlayForInstance = NULL; }
 
 /* Input mode instance accessors */
-void aarcadecore_setInputModeInstance(EmbeddedInstance* inst) { g_inputModeInstance = inst; }
+void aarcadecore_setInputModeInstance(EmbeddedInstance* inst) { g_inputModeInstance = inst; g_overlayDirty = true; }
 EmbeddedInstance* aarcadecore_getInputModeInstance(void) { return g_inputModeInstance; }
 
 static int getActiveTaskIndex(void)
@@ -176,27 +180,38 @@ static void notifyOverlayState(void)
     }
 
     char urlEsc[1024] = "", titleEsc[512] = "", itemIdEsc[128] = "";
+    char corePathEsc[512] = "", gamePathEsc[1024] = "";
     if (inst) {
         jsonEscapeStr(urlEsc, sizeof(urlEsc), inst->url.c_str());
         jsonEscapeStr(titleEsc, sizeof(titleEsc), inst->title.c_str());
         jsonEscapeStr(itemIdEsc, sizeof(itemIdEsc), inst->itemId.c_str());
     }
 
+    /* Extract core/game paths for Libretro instances */
+    if (target && target->type == EMBEDDED_LIBRETRO && target->user_data) {
+        typedef struct { LibretroHost* host; const char* core_path; const char* game_path; } LRDataFull;
+        LRDataFull* lrd = (LRDataFull*)target->user_data;
+        if (lrd->core_path) jsonEscapeStr(corePathEsc, sizeof(corePathEsc), lrd->core_path);
+        if (lrd->game_path) jsonEscapeStr(gamePathEsc, sizeof(gamePathEsc), lrd->game_path);
+    }
+
     bool canBack = target && target->vtable->can_go_back ? target->vtable->can_go_back(target) : false;
     bool canFwd = target && target->vtable->can_go_forward ? target->vtable->can_go_forward(target) : false;
 
-    char json[2048];
+    char json[4096];
     snprintf(json, sizeof(json),
         "{\"mode\":\"%s\",\"isFullscreen\":%s,\"isInputMode\":%s,"
         "\"url\":\"%s\",\"title\":\"%s\",\"itemId\":\"%s\","
-        "\"instanceType\":\"%s\",\"canGoBack\":%s,\"canGoForward\":%s}",
+        "\"instanceType\":\"%s\",\"canGoBack\":%s,\"canGoForward\":%s,"
+        "\"corePath\":\"%s\",\"gamePath\":\"%s\"}",
         mode,
         g_fullscreenInstance ? "true" : "false",
         g_inputModeInstance ? "true" : "false",
         urlEsc, titleEsc, itemIdEsc,
         instanceType,
         canBack ? "true" : "false",
-        canFwd ? "true" : "false");
+        canFwd ? "true" : "false",
+        corePathEsc, gamePathEsc);
 
     UltralightManager_NotifyOverlayMode(json);
 }
@@ -313,8 +328,13 @@ AARCADECORE_EXPORT void aarcadecore_shutdown(void)
     memset(&g_host, 0, sizeof(g_host));
 }
 
+/* Exposed for render functions to check frame number */
+uint32_t aarcadecore_getEngineFrame(void) { return g_engineFrame; }
+
 AARCADECORE_EXPORT void aarcadecore_update(void)
 {
+    g_engineFrame++;
+
     /* Pump Steam callbacks globally (handles all browsers + pending removals) */
     extern bool SteamworksWebBrowser_IsSteamReady(void);
     if (SteamworksWebBrowser_IsSteamReady())
@@ -592,13 +612,13 @@ static void compositeHudOver(uint8_t* dst, const uint8_t* hud, int pixelCount)
 {
     for (int i = 0; i < pixelCount; i++) {
         int off = i * 4;
-        uint8_t a = hud[off + 3];
+        unsigned a = hud[off + 3];
         if (a == 0) continue;
         if (a == 255) { memcpy(dst + off, hud + off, 4); continue; }
-        float fa = a / 255.0f, inv = 1.0f - fa;
-        dst[off + 0] = (uint8_t)(hud[off + 0] * fa + dst[off + 0] * inv);
-        dst[off + 1] = (uint8_t)(hud[off + 1] * fa + dst[off + 1] * inv);
-        dst[off + 2] = (uint8_t)(hud[off + 2] * fa + dst[off + 2] * inv);
+        unsigned inv = 255 - a;
+        dst[off + 0] = (uint8_t)((hud[off + 0] * a + dst[off + 0] * inv + 127) / 255);
+        dst[off + 1] = (uint8_t)((hud[off + 1] * a + dst[off + 1] * inv + 127) / 255);
+        dst[off + 2] = (uint8_t)((hud[off + 2] * a + dst[off + 2] * inv + 127) / 255);
         dst[off + 3] = 255;
     }
 }
@@ -607,18 +627,28 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, i
 {
     const uint8_t* hudBuf = UltralightManager_GetHudPixels();
 
-    /* Input mode without fullscreen (and not spawn mode): no overlay — cursor on task texture */
+    /* Input mode without fullscreen (and not spawn mode): no overlay needed — skip quad entirely */
     if (g_inputModeInstance && !g_fullscreenInstance && !UltralightManager_IsSpawnModeOpen()) {
-        memset(pixelData, 0, width * height * 4);
-        return true;
+        return false;
     }
 
-    /* Fullscreen: render SWB content + composite HUD cursor on top */
+    /* Fullscreen: render instance to clean buffer, copy to output, composite HUD on top.
+     * Instance render is a no-op if no new frame — clean buffer stays intact.
+     * We always copy + composite so cursor updates don't corrupt the clean frame. */
     if (g_fullscreenInstance && g_fullscreenInstance->vtable->is_active(g_fullscreenInstance)
         && g_fullscreenInstance->vtable->render) {
-        g_fullscreenInstance->vtable->render(g_fullscreenInstance, pixelData, width, height, 0, 32);
+        static uint8_t* g_cleanFrameBuffer = NULL;
+        int bufSize = width * height * 4;
+        if (!g_cleanFrameBuffer)
+            g_cleanFrameBuffer = (uint8_t*)malloc(bufSize);
+        /* Render instance to clean buffer (no-op if no new frame) */
+        g_fullscreenInstance->vtable->render(g_fullscreenInstance, g_cleanFrameBuffer, width, height, 0, 32);
+        /* Copy clean frame to output */
+        memcpy(pixelData, g_cleanFrameBuffer, bufSize);
+        /* Composite HUD on top of the copy */
         if (hudBuf)
             compositeHudOver((uint8_t*)pixelData, hudBuf, width * height);
+        g_overlayDirty = false;
         return true;
     }
 
@@ -628,6 +658,7 @@ AARCADECORE_EXPORT bool aarcadecore_render_overlay(void* pixelData, int width, i
         return false;
 
     ul->vtable->render(ul, pixelData, width, height, 0, 32);
+    g_overlayDirty = false;
     return true;
 }
 
@@ -931,6 +962,13 @@ AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
     g_fullscreenInstance = NULL;
 }
 
+AARCADECORE_EXPORT void aarcadecore_mark_thing_seen(int thingIdx)
+{
+    int taskIdx = g_instanceManager.getTaskIndexForThing(thingIdx);
+    if (taskIdx >= 0 && taskIdx < g_taskCount && g_tasks[taskIdx])
+        g_tasks[taskIdx]->lastSeenFrame = g_engineFrame;
+}
+
 AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
 {
     if (!cmd) return false;
@@ -959,13 +997,20 @@ AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
     }
 
     if (strcmp(cmd, "TaskClose") == 0) {
-        /* Try aimed object's task first */
-        const SpawnedObject* aimed = g_instanceManager.getAimedObject();
-        if (aimed && !aimed->itemId.empty()) {
-            const EmbeddedItemInstance* inst = g_instanceManager.getItemInstance(aimed->itemId);
-            if (inst && inst->active) {
-                g_instanceManager.deactivateInstance(aimed->itemId);
-                return true;
+        /* Try aimed object's task first (resolve slave→master) */
+        int aimedIdx = g_instanceManager.getAimedThingIdx();
+        if (aimedIdx >= 0) {
+            int resolved = g_instanceManager.resolveMasterThingIdx(aimedIdx);
+            for (int i = 0; i < g_instanceManager.getSpawnedCount(); i++) {
+                const SpawnedObject* obj = g_instanceManager.getSpawned(i);
+                if (obj && obj->thingIdx == resolved) {
+                    const EmbeddedItemInstance* inst = g_instanceManager.getItemInstance(obj->itemId);
+                    if (inst && inst->active) {
+                        g_instanceManager.deactivateInstance(obj->itemId);
+                        return true;
+                    }
+                    break;
+                }
             }
         }
         /* Fall back to first active task */

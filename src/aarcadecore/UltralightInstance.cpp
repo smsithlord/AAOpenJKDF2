@@ -161,20 +161,29 @@ AAPI_CALLBACK(js_manager_getOverlayInstanceInfo) {
     if (!inst) return JSValueMakeNull(ctx);
 
     JSObjectRef obj = JSObjectMake(ctx, nullptr, nullptr);
-    JSStringRef uk = JSStringCreateWithUTF8CString("url");
-    JSStringRef uv = JSStringCreateWithUTF8CString(inst->url.c_str());
-    JSObjectSetProperty(ctx, obj, uk, JSValueMakeString(ctx, uv), 0, nullptr);
-    JSStringRelease(uk); JSStringRelease(uv);
+    jsSetPropStr(ctx, obj, "url", inst->url);
+    jsSetPropStr(ctx, obj, "title", inst->title);
+    jsSetPropStr(ctx, obj, "itemId", inst->itemId);
 
-    JSStringRef tk = JSStringCreateWithUTF8CString("title");
-    JSStringRef tv = JSStringCreateWithUTF8CString(inst->title.c_str());
-    JSObjectSetProperty(ctx, obj, tk, JSValueMakeString(ctx, tv), 0, nullptr);
-    JSStringRelease(tk); JSStringRelease(tv);
+    /* Instance type */
+    const char* itype = "";
+    if (target) {
+        switch (target->type) {
+            case EMBEDDED_STEAMWORKS_BROWSER: itype = "swb"; break;
+            case EMBEDDED_LIBRETRO: itype = "libretro"; break;
+            case EMBEDDED_ULTRALIGHT: itype = "ultralight"; break;
+            default: break;
+        }
+    }
+    jsSetPropStr(ctx, obj, "instanceType", std::string(itype));
 
-    JSStringRef ik = JSStringCreateWithUTF8CString("itemId");
-    JSStringRef iv = JSStringCreateWithUTF8CString(inst->itemId.c_str());
-    JSObjectSetProperty(ctx, obj, ik, JSValueMakeString(ctx, iv), 0, nullptr);
-    JSStringRelease(ik); JSStringRelease(iv);
+    /* Core/game paths for Libretro */
+    if (target && target->type == EMBEDDED_LIBRETRO && target->user_data) {
+        typedef struct { void* host; const char* core_path; const char* game_path; } LRDataFull;
+        LRDataFull* lrd = (LRDataFull*)target->user_data;
+        if (lrd->core_path) jsSetPropStr(ctx, obj, "corePath", std::string(lrd->core_path));
+        if (lrd->game_path) jsSetPropStr(ctx, obj, "gamePath", std::string(lrd->game_path));
+    }
 
     return obj;
 }

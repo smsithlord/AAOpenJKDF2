@@ -19,34 +19,12 @@
             font-family: 'Segoe UI', Arial, sans-serif;
         }
 
-        .address-bar {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            background: rgba(35, 35, 35, 1.0);
-            padding: 4px 6px;
-            border-radius: 6px 6px 0 0;
-            gap: 4px;
-            min-width: 400px;
-            max-height: 0;
-            overflow: hidden;
-            opacity: 0;
-            transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
-            padding-top: 0;
-            padding-bottom: 0;
-        }
-        .address-bar.open {
-            max-height: 40px;
-            opacity: 1;
-            padding: 4px 6px;
-        }
-
         .overlay-tab {
             background: rgba(40, 40, 40, 1.0);
             color: #ccc;
-            font-size: 13px;
-            padding: 5px 20px;
-            border-radius: 0 0 6px 6px;
+            font-size: 16px;
+            padding: 8px 32px;
+            border-radius: 0 0 8px 8px;
             cursor: pointer;
             user-select: none;
             transition: background 0.15s, color 0.15s;
@@ -58,20 +36,41 @@
         .overlay-tab.active {
             background: rgba(50, 50, 50, 1.0);
             color: #fff;
-            border-radius: 0;
         }
         .overlay-tab.active:hover {
             background: rgba(70, 70, 70, 1.0);
             color: #fff;
         }
 
+        .address-bar {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            background: rgba(35, 35, 35, 1.0);
+            padding: 8px 12px;
+            border-radius: 0 0 8px 8px;
+            gap: 8px;
+            min-width: 800px;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.25s ease;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        .address-bar.open {
+            max-height: 80px;
+            opacity: 1;
+            padding: 8px 12px;
+        }
+
         .address-bar button {
             background: rgba(70, 70, 70, 1.0);
             color: #ccc;
             border: none;
-            border-radius: 3px;
-            padding: 4px 8px;
-            font-size: 14px;
+            border-radius: 4px;
+            padding: 8px 14px;
+            font-size: 18px;
             cursor: pointer;
             font-family: 'Segoe UI', Arial, sans-serif;
             transition: background 0.12s, color 0.12s;
@@ -90,9 +89,9 @@
             background: rgba(20, 20, 20, 1.0);
             color: #ddd;
             border: 1px solid rgba(80, 80, 80, 0.6);
-            border-radius: 3px;
-            padding: 4px 8px;
-            font-size: 12px;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 15px;
             font-family: 'Segoe UI', Arial, sans-serif;
             outline: none;
         }
@@ -117,18 +116,27 @@
 <body>
     <div style="position:absolute;top:5px;left:5px;font-size:30px;color:#888;cursor:pointer;pointer-events:auto;z-index:99999" onclick="location.reload()">&#8226;</div>
     <div class="overlay-bar" id="bar">
+        <div class="overlay-tab" id="tab">Web Browser</div>
         <div class="address-bar" id="addressBar">
             <button id="btnBack" title="Back" disabled>&#9664;</button>
             <button id="btnForward" title="Forward" disabled>&#9654;</button>
             <button id="btnReload" title="Reload">&#8635;</button>
             <input type="text" id="addressInput" placeholder="Address..." />
         </div>
-        <div class="overlay-tab" id="tab">Web Browser</div>
+        <div class="address-bar" id="libretroBar">
+            <span style="color:#888; font-size:15px; margin-right:6px;">Core:</span>
+            <input type="text" id="coreInput" readonly style="flex:1; margin-right:12px;" />
+            <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
+            <input type="text" id="fileInput" readonly style="flex:1;" />
+        </div>
     </div>
     <div class="overlay-cursor" id="cursor"><img src="cursors/default.png" alt=""></div>
 <script>
     var tab = document.getElementById('tab');
     var addressBar = document.getElementById('addressBar');
+    var libretroBar = document.getElementById('libretroBar');
+    var coreInput = document.getElementById('coreInput');
+    var fileInput = document.getElementById('fileInput');
     var addressInput = document.getElementById('addressInput');
     var cursor = document.getElementById('cursor');
     var btnBack = document.getElementById('btnBack');
@@ -153,6 +161,7 @@
     function toggleBar() {
         barOpen = !barOpen;
         addressBar.className = barOpen ? 'address-bar open' : 'address-bar';
+        libretroBar.className = barOpen ? 'address-bar open' : 'address-bar';
         tab.className = barOpen ? 'overlay-tab active' : 'overlay-tab';
     }
 
@@ -197,18 +206,41 @@
         if (!state) return;
         /* Show/hide virtual cursor based on mode */
         cursor.style.display = (state.mode === 'input') ? '' : 'none';
-        /* Update address bar URL if provided */
-        if (state.url) addressInput.value = state.url;
-        /* Update back/forward button state */
-        btnBack.disabled = !state.canGoBack;
-        btnForward.disabled = !state.canGoForward;
+
+        /* Adapt UI for instance type — hide inactive bar completely */
+        if (state.instanceType === 'libretro') {
+            tab.textContent = 'Libretro';
+            addressBar.style.display = 'none';
+            libretroBar.style.display = '';
+            coreInput.value = state.corePath || '';
+            fileInput.value = state.gamePath || '';
+        } else {
+            tab.textContent = 'Web Browser';
+            addressBar.style.display = '';
+            libretroBar.style.display = 'none';
+            if (state.url) addressInput.value = state.url;
+            btnBack.disabled = !state.canGoBack;
+            btnForward.disabled = !state.canGoForward;
+        }
     };
 
-    /* Initial mode check */
+    /* Initial mode check — build full state from available APIs */
     try {
-        if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getOverlayMode) {
-            var mode = aapi.manager.getOverlayMode() || '';
-            window.onOverlayModeChanged({ mode: mode });
+        if (typeof aapi !== 'undefined' && aapi.manager) {
+            var initState = { mode: '' };
+            if (aapi.manager.getOverlayMode) initState.mode = aapi.manager.getOverlayMode() || '';
+            if (aapi.manager.getOverlayInstanceInfo) {
+                var info = aapi.manager.getOverlayInstanceInfo();
+                if (info) {
+                    initState.url = info.url;
+                    initState.title = info.title;
+                    initState.itemId = info.itemId;
+                    initState.instanceType = info.instanceType;
+                    initState.corePath = info.corePath;
+                    initState.gamePath = info.gamePath;
+                }
+            }
+            window.onOverlayModeChanged(initState);
         }
     } catch (e) {}
 

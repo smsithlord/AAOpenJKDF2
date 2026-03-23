@@ -96,6 +96,7 @@ static aarcadecore_open_tab_menu_to_tab_t g_fn_open_tab_menu_to_tab = NULL;
 static aarcadecore_toggle_build_context_menu_t g_fn_toggle_build_context_menu = NULL;
 static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
+static aarcadecore_mark_thing_seen_t g_fn_mark_thing_seen = NULL;
 static aarcadecore_action_command_t g_fn_action_command = NULL;
 
 /* Forward declarations */
@@ -368,6 +369,7 @@ void AACoreManager_Init(void)
     LOAD_FN(toggle_build_context_menu)
     LOAD_FN(is_fullscreen_active)
     LOAD_FN(exit_fullscreen)
+    LOAD_FN(mark_thing_seen)
     LOAD_FN(action_command)
     #undef LOAD_FN
 
@@ -508,6 +510,7 @@ void AACoreManager_Shutdown(void)
     g_fn_toggle_build_context_menu = NULL;
     g_fn_is_fullscreen_active = NULL;
     g_fn_exit_fullscreen = NULL;
+    g_fn_mark_thing_seen = NULL;
     g_fn_action_command = NULL;
 
     for (int i = 0; i < MAX_TASKS; i++) {
@@ -1626,6 +1629,10 @@ void AACoreManager_PreRenderThing(void* pSithThing)
 
     for (int i = 0; i < g_thingTaskCount; i++) {
         if (g_thingTaskMap[i].thing == pSithThing) {
+            /* Mark this thing as seen for visibility tracking / throttling */
+            if (g_fn_mark_thing_seen)
+                g_fn_mark_thing_seen(g_thingTaskMap[i].thingIdx);
+
             /* Flush pending faces so previous thing's faces draw with previous texture_id */
             rdCache_Flush();
 
@@ -1742,7 +1749,9 @@ void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
     {
         int menuOpen = g_fn_is_main_menu_open && g_fn_is_main_menu_open();
         int spawnMode = g_fn_is_spawn_mode_active && g_fn_is_spawn_mode_active();
-        if (!menuOpen && !spawnMode) return;
+        int inputMode = g_fn_is_input_mode_active && g_fn_is_input_mode_active();
+        int fullscreen = g_fn_is_fullscreen_active && g_fn_is_fullscreen_active();
+        if (!menuOpen && !spawnMode && !inputMode && !fullscreen) return;
     }
     if (!g_fn_render_overlay)
         return;

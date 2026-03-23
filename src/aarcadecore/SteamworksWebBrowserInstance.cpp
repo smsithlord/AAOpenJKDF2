@@ -249,6 +249,15 @@ static void swb_render(EmbeddedInstance* inst,
     if (!data->pixelBuffer || data->bufferWidth == 0)
         return;
 
+    /* Skip duplicate 16-bit renders in same frame (per-thing texture cached by host).
+     * 32-bit fullscreen renders always proceed — different buffer/format. */
+    extern uint32_t aarcadecore_getEngineFrame(void);
+    uint32_t frame = aarcadecore_getEngineFrame();
+    if (is16bit && inst->lastRenderedFrame == frame)
+        return;
+    if (is16bit)
+        inst->lastRenderedFrame = frame;
+
     int scale_x = ((int)data->bufferWidth << 16) / width;
     int scale_y = ((int)data->bufferHeight << 16) / height;
 
@@ -293,6 +302,7 @@ static void swb_render(EmbeddedInstance* inst,
             }
         }
     }
+
 }
 
 static void swb_key_down(EmbeddedInstance* inst, int vk_code, int modifiers)

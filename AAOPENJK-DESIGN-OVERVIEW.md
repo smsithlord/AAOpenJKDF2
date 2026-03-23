@@ -159,12 +159,27 @@ On new spawn: InstanceManager.requestSpawn reads localStorage via
 ```
 Each frame:
   1. SWB/Libretro renders to 16-bit RGB565 pixel buffer
+     - Per-frame dedup: lastRenderedFrame skips duplicate 16-bit renders
+     - PreRenderThing marks thing as seen (lastSeenFrame for throttling)
   2. HUD overlay composited on top (if input mode)
   3. Host uploads pixels to GL texture
   4. PreRenderThing: swap DynScreen texture_id → thing's GL texture
   5. Engine renders the thing with swapped texture
   6. PostRenderThing: restore original texture_id
   7. rdCache_Flush between things to prevent batching
+```
+
+### Fullscreen overlay rendering
+```
+Fullscreen embedded instance:
+  1. Instance renders to g_cleanFrameBuffer (1920x1080 BGRA32)
+     - Skipped if no new content (buffer stays clean from last render)
+  2. Clean buffer copied to output pixelData
+  3. HUD composited on top of copy (integer alpha blend, no float math)
+  4. Host uploads to GL texture + draws fullscreen quad
+
+Input mode (no fullscreen): render_overlay returns false → no quad drawn
+Spawn mode: HUD rendered directly (no instance underneath)
 ```
 
 ### Input routing

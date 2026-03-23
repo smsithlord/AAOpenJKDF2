@@ -161,6 +161,7 @@ public:
     void rememberObject(int thingIdx);
     void setRememberedItemId(const std::string& itemId) { rememberedItemId_ = itemId; }
     int getSlaveTaskIndex() const;
+    int resolveMasterThingIdx(int thingIdx) const;
     bool toggleSlave(int thingIdx);
     EmbeddedInstance* getInputTarget() const;
     const EmbeddedItemInstance* getInstanceForBrowser(EmbeddedInstance* browser) const;
