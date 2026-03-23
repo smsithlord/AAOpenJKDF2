@@ -165,12 +165,15 @@ AARCADECORE_EXPORT void aarcadecore_enter_input_mode_for_selected(void);
 AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void);
 AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void);
 
-/* Spawn transform override (rotation + position offset) */
+/* Spawn transform override (rotation + position offset + scale) */
 AARCADECORE_EXPORT bool aarcadecore_has_spawn_transform(void);
 AARCADECORE_EXPORT void aarcadecore_get_spawn_transform(float* p, float* y, float* r, bool* isWorldRot,
-    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast);
+    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast, float* scale);
 AARCADECORE_EXPORT void aarcadecore_clear_spawn_transform(void);
 AARCADECORE_EXPORT const char* aarcadecore_get_spawn_model_id(void);
+
+/* Get uniform scale for a spawned object */
+AARCADECORE_EXPORT float aarcadecore_get_object_scale(int thingIdx);
 
 /* Update thingIdx after destroy+recreate */
 AARCADECORE_EXPORT void aarcadecore_update_thing_idx(int oldIdx, int newIdx);
@@ -273,8 +276,9 @@ typedef void  (*aarcadecore_enter_input_mode_for_selected_t)(void);
 typedef void  (*aarcadecore_exit_input_mode_t)(void);
 typedef bool  (*aarcadecore_is_input_mode_active_t)(void);
 typedef bool  (*aarcadecore_has_spawn_transform_t)(void);
-typedef void  (*aarcadecore_get_spawn_transform_t)(float*, float*, float*, bool*, float*, float*, float*, bool*, bool*);
+typedef void  (*aarcadecore_get_spawn_transform_t)(float*, float*, float*, bool*, float*, float*, float*, bool*, bool*, float*);
 typedef const char* (*aarcadecore_get_spawn_model_id_t)(void);
+typedef float (*aarcadecore_get_object_scale_t)(int thingIdx);
 typedef void  (*aarcadecore_update_thing_idx_t)(int oldIdx, int newIdx);
 typedef void  (*aarcadecore_set_spawn_preview_thing_t)(int thingIdx);
 typedef void  (*aarcadecore_reload_thing_images_t)(int thingIdx);

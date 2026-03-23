@@ -269,7 +269,7 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     UltralightManager_Init();
 
     /* Open the library database and ensure schema is up to date */
-    g_library.open("G:/Documents Sym Links/GitHub/aarcade-core/x64/Release/library.db");
+    g_library.open("library.db");
     g_library.ensureSchema();
     g_library.setPlatformKey(OPENJK_PLATFORM_ID);
 
@@ -795,9 +795,14 @@ AARCADECORE_EXPORT bool aarcadecore_has_spawn_transform(void)
 }
 
 AARCADECORE_EXPORT void aarcadecore_get_spawn_transform(float* p, float* y, float* r, bool* isWorldRot,
-    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast)
+    float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast, float* scale)
 {
-    g_instanceManager.getSpawnTransform(p, y, r, isWorldRot, ox, oy, oz, isWorldOff, useRaycast);
+    g_instanceManager.getSpawnTransform(p, y, r, isWorldRot, ox, oy, oz, isWorldOff, useRaycast, scale);
+}
+
+AARCADECORE_EXPORT float aarcadecore_get_object_scale(int thingIdx)
+{
+    return g_instanceManager.getObjectScale(thingIdx);
 }
 
 AARCADECORE_EXPORT void aarcadecore_clear_spawn_transform(void)

@@ -181,6 +181,12 @@
             <input type="checkbox" id="raycastOffset">
             <label for="raycastOffset">Use Raycast Offset</label>
         </div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:6px 0">
+        <div class="transform-row">
+            <label class="axis-label" data-slider="scaleSlider">Scale:</label>
+            <input type="range" id="scaleSlider" min="0.1" max="10" value="1" step="0.1">
+            <span class="val" id="scaleVal">1.0</span>
+        </div>
     </div>
     <div class="spawn-hint">Click to place &middot; Escape to cancel &middot; Scroll to change model &middot; RMB for transform</div>
 <script>
@@ -264,6 +270,8 @@
     var offZVal = document.getElementById('offZVal');
     var worldOffset = document.getElementById('worldOffset');
     var raycastOffset = document.getElementById('raycastOffset');
+    var scaleSlider = document.getElementById('scaleSlider');
+    var scaleVal = document.getElementById('scaleVal');
 
     function getModelId() {
         try {
@@ -280,16 +288,18 @@
         var ox = parseFloat(offXSlider.value);
         var oy = parseFloat(offYSlider.value);
         var oz = parseFloat(offZSlider.value);
+        var sc = parseFloat(scaleSlider.value);
         pitchVal.textContent = p;
         yawVal.textContent = y;
         rollVal.textContent = r;
         offXVal.textContent = ox.toFixed(2);
         offYVal.textContent = oy.toFixed(2);
         offZVal.textContent = oz.toFixed(2);
+        scaleVal.textContent = sc.toFixed(1);
         try {
             if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.setSpawnTransform)
                 aapi.manager.setSpawnTransform(p, y, r, worldRotation.checked,
-                    ox, oy, oz, worldOffset.checked, raycastOffset.checked);
+                    ox, oy, oz, worldOffset.checked, raycastOffset.checked, sc);
         } catch (e) {}
     }
 
@@ -305,6 +315,7 @@
                 offXSlider.value = saved.offX || 0;
                 offYSlider.value = saved.offY || 0;
                 offZSlider.value = saved.offZ || 0;
+                scaleSlider.value = saved.scale || 1;
                 sendTransform();
             }
         } catch (e) {}
@@ -316,13 +327,14 @@
         try {
             localStorage.setItem('spawnTransform_' + mid, JSON.stringify({
                 pitch: parseInt(pitchSlider.value), yaw: parseInt(yawSlider.value), roll: parseInt(rollSlider.value),
-                offX: parseFloat(offXSlider.value), offY: parseFloat(offYSlider.value), offZ: parseFloat(offZSlider.value)
+                offX: parseFloat(offXSlider.value), offY: parseFloat(offYSlider.value), offZ: parseFloat(offZSlider.value),
+                scale: parseFloat(scaleSlider.value)
             }));
         } catch (e) {}
     }
 
     /* Attach listeners */
-    var allSliders = [pitchSlider, yawSlider, rollSlider, offXSlider, offYSlider, offZSlider];
+    var allSliders = [pitchSlider, yawSlider, rollSlider, offXSlider, offYSlider, offZSlider, scaleSlider];
     for (var s = 0; s < allSliders.length; s++) allSliders[s].addEventListener('input', sendTransform);
     worldRotation.addEventListener('change', sendTransform);
     worldOffset.addEventListener('change', sendTransform);

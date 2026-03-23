@@ -61,6 +61,10 @@ public:
     void saveInstanceObject(const Arcade::InstanceObject& obj);
     void deleteInstanceObject(const std::string& instanceId, const std::string& objectKey);
 
+    /* Merge another library.db into this one using ATTACH DATABASE.
+     * strategy: "skip" = INSERT OR IGNORE, "overwrite" = INSERT OR REPLACE */
+    std::string mergeFrom(const std::string& sourceDbPath, const std::string& strategy = "skip");
+
 private:
     sqlite3* db_;
     std::string platformKey_;

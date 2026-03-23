@@ -298,6 +298,7 @@ void InstanceManager::onMapLoaded()
             req.posX = px; req.posY = py; req.posZ = pz;
             req.sectorId = sector;
             req.rotX = rx; req.rotY = ry; req.rotZ = rz;
+            req.scale = obj.scale;
 
             pendingSpawns_.push(req);
         }
@@ -324,6 +325,7 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
     req.posX = req.posY = req.posZ = 0;
     req.sectorId = -1;
     req.rotX = req.rotY = req.rotZ = 0;
+    req.scale = 1.0f;
     pendingSpawns_.push(req);
 }
 
@@ -350,6 +352,7 @@ void InstanceManager::initSpawnedObject(int thingIdx)
     obj.modelId = lastPopped_.modelId;
     obj.objectKey = lastPopped_.objectKey.empty() ? Arcade::generateFirebasePushId() : lastPopped_.objectKey;
     obj.url = resolvedUrl;
+    obj.scale = lastPopped_.scale;
     obj.thingIdx = thingIdx;
     obj.screenImageRequested = false;
     obj.marqueeImageRequested = false;
@@ -403,8 +406,15 @@ void InstanceManager::initSpawnedObject(int thingIdx)
 
 void InstanceManager::confirmSpawn(int thingIdx)
 {
-    /* Called when user actually confirms placement (LMB) — just logs for now.
-     * Position saving is handled by report_thing_transform from the host. */
+    /* Update scale from spawn transform before position is reported and saved */
+    if (spawnTransformSet_) {
+        for (auto& obj : objects_) {
+            if (obj.thingIdx == thingIdx) {
+                obj.scale = spawnScale_;
+                break;
+            }
+        }
+    }
     if (g_host.host_printf)
         g_host.host_printf("InstanceManager: Spawn confirmed - thingIdx=%d\n", thingIdx);
 }
@@ -639,22 +649,38 @@ int InstanceManager::popPendingMove()
 }
 
 void InstanceManager::setSpawnTransform(float pitch, float yaw, float roll, bool isWorldRot,
-                                         float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset)
+                                         float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset,
+                                         float scale)
 {
     spawnPitch_ = pitch; spawnYaw_ = yaw; spawnRoll_ = roll; spawnRotIsWorld_ = isWorldRot;
     spawnOffX_ = offX; spawnOffY_ = offY; spawnOffZ_ = offZ;
     spawnOffIsWorld_ = isWorldOffset; spawnUseRaycast_ = useRaycastOffset;
+    spawnScale_ = scale;
     spawnTransformSet_ = true;
 }
 
 void InstanceManager::getSpawnTransform(float* p, float* y, float* r, bool* isWorldRot,
-                                         float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast) const
+                                         float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast,
+                                         float* scale) const
 {
     if (p) *p = spawnPitch_; if (y) *y = spawnYaw_; if (r) *r = spawnRoll_;
     if (isWorldRot) *isWorldRot = spawnRotIsWorld_;
     if (ox) *ox = spawnOffX_; if (oy) *oy = spawnOffY_; if (oz) *oz = spawnOffZ_;
     if (isWorldOff) *isWorldOff = spawnOffIsWorld_;
     if (useRaycast) *useRaycast = spawnUseRaycast_;
+    if (scale) *scale = spawnScale_;
+}
+
+float InstanceManager::getObjectScale(int thingIdx) const
+{
+    /* During spawn/move mode, use live slider value for the preview thing */
+    if (thingIdx == spawnPreviewThingIdx_ && spawnTransformSet_)
+        return spawnScale_;
+
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx == thingIdx) return obj.scale;
+    }
+    return 1.0f;
 }
 
 std::string InstanceManager::getSpawnModelId() const
@@ -756,6 +782,10 @@ int InstanceManager::importDefaultLibrary()
         { "aaojk_movie_display_wallmount", "Movie Display Wallmount" },
         { "dyn_videosign", "Video Sign" },
         { "aaojk_wall_pad_w", "Wall Pad W" },
+        { "aaojk_pic_wide_l", "Pic Wide L" },
+        { "aaojk_pic_tall_l", "Pic Tall L" },
+        { "aaojk_big_movie_wallmount", "Big Movie Wallmount" },
+        { "aaojk_big_movie_wallmount_no_banner", "Big Movie Wallmount No Banner" },
     };
     int created = 0;
     for (auto& d : defaults) {
@@ -771,6 +801,11 @@ int InstanceManager::importDefaultLibrary()
         g_host.host_printf("InstanceManager: importDefaultLibrary created %d of %d models\n",
             created, (int)(sizeof(defaults) / sizeof(defaults[0])));
     return created;
+}
+
+std::string InstanceManager::mergeLibrary(const std::string& sourcePath, const std::string& strategy)
+{
+    return g_library.mergeFrom(sourcePath, strategy);
 }
 
 void InstanceManager::requestSpawnModelChange(const std::string& modelId)
@@ -880,7 +915,7 @@ void InstanceManager::reportThingTransform(int thingIdx, float px, float py, flo
             dbObj.model = obj.modelId;
             dbObj.position = posBuf;
             dbObj.rotation = rotBuf;
-            dbObj.scale = 1.0f;
+            dbObj.scale = obj.scale;
 
             g_library.saveInstanceObject(dbObj);
 

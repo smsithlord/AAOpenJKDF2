@@ -895,12 +895,27 @@ void Window_SdlUpdate()
                     if (vk) AACoreManager_KeyDown(vk, mods);
 
                     /* Synthesize key_char for printable characters since
-                     * SDL_TEXTINPUT may not fire in relative mouse mode */
+                     * SDL_TEXTINPUT may not fire in relative mouse mode.
+                     * Must handle shift+symbol mappings (e.g. shift+; → ':') */
                     SDL_Keycode sym = event.key.keysym.sym;
                     if (sym >= SDLK_SPACE && sym <= SDLK_z && sym < 128) {
                         unsigned int ch = (unsigned int)sym;
-                        if (ch >= 'a' && ch <= 'z' && (mods & 4)) /* AACORE_MOD_SHIFT */
-                            ch -= 32; /* uppercase */
+                        if (mods & 4) { /* AACORE_MOD_SHIFT */
+                            if (ch >= 'a' && ch <= 'z') ch -= 32; /* uppercase */
+                            else switch (ch) {
+                                case '1': ch = '!'; break; case '2': ch = '@'; break;
+                                case '3': ch = '#'; break; case '4': ch = '$'; break;
+                                case '5': ch = '%'; break; case '6': ch = '^'; break;
+                                case '7': ch = '&'; break; case '8': ch = '*'; break;
+                                case '9': ch = '('; break; case '0': ch = ')'; break;
+                                case '-': ch = '_'; break; case '=': ch = '+'; break;
+                                case '[': ch = '{'; break; case ']': ch = '}'; break;
+                                case '\\': ch = '|'; break; case ';': ch = ':'; break;
+                                case '\'': ch = '"'; break; case ',': ch = '<'; break;
+                                case '.': ch = '>'; break; case '/': ch = '?'; break;
+                                case '`': ch = '~'; break;
+                            }
+                        }
                         AACoreManager_KeyChar(ch, mods);
                     }
                     break; /* AArcade consumed the key — don't forward to game */

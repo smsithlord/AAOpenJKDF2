@@ -17,6 +17,7 @@ struct SpawnRequest {
     float posX, posY, posZ;
     int sectorId;
     float rotX, rotY, rotZ;
+    float scale;
     std::string objectKey; /* for restored objects */
 };
 
@@ -36,6 +37,7 @@ struct SpawnedObject {
     std::string modelId;      /* model ID from media library */
     std::string objectKey;    /* Firebase push ID for DB storage */
     std::string url;
+    float scale;              /* uniform scale factor (1.0 = normal) */
     int thingIdx;             /* engine sithThing index */
     std::string screenImagePath;
     std::string marqueeImagePath;
@@ -49,7 +51,7 @@ public:
         spawnPreviewThingIdx_(-1),
         spawnPitch_(0), spawnYaw_(0), spawnRoll_(0), spawnRotIsWorld_(false),
         spawnOffX_(0), spawnOffY_(0), spawnOffZ_(0), spawnOffIsWorld_(false),
-        spawnUseRaycast_(false), spawnTransformSet_(false) {}
+        spawnUseRaycast_(false), spawnScale_(1.0f), spawnTransformSet_(false) {}
 
     /* Map lifecycle — called by host when maps load/unload */
     void onMapLoaded();
@@ -107,12 +109,17 @@ public:
     bool hasPendingMove() const;
     int popPendingMove();
 
-    /* Spawn transform override (rotation + position offset) */
+    /* Spawn transform override (rotation + position offset + scale) */
     void setSpawnTransform(float pitch, float yaw, float roll, bool isWorldRot,
-                           float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset);
+                           float offX, float offY, float offZ, bool isWorldOffset, bool useRaycastOffset,
+                           float scale);
     bool hasSpawnTransform() const { return spawnTransformSet_; }
     void getSpawnTransform(float* p, float* y, float* r, bool* isWorldRot,
-                           float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast) const;
+                           float* ox, float* oy, float* oz, bool* isWorldOff, bool* useRaycast,
+                           float* scale) const;
+
+    /* Get uniform scale for a spawned object by thingIdx */
+    float getObjectScale(int thingIdx) const;
     void clearSpawnTransform() { spawnTransformSet_ = false; }
 
     /* Current spawn model ID (for localStorage persistence in JS) */
@@ -133,6 +140,10 @@ public:
 
     /* Import default model entries into the library */
     int importDefaultLibrary();
+
+    /* Merge another library.db into the active library.
+     * strategy: "skip" = INSERT OR IGNORE, "overwrite" = INSERT OR REPLACE */
+    std::string mergeLibrary(const std::string& sourcePath, const std::string& strategy = "skip");
 
     /* Spawn mode model change — queues a template name for the host */
     void requestSpawnModelChange(const std::string& modelId);
@@ -170,6 +181,7 @@ private:
     float spawnOffX_, spawnOffY_, spawnOffZ_;
     bool spawnOffIsWorld_;
     bool spawnUseRaycast_;
+    float spawnScale_;
     bool spawnTransformSet_;
     SpawnRequest lastPopped_;
 

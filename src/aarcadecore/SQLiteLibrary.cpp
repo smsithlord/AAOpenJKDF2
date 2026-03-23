@@ -12,7 +12,7 @@ bool SQLiteLibrary::open(const char* dbPath)
 {
     if (db_) close();
 
-    int rc = sqlite3_open_v2(dbPath, &db_, SQLITE_OPEN_READWRITE, nullptr);
+    int rc = sqlite3_open_v2(dbPath, &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
     if (rc != SQLITE_OK) {
         if (g_host.host_printf)
             g_host.host_printf("SQLiteLibrary: Failed to open '%s': %s\n", dbPath, sqlite3_errmsg(db_));
@@ -623,6 +623,126 @@ void SQLiteLibrary::deleteInstanceObject(const std::string& instanceId, const st
     sqlite3_bind_text(stmt, 2, objectKey.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+}
+
+std::string SQLiteLibrary::mergeFrom(const std::string& sourceDbPath, const std::string& strategy)
+{
+    if (!db_) return "Target database not open";
+
+    const char* conflict = (strategy == "overwrite") ? "REPLACE" : "IGNORE";
+
+    /* Escape single quotes in path for SQL */
+    std::string escapedPath = sourceDbPath;
+    for (size_t i = 0; i < escapedPath.size(); i++) {
+        if (escapedPath[i] == '\'') { escapedPath.insert(i, 1, '\''); i++; }
+    }
+
+    std::string attachSql = "ATTACH DATABASE '" + escapedPath + "' AS src";
+    char* errMsg = nullptr;
+    int rc = sqlite3_exec(db_, attachSql.c_str(), nullptr, nullptr, &errMsg);
+    if (rc != SQLITE_OK) {
+        std::string err = errMsg ? errMsg : "Unknown error";
+        sqlite3_free(errMsg);
+        return "ATTACH failed: " + err;
+    }
+
+    const char* mainTables[] = { "platforms", "items", "types", "models", "apps", "maps", "instances" };
+
+    int totalInserted = 0;
+
+    sqlite3_exec(db_, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+
+    if (strategy == "larger") {
+        /* "Overwrite if larger" — INSERT OR IGNORE for new rows, then UPDATE where source is larger */
+        /* Per-table non-ID columns for length comparison */
+        const char* tableCols[][10] = {
+            /* platforms */ { "title", nullptr },
+            /* items */     { "app", "description", "file", "marquee", "preview", "screen", "title", "type", nullptr },
+            /* types */     { "title", "priority", nullptr },
+            /* models */    { "title", "screen", nullptr },
+            /* apps */      { "title", "type", "screen", nullptr },
+            /* maps */      { "title", nullptr },
+            /* instances */ { "title", "map", nullptr },
+        };
+
+        for (int i = 0; i < 7; i++) {
+            /* Step 1: Insert new rows */
+            std::string sql = std::string("INSERT OR IGNORE INTO main.") + mainTables[i]
+                + " SELECT * FROM src." + mainTables[i];
+            rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &errMsg);
+            if (rc != SQLITE_OK) { if (errMsg) sqlite3_free(errMsg); errMsg = nullptr; continue; }
+            totalInserted += sqlite3_changes(db_);
+
+            /* Step 2: Build length comparison and UPDATE existing rows if source is larger */
+            std::string srcLen, dstLen, setCols;
+            for (int c = 0; tableCols[i][c]; c++) {
+                const char* col = tableCols[i][c];
+                if (c > 0) { srcLen += "+"; dstLen += "+"; setCols += ","; }
+                srcLen += std::string("length(coalesce(s.") + col + ",''))";
+                dstLen += std::string("length(coalesce(m.") + col + ",''))";
+                setCols += std::string(col) + "=s." + col;
+            }
+            std::string updateSql = std::string("UPDATE main.") + mainTables[i] + " SET " + setCols
+                + " FROM src." + mainTables[i] + " s"
+                + " WHERE main." + mainTables[i] + ".id = s.id"
+                + " AND (" + srcLen + ") > (" + dstLen + ")";
+            /* SQLite UPDATE...FROM requires aliasing the target — use a subquery approach instead */
+            updateSql = std::string("UPDATE main.") + mainTables[i] + " AS m SET " + setCols
+                + " FROM src." + mainTables[i] + " AS s"
+                + " WHERE m.id = s.id AND (" + srcLen + ") > (" + dstLen + ")";
+            rc = sqlite3_exec(db_, updateSql.c_str(), nullptr, nullptr, &errMsg);
+            if (rc != SQLITE_OK) { if (errMsg) sqlite3_free(errMsg); errMsg = nullptr; continue; }
+            totalInserted += sqlite3_changes(db_);
+
+            if (g_host.host_printf)
+                g_host.host_printf("SQLiteLibrary: Merged (larger) into %s\n", mainTables[i]);
+        }
+    } else {
+        /* "skip" or "overwrite" — fast path */
+        for (int i = 0; i < 7; i++) {
+            std::string sql = std::string("INSERT OR ") + conflict + " INTO main." + mainTables[i]
+                + " SELECT * FROM src." + mainTables[i];
+            rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &errMsg);
+            if (rc != SQLITE_OK) {
+                if (errMsg) sqlite3_free(errMsg);
+                errMsg = nullptr;
+                continue;
+            }
+            int changes = sqlite3_changes(db_);
+            totalInserted += changes;
+            if (g_host.host_printf)
+                g_host.host_printf("SQLiteLibrary: Merged %d rows into %s (%s)\n", changes, mainTables[i], conflict);
+        }
+    }
+
+    /* Collection tables: always INSERT OR IGNORE (no size comparison needed) */
+    const char* collectionInserts[] = {
+        "INSERT OR IGNORE INTO main.model_platforms (model_id, platform_key, file) "
+            "SELECT model_id, platform_key, file FROM src.model_platforms",
+        "INSERT OR IGNORE INTO main.map_platforms (map_id, platform_key, file) "
+            "SELECT map_id, platform_key, file FROM src.map_platforms",
+        "INSERT OR IGNORE INTO main.instance_objects (instance_id, object_key, anim, body, child, item, model, position, rotation, scale, skin, slave) "
+            "SELECT instance_id, object_key, anim, body, child, item, model, position, rotation, scale, skin, slave FROM src.instance_objects",
+    };
+
+    for (int i = 0; i < 3; i++) {
+        rc = sqlite3_exec(db_, collectionInserts[i], nullptr, nullptr, &errMsg);
+        if (rc != SQLITE_OK) {
+            if (errMsg) sqlite3_free(errMsg);
+            errMsg = nullptr;
+            continue;
+        }
+        totalInserted += sqlite3_changes(db_);
+    }
+
+    sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
+    sqlite3_exec(db_, "DETACH DATABASE src", nullptr, nullptr, nullptr);
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Merged %d total rows", totalInserted);
+    if (g_host.host_printf)
+        g_host.host_printf("SQLiteLibrary: %s from %s\n", buf, sourceDbPath.c_str());
+    return buf;
 }
 
 std::string SQLiteLibrary::findModelPlatformFile(const std::string& modelId, const std::string& platformKey)

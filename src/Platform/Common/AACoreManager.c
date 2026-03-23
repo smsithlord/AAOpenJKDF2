@@ -70,6 +70,7 @@ static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
 static aarcadecore_has_spawn_transform_t g_fn_has_spawn_transform = NULL;
 static aarcadecore_get_spawn_transform_t g_fn_get_spawn_transform = NULL;
+static aarcadecore_get_object_scale_t g_fn_get_object_scale = NULL;
 static aarcadecore_get_spawn_model_id_t g_fn_get_spawn_model_id = NULL;
 static aarcadecore_update_thing_idx_t g_fn_update_thing_idx = NULL;
 static aarcadecore_set_spawn_preview_thing_t g_fn_set_spawn_preview_thing = NULL;
@@ -340,6 +341,7 @@ void AACoreManager_Init(void)
     LOAD_FN(object_used)
     LOAD_FN(has_spawn_transform)
     LOAD_FN(get_spawn_transform)
+    LOAD_FN(get_object_scale)
     LOAD_FN(get_spawn_model_id)
     LOAD_FN(update_thing_idx)
     LOAD_FN(set_spawn_preview_thing)
@@ -478,6 +480,7 @@ void AACoreManager_Shutdown(void)
     g_fn_object_used = NULL;
     g_fn_has_spawn_transform = NULL;
     g_fn_get_spawn_transform = NULL;
+    g_fn_get_object_scale = NULL;
     g_fn_get_spawn_model_id = NULL;
     g_fn_update_thing_idx = NULL;
     g_fn_set_spawn_preview_thing = NULL;
@@ -874,9 +877,9 @@ void AACoreManager_Update(void)
 
             /* Apply transform overrides from spawn mode panel */
             if (g_fn_has_spawn_transform && g_fn_has_spawn_transform()) {
-                float rp, ry, rr, ox, oy, oz;
+                float rp, ry, rr, ox, oy, oz, spawnScale;
                 bool isWorldRot = false, isWorldOff = false, useRaycast = false;
-                g_fn_get_spawn_transform(&rp, &ry, &rr, &isWorldRot, &ox, &oy, &oz, &isWorldOff, &useRaycast);
+                g_fn_get_spawn_transform(&rp, &ry, &rr, &isWorldRot, &ox, &oy, &oz, &isWorldOff, &useRaycast, &spawnScale);
 
                 /* Position offset (applied before rotation) */
                 if (ox != 0.0f || oy != 0.0f || oz != 0.0f) {
@@ -1614,6 +1617,18 @@ void AACoreManager_PreRenderThing(void* pSithThing)
                 g_origMarqueeTextures[0].opaqueMats[0].texture_loaded = 1;
                 g_origMarqueeTextures[0].opaqueMats[0].is_16bit = 1;
             }
+
+            /* Apply per-object uniform scale by scaling the orientation matrix axes */
+            if (g_fn_get_object_scale) {
+                float scale = g_fn_get_object_scale(g_thingTaskMap[i].thingIdx);
+                if (scale != 1.0f) {
+                    sithThing* pThing = (sithThing*)pSithThing;
+                    rdVector_Scale3Acc(&pThing->lookOrientation.rvec, scale);
+                    rdVector_Scale3Acc(&pThing->lookOrientation.lvec, scale);
+                    rdVector_Scale3Acc(&pThing->lookOrientation.uvec, scale);
+                }
+            }
+
             return;
         }
     }
@@ -1621,7 +1636,24 @@ void AACoreManager_PreRenderThing(void* pSithThing)
 
 void AACoreManager_PostRenderThing(void* pSithThing)
 {
-    /* No-op — next PreRenderThing will flush before overwriting the swap */
+    if (!g_dynscreenMaterial || g_thingTaskCount == 0) return;
+
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].thing == pSithThing) {
+            /* Restore orientation vectors after scaled render */
+            if (g_fn_get_object_scale) {
+                float scale = g_fn_get_object_scale(g_thingTaskMap[i].thingIdx);
+                if (scale != 1.0f) {
+                    sithThing* pThing = (sithThing*)pSithThing;
+                    float inv = 1.0f / scale;
+                    rdVector_Scale3Acc(&pThing->lookOrientation.rvec, inv);
+                    rdVector_Scale3Acc(&pThing->lookOrientation.lvec, inv);
+                    rdVector_Scale3Acc(&pThing->lookOrientation.uvec, inv);
+                }
+            }
+            return;
+        }
+    }
 }
 
 void AACoreManager_ToggleMainMenu(void)

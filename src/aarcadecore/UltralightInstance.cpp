@@ -217,7 +217,7 @@ AAPI_CALLBACK(js_manager_reloadInstance) {
 }
 
 AAPI_CALLBACK(js_manager_setSpawnTransform) {
-    if (argumentCount < 9) return JSValueMakeBoolean(ctx, false);
+    if (argumentCount < 10) return JSValueMakeBoolean(ctx, false);
     float pitch = (float)JSValueToNumber(ctx, arguments[0], nullptr);
     float yaw   = (float)JSValueToNumber(ctx, arguments[1], nullptr);
     float roll  = (float)JSValueToNumber(ctx, arguments[2], nullptr);
@@ -227,7 +227,8 @@ AAPI_CALLBACK(js_manager_setSpawnTransform) {
     float offZ = (float)JSValueToNumber(ctx, arguments[6], nullptr);
     bool isWorldOff = JSValueToBoolean(ctx, arguments[7]);
     bool useRaycast = JSValueToBoolean(ctx, arguments[8]);
-    g_instanceManager.setSpawnTransform(pitch, yaw, roll, isWorldRot, offX, offY, offZ, isWorldOff, useRaycast);
+    float scale = (float)JSValueToNumber(ctx, arguments[9], nullptr);
+    g_instanceManager.setSpawnTransform(pitch, yaw, roll, isWorldRot, offX, offY, offZ, isWorldOff, useRaycast, scale);
     return JSValueMakeBoolean(ctx, true);
 }
 
@@ -317,6 +318,23 @@ AAPI_CALLBACK(js_manager_importDefaultLibrary) {
     JSObjectSetProperty(ctx, result, totalKey, JSValueMakeNumber(ctx, 4), 0, nullptr);
     JSStringRelease(createdKey);
     JSStringRelease(totalKey);
+    return result;
+}
+
+AAPI_CALLBACK(js_manager_mergeLibrary) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string sourcePath = jsValueToString(ctx, arguments[0]);
+    std::string strategy = (argumentCount >= 2) ? jsValueToString(ctx, arguments[1]) : "skip";
+    std::string stats = g_instanceManager.mergeLibrary(sourcePath, strategy);
+    JSObjectRef result = JSObjectMake(ctx, nullptr, nullptr);
+    JSStringRef k;
+    k = JSStringCreateWithUTF8CString("success");
+    JSObjectSetProperty(ctx, result, k, JSValueMakeBoolean(ctx, true), 0, nullptr);
+    JSStringRelease(k);
+    k = JSStringCreateWithUTF8CString("stats");
+    JSStringRef v = JSStringCreateWithUTF8CString(stats.c_str());
+    JSObjectSetProperty(ctx, result, k, JSValueMakeString(ctx, v), 0, nullptr);
+    JSStringRelease(v); JSStringRelease(k);
     return result;
 }
 
@@ -711,6 +729,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "getRequestedTab", js_manager_getRequestedTab);
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
+    addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);
