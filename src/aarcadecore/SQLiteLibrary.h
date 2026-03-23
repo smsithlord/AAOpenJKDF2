@@ -64,6 +64,7 @@ public:
     std::vector<Arcade::InstanceObject> getInstanceObjects(const std::string& instanceId);
     void saveInstanceObject(const Arcade::InstanceObject& obj);
     void deleteInstanceObject(const std::string& instanceId, const std::string& objectKey);
+    void updateInstanceObjectSlave(const std::string& instanceId, const std::string& objectKey, int slave);
 
     /* Merge another library.db into this one using ATTACH DATABASE.
      * strategy: "skip" = INSERT OR IGNORE, "overwrite" = INSERT OR REPLACE */

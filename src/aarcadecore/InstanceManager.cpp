@@ -1061,7 +1061,10 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
         aarcadecore_removeTask(inst.taskIndex);
     }
     if (inst.browser) {
-        SteamworksWebBrowserInstance_Destroy(inst.browser);
+        if (inst.browser->type == EMBEDDED_LIBRETRO)
+            LibretroInstance_Destroy(inst.browser);
+        else
+            SteamworksWebBrowserInstance_Destroy(inst.browser);
         inst.browser = nullptr;
     }
 
@@ -1188,6 +1191,8 @@ bool InstanceManager::toggleSlave(int thingIdx)
     for (auto& obj : objects_) {
         if (obj.thingIdx == thingIdx) {
             obj.slave = !obj.slave;
+            if (!currentInstanceId_.empty())
+                g_library.updateInstanceObjectSlave(currentInstanceId_, obj.objectKey, obj.slave ? 1 : 0);
             if (g_host.host_printf)
                 g_host.host_printf("InstanceManager: toggleSlave thingIdx=%d → slave=%d\n", thingIdx, obj.slave ? 1 : 0);
             return obj.slave;

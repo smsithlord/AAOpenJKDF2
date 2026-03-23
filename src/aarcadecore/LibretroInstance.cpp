@@ -188,10 +188,45 @@ static void libretro_inst_render(EmbeddedInstance* inst,
             }
         }
     } else {
-        uint8_t* dest = (uint8_t*)pixelData;
-        int i;
-        for (i = 0; i < width * height; i++) {
-            dest[i] = (uint8_t)((((i % width) + (i / width)) / 8) & 0xFF);
+        /* 32bpp BGRA output (fullscreen overlay) */
+        uint32_t* dest = (uint32_t*)pixelData;
+        int scale_x = ((int)frame_width << 16) / width;
+        int scale_y = ((int)frame_height << 16) / height;
+
+        if (is_xrgb8888) {
+            const uint32_t* src = (const uint32_t*)frame_data;
+            int y, x;
+            for (y = 0; y < height; y++) {
+                int src_y = (y * scale_y) >> 16;
+                if (src_y >= (int)frame_height) src_y = frame_height - 1;
+                for (x = 0; x < width; x++) {
+                    int src_x = (x * scale_x) >> 16;
+                    if (src_x >= (int)frame_width) src_x = frame_width - 1;
+                    uint32_t color = src[src_y * (frame_pitch / 4) + src_x];
+                    /* XRGB8888 → BGRA: swap R and B, set A=255 */
+                    uint8_t r = (color >> 16) & 0xFF;
+                    uint8_t g = (color >> 8) & 0xFF;
+                    uint8_t b = color & 0xFF;
+                    dest[y * width + x] = (255u << 24) | (r << 16) | (g << 8) | b;
+                }
+            }
+        } else {
+            const uint16_t* src = (const uint16_t*)frame_data;
+            int y, x;
+            for (y = 0; y < height; y++) {
+                int src_y = (y * scale_y) >> 16;
+                if (src_y >= (int)frame_height) src_y = frame_height - 1;
+                for (x = 0; x < width; x++) {
+                    int src_x = (x * scale_x) >> 16;
+                    if (src_x >= (int)frame_width) src_x = frame_width - 1;
+                    uint16_t pixel = src[src_y * (frame_pitch / 2) + src_x];
+                    /* RGB565 → BGRA */
+                    uint8_t r = ((pixel >> 11) & 0x1F) << 3;
+                    uint8_t g = ((pixel >> 5) & 0x3F) << 2;
+                    uint8_t b = (pixel & 0x1F) << 3;
+                    dest[y * width + x] = (255u << 24) | (r << 16) | (g << 8) | b;
+                }
+            }
         }
     }
 }

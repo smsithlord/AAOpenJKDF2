@@ -707,6 +707,19 @@ void SQLiteLibrary::saveInstanceObject(const Arcade::InstanceObject& obj)
     sqlite3_finalize(stmt);
 }
 
+void SQLiteLibrary::updateInstanceObjectSlave(const std::string& instanceId, const std::string& objectKey, int slave)
+{
+    if (!db_) return;
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "UPDATE instance_objects SET slave = ? WHERE instance_id = ? AND object_key = ?";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return;
+    sqlite3_bind_int(stmt, 1, slave);
+    sqlite3_bind_text(stmt, 2, instanceId.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, objectKey.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
 void SQLiteLibrary::deleteInstanceObject(const std::string& instanceId, const std::string& objectKey)
 {
     if (!db_) return;
