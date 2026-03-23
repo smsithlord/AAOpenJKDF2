@@ -223,6 +223,147 @@ void LibretroCoreConfigManager::resetCoreOptions(const std::string& coreFile)
         g_host.host_printf("LibretroCoreConfig: Reset options for %s (%s)\n", coreFile.c_str(), optPath.c_str());
 }
 
+static std::string toLowerStr(const std::string& s) {
+    std::string out = s;
+    std::transform(out.begin(), out.end(), out.begin(), ::tolower);
+    return out;
+}
+
+static bool startsWithIgnoreCase(const std::string& str, const std::string& prefix) {
+    if (prefix.empty() || str.size() < prefix.size()) return false;
+    return toLowerStr(str.substr(0, prefix.size())) == toLowerStr(prefix);
+}
+
+static std::string getFileExtension(const std::string& path) {
+    size_t dot = path.rfind('.');
+    if (dot == std::string::npos) return "";
+    return toLowerStr(path.substr(dot + 1));
+}
+
+std::string LibretroCoreConfigManager::findCoreForFile(const std::string& filePath) const
+{
+    if (filePath.empty()) return "";
+
+    std::string fileExt = getFileExtension(filePath);
+    /* Normalize path separators for comparison */
+    std::string normPath = filePath;
+    for (auto& c : normPath) { if (c == '/') c = '\\'; }
+
+    for (const auto& core : cores_) {
+        if (!core.enabled) continue;
+
+        for (const auto& cp : core.paths) {
+            /* Normalize content path */
+            std::string normContentPath = cp.path;
+            for (auto& c : normContentPath) { if (c == '/') c = '\\'; }
+            /* Ensure trailing backslash */
+            if (!normContentPath.empty() && normContentPath.back() != '\\')
+                normContentPath += '\\';
+
+            /* Check if file is within this content path */
+            if (!normContentPath.empty() && startsWithIgnoreCase(normPath, normContentPath)) {
+                /* Check extension filter if specified */
+                if (!cp.extensions.empty() && !fileExt.empty()) {
+                    /* Parse comma-separated extensions */
+                    bool extMatch = false;
+                    std::string exts = cp.extensions;
+                    size_t pos = 0;
+                    while (pos < exts.size()) {
+                        size_t comma = exts.find(',', pos);
+                        if (comma == std::string::npos) comma = exts.size();
+                        std::string ext = exts.substr(pos, comma - pos);
+                        /* Trim whitespace */
+                        while (!ext.empty() && ext.front() == ' ') ext.erase(ext.begin());
+                        while (!ext.empty() && ext.back() == ' ') ext.pop_back();
+                        if (toLowerStr(ext) == fileExt) { extMatch = true; break; }
+                        pos = comma + 1;
+                    }
+                    if (!extMatch) continue;
+                }
+                if (g_host.host_printf)
+                    g_host.host_printf("LibretroCoreConfig: File '%s' matched core '%s' (path: '%s')\n",
+                                      filePath.c_str(), core.file.c_str(), cp.path.c_str());
+                return core.file;
+            }
+
+            /* If content path is empty (any folder), just check extension */
+            if (normContentPath.empty() && !cp.extensions.empty() && !fileExt.empty()) {
+                std::string exts = cp.extensions;
+                size_t pos = 0;
+                while (pos < exts.size()) {
+                    size_t comma = exts.find(',', pos);
+                    if (comma == std::string::npos) comma = exts.size();
+                    std::string ext = exts.substr(pos, comma - pos);
+                    while (!ext.empty() && ext.front() == ' ') ext.erase(ext.begin());
+                    while (!ext.empty() && ext.back() == ' ') ext.pop_back();
+                    if (toLowerStr(ext) == fileExt) {
+                        if (g_host.host_printf)
+                            g_host.host_printf("LibretroCoreConfig: File '%s' matched core '%s' (ext: '%s')\n",
+                                              filePath.c_str(), core.file.c_str(), ext.c_str());
+                        return core.file;
+                    }
+                    pos = comma + 1;
+                }
+            }
+        }
+    }
+    return "";
+}
+
+std::string LibretroCoreConfigManager::findCoreMatchingAppPaths(
+    const std::vector<std::pair<std::string, std::string>>& appPaths) const
+{
+    for (const auto& core : cores_) {
+        if (!core.enabled) continue;
+        for (const auto& cp : core.paths) {
+            std::string normCorePath = cp.path;
+            for (auto& c : normCorePath) { if (c == '/') c = '\\'; }
+            if (!normCorePath.empty() && normCorePath.back() != '\\') normCorePath += '\\';
+
+            for (const auto& ap : appPaths) {
+                std::string normAppPath = ap.first;
+                for (auto& c : normAppPath) { if (c == '/') c = '\\'; }
+                if (!normAppPath.empty() && normAppPath.back() != '\\') normAppPath += '\\';
+
+                if (!normCorePath.empty() && !normAppPath.empty() &&
+                    toLowerStr(normCorePath) == toLowerStr(normAppPath)) {
+                    if (g_host.host_printf)
+                        g_host.host_printf("LibretroCoreConfig: App path '%s' matched core '%s'\n",
+                                          ap.first.c_str(), core.file.c_str());
+                    return core.file;
+                }
+            }
+        }
+    }
+    return "";
+}
+
+std::string LibretroCoreConfigManager::resolveFileInCorePaths(
+    const std::string& coreDll, const std::string& filename) const
+{
+    for (const auto& core : cores_) {
+        if (core.file != coreDll) continue;
+        for (const auto& cp : core.paths) {
+            std::string normPath = cp.path;
+            for (auto& c : normPath) { if (c == '/') c = '\\'; }
+            if (!normPath.empty() && normPath.back() != '\\') normPath += '\\';
+
+            std::string fullPath = normPath + filename;
+            /* Check if file exists */
+            FILE* f = fopen(fullPath.c_str(), "rb");
+            if (f) {
+                fclose(f);
+                if (g_host.host_printf)
+                    g_host.host_printf("LibretroCoreConfig: Resolved '%s' to '%s'\n",
+                                      filename.c_str(), fullPath.c_str());
+                return fullPath;
+            }
+        }
+        break;
+    }
+    return "";
+}
+
 std::string LibretroCoreConfigManager::toJson() const
 {
     std::ostringstream ss;

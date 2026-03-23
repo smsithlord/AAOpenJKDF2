@@ -172,6 +172,15 @@ function initEditItem() {
             type: 'select',
             options: appOptions,
             actions: [
+                {
+                    icon: '<img src="icons/editicon.png" class="aa-edit-action-icon">',
+                    title: 'Edit app',
+                    onClick: function() {
+                        var sel = r3.input;
+                        if (sel && sel.value)
+                            window.location = 'file:///aarcadecore/ui/editApp.html?appId=' + encodeURIComponent(sel.value);
+                    }
+                },
                 { icon: '<img src="icons/plusicon.png" class="aa-edit-action-icon">', title: 'Create new app' }
             ]
         });

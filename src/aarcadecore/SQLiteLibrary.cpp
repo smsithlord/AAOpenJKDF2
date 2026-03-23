@@ -253,26 +253,48 @@ std::vector<Arcade::Model> SQLiteLibrary::searchModels(const std::string& query,
 
 // --- Apps ---
 
+static Arcade::App readAppRow(sqlite3_stmt* stmt) {
+    Arcade::App a;
+    a.id            = SQLiteLibrary::getStr(stmt, 0);
+    a.title         = SQLiteLibrary::getStr(stmt, 1);
+    a.type          = SQLiteLibrary::getStr(stmt, 2);
+    a.screen        = SQLiteLibrary::getStr(stmt, 3);
+    a.commandformat = SQLiteLibrary::getStr(stmt, 4);
+    a.description   = SQLiteLibrary::getStr(stmt, 5);
+    a.download      = SQLiteLibrary::getStr(stmt, 6);
+    a.file          = SQLiteLibrary::getStr(stmt, 7);
+    a.reference     = SQLiteLibrary::getStr(stmt, 8);
+    return a;
+}
+
+Arcade::App SQLiteLibrary::getAppById(const std::string& id)
+{
+    Arcade::App app;
+    if (!db_) return app;
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id, title, type, screen, commandformat, description, download, file, reference FROM apps WHERE id = ? LIMIT 1";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return app;
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        app = readAppRow(stmt);
+    sqlite3_finalize(stmt);
+    return app;
+}
+
 std::vector<Arcade::App> SQLiteLibrary::getApps(int offset, int limit)
 {
     std::vector<Arcade::App> results;
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title, type, screen FROM apps ORDER BY id LIMIT ? OFFSET ?";
+    const char* sql = "SELECT id, title, type, screen, commandformat, description, download, file, reference FROM apps ORDER BY id LIMIT ? OFFSET ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     sqlite3_bind_int(stmt, 1, limit);
     sqlite3_bind_int(stmt, 2, offset);
 
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        Arcade::App a;
-        a.id     = getStr(stmt, 0);
-        a.title  = getStr(stmt, 1);
-        a.type   = getStr(stmt, 2);
-        a.screen = getStr(stmt, 3);
-        results.push_back(std::move(a));
-    }
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+        results.push_back(readAppRow(stmt));
     sqlite3_finalize(stmt);
     return results;
 }
@@ -283,23 +305,81 @@ std::vector<Arcade::App> SQLiteLibrary::searchApps(const std::string& query, int
     if (!db_) return results;
 
     sqlite3_stmt* stmt = nullptr;
-    const char* sql = "SELECT id, title, type, screen FROM apps WHERE title LIKE ? LIMIT ?";
+    const char* sql = "SELECT id, title, type, screen, commandformat, description, download, file, reference FROM apps WHERE title LIKE ? LIMIT ?";
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
 
     std::string pattern = "%" + query + "%";
     sqlite3_bind_text(stmt, 1, pattern.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 2, limit);
 
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+        results.push_back(readAppRow(stmt));
+    sqlite3_finalize(stmt);
+    return results;
+}
+
+std::vector<Arcade::AppFilepath> SQLiteLibrary::getAppFilepaths(const std::string& appId)
+{
+    std::vector<Arcade::AppFilepath> results;
+    if (!db_) return results;
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT app_id, filepath_key, path, extensions FROM app_filepaths WHERE app_id = ?";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return results;
+    sqlite3_bind_text(stmt, 1, appId.c_str(), -1, SQLITE_TRANSIENT);
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        Arcade::App a;
-        a.id     = getStr(stmt, 0);
-        a.title  = getStr(stmt, 1);
-        a.type   = getStr(stmt, 2);
-        a.screen = getStr(stmt, 3);
-        results.push_back(std::move(a));
+        Arcade::AppFilepath fp;
+        fp.app_id       = getStr(stmt, 0);
+        fp.filepath_key = getStr(stmt, 1);
+        fp.path         = getStr(stmt, 2);
+        fp.extensions   = getStr(stmt, 3);
+        results.push_back(std::move(fp));
     }
     sqlite3_finalize(stmt);
     return results;
+}
+
+void SQLiteLibrary::updateAppField(const std::string& appId, const std::string& field, const std::string& value)
+{
+    if (!db_) return;
+    /* Whitelist allowed fields to prevent SQL injection */
+    static const char* allowed[] = { "title", "type", "screen", "commandformat", "description", "download", "file", "reference" };
+    bool ok = false;
+    for (auto f : allowed) { if (field == f) { ok = true; break; } }
+    if (!ok) return;
+
+    std::string sql = "UPDATE apps SET " + field + " = ? WHERE id = ?";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) return;
+    sqlite3_bind_text(stmt, 1, value.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, appId.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
+
+void SQLiteLibrary::saveAppFilepaths(const std::string& appId, const std::vector<Arcade::AppFilepath>& paths)
+{
+    if (!db_) return;
+    /* Delete existing paths */
+    sqlite3_stmt* stmt = nullptr;
+    const char* delSql = "DELETE FROM app_filepaths WHERE app_id = ?";
+    if (sqlite3_prepare_v2(db_, delSql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, appId.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+    /* Insert new paths */
+    const char* insSql = "INSERT INTO app_filepaths (app_id, filepath_key, path, extensions) VALUES (?, ?, ?, ?)";
+    for (const auto& fp : paths) {
+        if (sqlite3_prepare_v2(db_, insSql, -1, &stmt, nullptr) == SQLITE_OK) {
+            std::string key = fp.filepath_key.empty() ? Arcade::generateFirebasePushId() : fp.filepath_key;
+            sqlite3_bind_text(stmt, 1, appId.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 2, key.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 3, fp.path.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 4, fp.extensions.c_str(), -1, SQLITE_TRANSIENT);
+            sqlite3_step(stmt);
+            sqlite3_finalize(stmt);
+        }
+    }
 }
 
 // --- Maps ---
@@ -476,6 +556,19 @@ void SQLiteLibrary::ensureSchema()
             "position TEXT, rotation TEXT, scale REAL, skin INTEGER, slave INTEGER, "
             "FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE, "
             "UNIQUE (instance_id, object_key))");
+
+    /* Ensure apps has full set of columns from old schema */
+    execSQL("ALTER TABLE apps ADD COLUMN commandformat TEXT");
+    execSQL("ALTER TABLE apps ADD COLUMN description TEXT");
+    execSQL("ALTER TABLE apps ADD COLUMN download TEXT");
+    execSQL("ALTER TABLE apps ADD COLUMN file TEXT");
+    execSQL("ALTER TABLE apps ADD COLUMN reference TEXT");
+
+    /* App file paths (content folders + extension filters) */
+    execSQL("CREATE TABLE IF NOT EXISTS app_filepaths (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "app_id TEXT NOT NULL, filepath_key TEXT NOT NULL, path TEXT, extensions TEXT, "
+            "FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE, "
+            "UNIQUE (app_id, filepath_key))");
 }
 
 std::string SQLiteLibrary::findMapByPlatformFile(const std::string& platformKey, const std::string& file)
@@ -723,9 +816,11 @@ std::string SQLiteLibrary::mergeFrom(const std::string& sourceDbPath, const std:
             "SELECT map_id, platform_key, file FROM src.map_platforms",
         "INSERT OR IGNORE INTO main.instance_objects (instance_id, object_key, anim, body, child, item, model, position, rotation, scale, skin, slave) "
             "SELECT instance_id, object_key, anim, body, child, item, model, position, rotation, scale, skin, slave FROM src.instance_objects",
+        "INSERT OR IGNORE INTO main.app_filepaths (app_id, filepath_key, path, extensions) "
+            "SELECT app_id, filepath_key, path, extensions FROM src.app_filepaths",
     };
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         rc = sqlite3_exec(db_, collectionInserts[i], nullptr, nullptr, &errMsg);
         if (rc != SQLITE_OK) {
             if (errMsg) sqlite3_free(errMsg);

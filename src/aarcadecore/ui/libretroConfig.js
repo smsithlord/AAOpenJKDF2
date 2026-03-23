@@ -236,19 +236,31 @@ function initLibretroConfig() {
             entry.addEventListener('mouseenter', function() { removeBtn.style.visibility = 'visible'; });
             entry.addEventListener('mouseleave', function() { removeBtn.style.visibility = 'hidden'; });
 
-            /* Save on Enter key in text inputs */
-            function onInputConfirm(e) {
-                if (e.key === 'Enter') {
-                    e.target.style.transition = 'none';
-                    e.target.style.backgroundColor = '#1a5276';
-                    e.target.offsetTop;
-                    e.target.style.transition = 'background-color 0.5s';
-                    e.target.style.backgroundColor = '#080808';
-                    saveCurrentCore();
-                }
+            /* Confirm on Enter (green flash + save), revert on blur */
+            function setupInputConfirm(input) {
+                input.originalValue = input.value;
+                input.addEventListener('focus', function() {
+                    this.originalValue = this.value;
+                });
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        this.originalValue = this.value;
+                        this.style.transition = 'none';
+                        this.style.backgroundColor = '#1a5276';
+                        this.offsetTop;
+                        this.style.transition = 'background-color 0.5s';
+                        this.style.backgroundColor = '#080808';
+                        this.blur();
+                        saveCurrentCore();
+                    }
+                });
+                input.addEventListener('blur', function() {
+                    if (this.value !== this.originalValue)
+                        this.value = this.originalValue;
+                });
             }
-            i1.addEventListener('keydown', onInputConfirm);
-            i2.addEventListener('keydown', onInputConfirm);
+            setupInputConfirm(i1);
+            setupInputConfirm(i2);
 
             entry.appendChild(r1);
             entry.appendChild(r2);

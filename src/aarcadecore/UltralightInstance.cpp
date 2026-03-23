@@ -517,6 +517,11 @@ static JSObjectRef appToJS(JSContextRef ctx, const Arcade::App& a) {
     jsSetProp(ctx, o, "title", a.title);
     jsSetProp(ctx, o, "type", a.type);
     jsSetProp(ctx, o, "screen", a.screen);
+    jsSetProp(ctx, o, "commandformat", a.commandformat);
+    jsSetProp(ctx, o, "description", a.description);
+    jsSetProp(ctx, o, "download", a.download);
+    jsSetProp(ctx, o, "file", a.file);
+    jsSetProp(ctx, o, "reference", a.reference);
     return o;
 }
 
@@ -627,6 +632,66 @@ AAPI_CALLBACK(js_aapi_getInstancesTyped) {
 AAPI_CALLBACK(js_aapi_searchInstancesTyped) {
     int limit; std::string q = parseQueryLimit(ctx, argumentCount, arguments, limit);
     return vectorToJSArray(ctx, g_library.searchInstances(q, limit), instanceToJS);
+}
+
+AAPI_CALLBACK(js_aapi_getAppById) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string id = jsValueToString(ctx, arguments[0]);
+    Arcade::App app = g_library.getAppById(id);
+    if (app.id.empty()) return JSValueMakeNull(ctx);
+    return appToJS(ctx, app);
+}
+
+AAPI_CALLBACK(js_aapi_getAppFilepaths) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string appId = jsValueToString(ctx, arguments[0]);
+    auto fps = g_library.getAppFilepaths(appId);
+    JSObjectRef arr = JSObjectMakeArray(ctx, 0, nullptr, nullptr);
+    for (size_t i = 0; i < fps.size(); i++) {
+        JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
+        jsSetProp(ctx, o, "app_id", fps[i].app_id);
+        jsSetProp(ctx, o, "filepath_key", fps[i].filepath_key);
+        jsSetProp(ctx, o, "path", fps[i].path);
+        jsSetProp(ctx, o, "extensions", fps[i].extensions);
+        JSObjectSetPropertyAtIndex(ctx, arr, (unsigned)i, o, nullptr);
+    }
+    return arr;
+}
+
+AAPI_CALLBACK(js_aapi_saveAppAttribute) {
+    if (argumentCount < 3) return JSValueMakeBoolean(ctx, false);
+    std::string appId = jsValueToString(ctx, arguments[0]);
+    std::string field = jsValueToString(ctx, arguments[1]);
+    std::string value = jsValueToString(ctx, arguments[2]);
+    g_library.updateAppField(appId, field, value);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+AAPI_CALLBACK(js_aapi_saveAppFilepaths) {
+    if (argumentCount < 2) return JSValueMakeBoolean(ctx, false);
+    std::string appId = jsValueToString(ctx, arguments[0]);
+    /* arguments[1] is an array of {path, extensions} objects */
+    JSObjectRef arr = JSValueToObject(ctx, arguments[1], nullptr);
+    if (!arr) return JSValueMakeBoolean(ctx, false);
+    JSStringRef lenKey = JSStringCreateWithUTF8CString("length");
+    int count = (int)JSValueToNumber(ctx, JSObjectGetProperty(ctx, arr, lenKey, nullptr), nullptr);
+    JSStringRelease(lenKey);
+    std::vector<Arcade::AppFilepath> paths;
+    for (int i = 0; i < count; i++) {
+        JSObjectRef o = JSValueToObject(ctx, JSObjectGetPropertyAtIndex(ctx, arr, i, nullptr), nullptr);
+        if (!o) continue;
+        Arcade::AppFilepath fp;
+        fp.app_id = appId;
+        JSStringRef pk = JSStringCreateWithUTF8CString("path");
+        fp.path = jsValueToString(ctx, JSObjectGetProperty(ctx, o, pk, nullptr));
+        JSStringRelease(pk);
+        pk = JSStringCreateWithUTF8CString("extensions");
+        fp.extensions = jsValueToString(ctx, JSObjectGetProperty(ctx, o, pk, nullptr));
+        JSStringRelease(pk);
+        paths.push_back(fp);
+    }
+    g_library.saveAppFilepaths(appId, paths);
+    return JSValueMakeBoolean(ctx, true);
 }
 
 /* --- aapi.images.* callback implementations --- */
@@ -840,6 +905,10 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, libraryObj, "getPlatforms", js_aapi_getPlatformsTyped);
     addJSMethod(ctx, libraryObj, "getInstances", js_aapi_getInstancesTyped);
     addJSMethod(ctx, libraryObj, "searchInstances", js_aapi_searchInstancesTyped);
+    addJSMethod(ctx, libraryObj, "getAppById", js_aapi_getAppById);
+    addJSMethod(ctx, libraryObj, "getAppFilepaths", js_aapi_getAppFilepaths);
+    addJSMethod(ctx, libraryObj, "saveAppAttribute", js_aapi_saveAppAttribute);
+    addJSMethod(ctx, libraryObj, "saveAppFilepaths", js_aapi_saveAppFilepaths);
 
     JSStringRef libraryName = JSStringCreateWithUTF8CString("library");
     JSObjectSetProperty(ctx, aapiObj, libraryName, libraryObj, 0, nullptr);

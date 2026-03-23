@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Edit App</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="arcadeHud.js"></script>
+    <script src="editApp.js"></script>
+</head>
+<body>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initEditApp(); });
+    } else {
+        arcadeHud.initialize();
+        initEditApp();
+    }
+</script>
+</body>
+</html>

@@ -28,6 +28,18 @@ public:
                     int priority, const std::vector<CoreContentPath>& paths);
     void resetCoreOptions(const std::string& coreFile);
 
+    /* Find an enabled core whose content paths match the given file.
+     * Returns the core DLL filename, or empty string if no match. */
+    std::string findCoreForFile(const std::string& filePath) const;
+
+    /* Find an enabled core that shares content paths with the given app file paths.
+     * Returns the core DLL filename, or empty string if no match. */
+    std::string findCoreMatchingAppPaths(const std::vector<std::pair<std::string, std::string>>& appPaths) const;
+
+    /* Resolve a filename within a matched core's content paths.
+     * Returns the full path if found on disk, or empty string. */
+    std::string resolveFileInCorePaths(const std::string& coreDll, const std::string& filename) const;
+
     /* Serialize all cores to JSON string for JS bridge */
     std::string toJson() const;
 

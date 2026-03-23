@@ -35,8 +35,12 @@ public:
     std::vector<Arcade::Model> searchModels(const std::string& query, int limit);
 
     // Apps
+    Arcade::App getAppById(const std::string& id);
     std::vector<Arcade::App> getApps(int offset, int limit);
     std::vector<Arcade::App> searchApps(const std::string& query, int limit);
+    std::vector<Arcade::AppFilepath> getAppFilepaths(const std::string& appId);
+    void updateAppField(const std::string& appId, const std::string& field, const std::string& value);
+    void saveAppFilepaths(const std::string& appId, const std::vector<Arcade::AppFilepath>& paths);
 
     // Maps
     std::vector<Arcade::Map> getMaps(int offset, int limit);
@@ -65,10 +69,11 @@ public:
      * strategy: "skip" = INSERT OR IGNORE, "overwrite" = INSERT OR REPLACE */
     std::string mergeFrom(const std::string& sourceDbPath, const std::string& strategy = "skip");
 
+    static std::string getStr(struct sqlite3_stmt* stmt, int col);
+
 private:
     sqlite3* db_;
     std::string platformKey_;
-    static std::string getStr(struct sqlite3_stmt* stmt, int col);
     void execSQL(const char* sql);
 };
 

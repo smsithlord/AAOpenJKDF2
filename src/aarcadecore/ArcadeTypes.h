@@ -39,6 +39,11 @@ struct Model {
 
 struct App {
     std::string id, title, type, screen;
+    std::string commandformat, description, download, file, reference;
+};
+
+struct AppFilepath {
+    std::string app_id, filepath_key, path, extensions;
 };
 
 struct Map {

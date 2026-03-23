@@ -21,6 +21,7 @@ void aarcadecore_clearOverlayAssociation(void);
 
 #include "ImageLoader.h"
 #include "SQLiteLibrary.h"
+#include "LibretroCoreConfig.h"
 extern ImageLoader g_imageLoader;
 extern SQLiteLibrary g_library;
 std::string UltralightManager_EvalLocalStorage(const char* key);
@@ -167,11 +168,40 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
     /* Decide which embedded instance type to create based on item data */
     EmbeddedInstance* task = nullptr;
 
-    if (containsIgnoreCase(item.title, "mario")) {
-        /* TEST: Libretro instance for items with "Mario" in the title */
+    /* Determine if this item should use Libretro instead of SWB */
+    bool useLibretro = false;
+    std::string coreDll, gamePath;
+
+    /* Case 1: item.file is a full local path (drive letter + colon) */
+    if (item.file.size() >= 2 && isalpha((unsigned char)item.file[0]) && item.file[1] == ':') {
+        coreDll = g_coreConfigMgr.findCoreForFile(item.file);
+        if (!coreDll.empty()) {
+            useLibretro = true;
+            gamePath = item.file;
+        }
+    }
+
+    /* Case 2: item has an "Open With" app whose file paths overlap with a Libretro core's content paths */
+    if (!useLibretro && !item.app.empty() && !item.file.empty()) {
+        auto appFilepaths = g_library.getAppFilepaths(item.app);
+        if (!appFilepaths.empty()) {
+            std::vector<std::pair<std::string, std::string>> appPaths;
+            for (const auto& fp : appFilepaths)
+                appPaths.push_back({fp.path, fp.extensions});
+            coreDll = g_coreConfigMgr.findCoreMatchingAppPaths(appPaths);
+            if (!coreDll.empty()) {
+                gamePath = g_coreConfigMgr.resolveFileInCorePaths(coreDll, item.file);
+                if (!gamePath.empty()) useLibretro = true;
+            }
+        }
+    }
+
+    if (useLibretro) {
+        std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
         if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: Title '%s' contains 'Mario' — creating Libretro instance\n", item.title.c_str());
-        task = LibretroInstance_Create("bsnes_libretro.dll", "testgame.zip", "DynScreen.mat");
+            g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
+                              item.file.c_str(), coreDll.c_str(), gamePath.c_str());
+        task = LibretroInstance_Create(corePath.c_str(), gamePath.c_str(), "DynScreen.mat");
     } else {
         /* Default: Steamworks Web Browser */
         task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "DynScreen.mat");
