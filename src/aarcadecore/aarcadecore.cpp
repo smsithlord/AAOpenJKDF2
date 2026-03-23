@@ -225,15 +225,18 @@ static EmbeddedInstance* get_input_target(void)
     return g_activeInstance;
 }
 
-/* Get the LibretroHost* from the active instance (if it's Libretro) */
+/* Get the LibretroHost* from any running Libretro task */
 static LibretroHost* get_active_libretro_host(void)
 {
-    if (!g_activeInstance || g_activeInstance->type != EMBEDDED_LIBRETRO)
-        return NULL;
-    if (!g_activeInstance->vtable->is_active(g_activeInstance))
-        return NULL;
     typedef struct { LibretroHost* host; } LRData;
-    return ((LRData*)g_activeInstance->user_data)->host;
+
+    /* Search all tasks for a running Libretro instance */
+    for (int i = 0; i < g_taskCount; i++) {
+        if (g_tasks[i] && g_tasks[i]->type == EMBEDDED_LIBRETRO &&
+            g_tasks[i]->vtable->is_active(g_tasks[i]))
+            return ((LRData*)g_tasks[i]->user_data)->host;
+    }
+    return NULL;
 }
 
 /* ========================================================================

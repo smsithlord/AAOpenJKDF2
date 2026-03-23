@@ -714,6 +714,26 @@ void AACoreManager_Update(void)
     if (g_fn_update)
         g_fn_update();
 
+    /* Lazy audio device init — open when a Libretro instance starts producing audio */
+    if (g_audio_dev == 0 && g_fn_get_audio_sample_rate) {
+        int sample_rate = g_fn_get_audio_sample_rate();
+        if (sample_rate > 0) {
+            SDL_AudioSpec want, have;
+            memset(&want, 0, sizeof(want));
+            want.freq = sample_rate;
+            want.format = AUDIO_S16SYS;
+            want.channels = 2;
+            want.samples = 2048;
+            want.callback = aacore_audio_callback;
+            want.userdata = NULL;
+            g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+            if (g_audio_dev > 0) {
+                SDL_PauseAudioDevice(g_audio_dev, 0);
+                stdPlatform_Printf("AACoreManager: Audio lazily initialized - %d Hz\n", have.freq);
+            }
+        }
+    }
+
     /* Selector ray — find which AArcade thing the player is aiming at,
      * and store the first solid surface hit for spawn mode reuse */
     {

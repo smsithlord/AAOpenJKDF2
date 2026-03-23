@@ -41,7 +41,21 @@ static std::string jsonGetString(const std::string& json, const std::string& key
         if (json[end] == '\\') end++; /* skip escaped char */
         end++;
     }
-    return json.substr(pos, end - pos);
+    std::string raw = json.substr(pos, end - pos);
+    /* Unescape JSON string */
+    std::string out;
+    for (size_t i = 0; i < raw.size(); i++) {
+        if (raw[i] == '\\' && i + 1 < raw.size()) {
+            char next = raw[i + 1];
+            if (next == '\\') { out += '\\'; i++; }
+            else if (next == '"') { out += '"'; i++; }
+            else if (next == 'n') { out += '\n'; i++; }
+            else out += raw[i];
+        } else {
+            out += raw[i];
+        }
+    }
+    return out;
 }
 
 static bool jsonGetBool(const std::string& json, const std::string& key) {
