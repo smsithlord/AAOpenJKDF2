@@ -755,6 +755,7 @@ int InstanceManager::importDefaultLibrary()
         { "aaojk_movie_stand_standard", "Movie Stand Standard" },
         { "aaojk_movie_display_wallmount", "Movie Display Wallmount" },
         { "dyn_videosign", "Video Sign" },
+        { "aaojk_wall_pad_w", "Wall Pad W" },
     };
     int created = 0;
     for (auto& d : defaults) {

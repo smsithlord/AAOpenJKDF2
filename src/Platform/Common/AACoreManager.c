@@ -585,11 +585,16 @@ static sithThing* aacore_spawn_at_player_aim(void)
     rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
     rdVector3 lookDir = aimMatrix.lvec;
 
-    /* Raycast forward from player */
-    sithCollision_SearchRadiusForThings(player->sector, player, &player->position,
+    /* Raycast forward from eye position */
+    rdVector3 eyePos = player->position;
+    rdVector_Add3Acc(&eyePos, &player->actorParams.eyeOffset);
+    sithSector* eyeSector = sithCollision_GetSectorLookAt(
+        player->sector, &player->position, &eyePos, 0.0f);
+    if (!eyeSector) eyeSector = player->sector;
+    sithCollision_SearchRadiusForThings(eyeSector, player, &eyePos,
                                         &lookDir, 10.0f, 0.0f, 0);
     sithCollisionSearchEntry* searchResult = sithCollision_NextSearchResult();
-    sithSector* spawnRaySector = player->sector;
+    sithSector* spawnRaySector = eyeSector;
     /* Track sector through adjoins to find first solid hit */
     while (searchResult) {
         if (searchResult->hitType & SITHCOLLISION_ADJOINCROSS) {
@@ -614,10 +619,10 @@ static sithThing* aacore_spawn_at_player_aim(void)
     sithSector* hitSector = spawnRaySector;
     sithCollision_SearchClose();
 
-    /* Hit position = player + lookDir * distance */
-    hitPos.x = player->position.x + lookDir.x * dist;
-    hitPos.y = player->position.y + lookDir.y * dist;
-    hitPos.z = player->position.z + lookDir.z * dist;
+    /* Hit position = eye + lookDir * distance */
+    hitPos.x = eyePos.x + lookDir.x * dist;
+    hitPos.y = eyePos.y + lookDir.y * dist;
+    hitPos.z = eyePos.z + lookDir.z * dist;
 
     /* Build orientation: up = surface normal, forward = away from player (facing outward) */
     rdVector3 uvec = hitNorm;
@@ -716,11 +721,18 @@ void AACoreManager_Update(void)
             rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
             rdVector3 lookDir = aimMatrix.lvec;
 
-            sithCollision_SearchRadiusForThings(player->sector, player,
-                &player->position, &lookDir, 50.0f, 0.025f, 0);
-                /* 0.025f radius = sphere sweep for easier selection; 0.0f would be pixel-accurate */
+            /* Compute eye position + sector (matching engine USE behavior) */
+            rdVector3 eyePos = player->position;
+            rdVector_Add3Acc(&eyePos, &player->actorParams.eyeOffset);
+            sithSector* eyeSector = sithCollision_GetSectorLookAt(
+                player->sector, &player->position, &eyePos, 0.0f);
+            if (!eyeSector) eyeSector = player->sector;
+
+            sithCollision_SearchRadiusForThings(eyeSector, player,
+                &eyePos, &lookDir, 50.0f, 0.0f, 0);
+                /* 0.0f = pixel-accurate; 0.025f is easier to select things but causes inaccurate placement against walls */
             sithCollisionSearchEntry* hit = sithCollision_NextSearchResult();
-            sithSector* raySector = player->sector;
+            sithSector* raySector = eyeSector;
             while (hit) {
                 /* Track sector as ray traverses adjoins */
                 if (hit->hitType & SITHCOLLISION_ADJOINCROSS) {
@@ -734,9 +746,9 @@ void AACoreManager_Update(void)
                     (hit->surface || ((hit->hitType & SITHCOLLISION_THING) && hit->receiver))) {
                     g_selectorRayHasHit = 1;
                     g_selectorRayHitNorm = hit->hitNorm;
-                    g_selectorRayHitPos.x = player->position.x + lookDir.x * hit->distance;
-                    g_selectorRayHitPos.y = player->position.y + lookDir.y * hit->distance;
-                    g_selectorRayHitPos.z = player->position.z + lookDir.z * hit->distance;
+                    g_selectorRayHitPos.x = eyePos.x + lookDir.x * hit->distance;
+                    g_selectorRayHitPos.y = eyePos.y + lookDir.y * hit->distance;
+                    g_selectorRayHitPos.z = eyePos.z + lookDir.z * hit->distance;
                     g_selectorRayHitSector = raySector;
                 }
                 /* Check for tracked AArcade things */
@@ -753,6 +765,28 @@ void AACoreManager_Update(void)
                 hit = sithCollision_NextSearchResult();
             }
             sithCollision_SearchClose();
+
+            /* Second ray with larger radius solely for aimed-at detection */
+            if (g_thingTaskCount > 0) {
+                newAimedAt = -1; /* Reset — second ray is authoritative for aimed-at */
+                sithCollision_SearchRadiusForThings(eyeSector, player,
+                    &eyePos, &lookDir, 50.0f, 0.025f, 0);
+                sithCollisionSearchEntry* hit2 = sithCollision_NextSearchResult();
+                while (hit2) {
+                    if ((hit2->hitType & SITHCOLLISION_THING) && hit2->receiver) {
+                        int idx2 = hit2->receiver->thingIdx;
+                        for (int i = 0; i < g_thingTaskCount; i++) {
+                            if (g_thingTaskMap[i].thingIdx == idx2) {
+                                newAimedAt = idx2;
+                                break;
+                            }
+                        }
+                        if (newAimedAt >= 0) break;
+                    }
+                    hit2 = sithCollision_NextSearchResult();
+                }
+                sithCollision_SearchClose();
+            }
         }
         if (newAimedAt != g_aimedAtThingIdx) {
             g_aimedAtThingIdx = newAimedAt;

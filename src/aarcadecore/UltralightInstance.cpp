@@ -314,7 +314,7 @@ AAPI_CALLBACK(js_manager_importDefaultLibrary) {
     JSStringRef createdKey = JSStringCreateWithUTF8CString("created");
     JSStringRef totalKey = JSStringCreateWithUTF8CString("total");
     JSObjectSetProperty(ctx, result, createdKey, JSValueMakeNumber(ctx, created), 0, nullptr);
-    JSObjectSetProperty(ctx, result, totalKey, JSValueMakeNumber(ctx, 3), 0, nullptr);
+    JSObjectSetProperty(ctx, result, totalKey, JSValueMakeNumber(ctx, 4), 0, nullptr);
     JSStringRelease(createdKey);
     JSStringRelease(totalKey);
     return result;
