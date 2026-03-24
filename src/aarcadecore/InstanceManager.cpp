@@ -120,18 +120,18 @@ static bool isImageUrl(const std::string& url)
     return false;
 }
 
-/* Build ordered list of screen image URL candidates (screen → preview → file → marquee → snapshot) */
+/* Build ordered list of screen image URL candidates (screen → preview → file → snapshot → marquee) */
 static std::vector<std::string> getScreenUrlCandidates(const Arcade::Item& item)
 {
     std::vector<std::string> urls;
     if (!item.screen.empty()) urls.push_back(item.screen);
     if (!item.preview.empty()) urls.push_back(item.preview);
     if (!item.file.empty()) urls.push_back(item.file);
-    if (!item.marquee.empty()) urls.push_back(item.marquee);
     if (!item.id.empty()) {
         std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
         if (!snapPath.empty()) urls.push_back(item.id);
     }
+    if (!item.marquee.empty()) urls.push_back(item.marquee);
     return urls;
 }
 

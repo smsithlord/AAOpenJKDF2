@@ -38,11 +38,29 @@
             return 'file:///' + u.replace(/\\/g, '/');
         }
 
+        function extractYouTubeVideoId(u) {
+            var m = u.match(/youtu\.be\/([^?&#]+)/i);
+            if (m) return m[1];
+            m = u.match(/youtube\.com.*[?&]v=([^&#]+)/i);
+            if (m) return m[1];
+            m = u.match(/youtube\.com\/embed\/([^?&#]+)/i);
+            if (m) return m[1];
+            return '';
+        }
+
         window.loadImageUrl = function(url) {
             const img = document.createElement('img');
             img.style.display = 'none';
             imageMap[url] = img;
-            var processedUrl = isLocalFile(url) ? toFileUrl(url) : url;
+            var processedUrl;
+            var ytId = extractYouTubeVideoId(url);
+            if (ytId) {
+                processedUrl = 'https://img.youtube.com/vi/' + ytId + '/0.jpg';
+            } else if (isLocalFile(url)) {
+                processedUrl = toFileUrl(url);
+            } else {
+                processedUrl = url;
+            }
 
             img.onload = function() {
                 readyQueue.push(url);
