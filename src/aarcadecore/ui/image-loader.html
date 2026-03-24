@@ -30,10 +30,19 @@
         const imageMap = {};
         let currentDisplayed = null;
 
+        function isLocalFile(u) {
+            return /^[a-zA-Z]:[\/\\]/.test(u);
+        }
+
+        function toFileUrl(u) {
+            return 'file:///' + u.replace(/\\/g, '/');
+        }
+
         window.loadImageUrl = function(url) {
             const img = document.createElement('img');
             img.style.display = 'none';
             imageMap[url] = img;
+            var processedUrl = isLocalFile(url) ? toFileUrl(url) : url;
 
             img.onload = function() {
                 readyQueue.push(url);
@@ -56,7 +65,7 @@
             };
 
             container.appendChild(img);
-            img.src = url;
+            img.src = processedUrl;
         };
 
         window.showNextReady = function() {
