@@ -308,13 +308,23 @@ bool ImageLoader::saveThumbnail(const std::string& key, const uint8_t* rgbaPixel
 
 // --- Public API ---
 
+static bool isLocalFilePath(const std::string& url) {
+    return url.size() >= 3 && isalpha((unsigned char)url[0]) && url[1] == ':' && (url[2] == '/' || url[2] == '\\');
+}
+
 void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(const ImageLoadResult&)> callback)
 {
     std::string hash = calculateKodiHash(normalizeUrl(url));
 
+    /* Local files: skip cache lookups — they're already on disk, send directly to JS */
+    bool localFile = isLocalFilePath(url);
+
     /* Check disk cache first — if cached AND pixels in memory, complete immediately */
-    std::string cached = getCachedFilePath(url);
-    if (cached.empty()) cached = getCachedFilePath(url, "snapshot");
+    std::string cached;
+    if (!localFile) {
+        cached = getCachedFilePath(url);
+        if (cached.empty()) cached = getCachedFilePath(url, "snapshot");
+    }
     if (!cached.empty()) {
         std::lock_guard<std::mutex> pxLock(pixelCacheMutex_);
         if (pixelCache_.find(cached) != pixelCache_.end()) {
@@ -564,10 +574,17 @@ void ImageLoader::onImageLoaderReady()
 
 void ImageLoader::processCompletions()
 {
-    std::lock_guard<std::mutex> lock(completionMutex_);
-    while (!completionQueue_.empty()) {
-        ImageLoadResult result = completionQueue_.front();
-        completionQueue_.pop();
+    /* Drain queue under lock, then fire callbacks unlocked.
+     * Callbacks may re-enter loadAndCacheImage which locks completionMutex_. */
+    std::vector<ImageLoadResult> batch;
+    {
+        std::lock_guard<std::mutex> lock(completionMutex_);
+        while (!completionQueue_.empty()) {
+            batch.push_back(completionQueue_.front());
+            completionQueue_.pop();
+        }
+    }
+    for (auto& result : batch) {
         if (result.callback) result.callback(result);
     }
 }

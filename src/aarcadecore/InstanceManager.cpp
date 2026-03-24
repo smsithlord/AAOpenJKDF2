@@ -120,29 +120,30 @@ static bool isImageUrl(const std::string& url)
     return false;
 }
 
-/* Get the best screen image URL (priority: screen → preview → file → marquee → snapshot fallback) */
-static std::string getBestScreenUrl(const Arcade::Item& item)
+/* Build ordered list of screen image URL candidates (screen → preview → file → marquee → snapshot) */
+static std::vector<std::string> getScreenUrlCandidates(const Arcade::Item& item)
 {
-    if (isImageUrl(item.screen)) return item.screen;
-    if (isImageUrl(item.preview)) return item.preview;
-    if (isImageUrl(item.file)) return item.file;
-    if (isImageUrl(item.marquee)) return item.marquee;
-    /* Snapshot fallback: check if we have a cached snapshot keyed by item.id */
+    std::vector<std::string> urls;
+    if (!item.screen.empty()) urls.push_back(item.screen);
+    if (!item.preview.empty()) urls.push_back(item.preview);
+    if (!item.file.empty()) urls.push_back(item.file);
+    if (!item.marquee.empty()) urls.push_back(item.marquee);
     if (!item.id.empty()) {
         std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
-        if (!snapPath.empty()) return item.id;
+        if (!snapPath.empty()) urls.push_back(item.id);
     }
-    return "";
+    return urls;
 }
 
-/* Get the best marquee image URL (priority: marquee → screen → preview → file fallback) */
-static std::string getBestMarqueeUrl(const Arcade::Item& item)
+/* Build ordered list of marquee image URL candidates (marquee → preview → file → screen) */
+static std::vector<std::string> getMarqueeUrlCandidates(const Arcade::Item& item)
 {
-    if (isImageUrl(item.marquee)) return item.marquee;
-    if (isImageUrl(item.screen)) return item.screen;
-    if (isImageUrl(item.preview)) return item.preview;
-    if (isImageUrl(item.file)) return item.file; /* fallback */
-    return "";
+    std::vector<std::string> urls;
+    if (!item.marquee.empty()) urls.push_back(item.marquee);
+    if (!item.preview.empty()) urls.push_back(item.preview);
+    if (!item.file.empty()) urls.push_back(item.file);
+    if (!item.screen.empty()) urls.push_back(item.screen);
+    return urls;
 }
 
 /* Case-insensitive substring search */
@@ -486,6 +487,45 @@ SpawnRequest InstanceManager::popPendingSpawn()
     return lastPopped_;
 }
 
+void InstanceManager::tryLoadImage(int objIdx, int thingIdx,
+                                    std::vector<std::string> candidates, int candidateIdx,
+                                    bool isScreen)
+{
+    if (candidateIdx >= (int)candidates.size()) {
+        /* All candidates exhausted — give up gracefully */
+        if (objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
+            if (isScreen)
+                objects_[objIdx].screenImageRequested = false;
+            else
+                objects_[objIdx].marqueeImageRequested = false;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: All %s image candidates failed for thingIdx=%d\n",
+                                  isScreen ? "screen" : "marquee", thingIdx);
+        }
+        return;
+    }
+
+    std::string url = candidates[candidateIdx];
+    g_imageLoader.loadAndCacheImage(url, [this, objIdx, thingIdx, candidates, candidateIdx, isScreen](const ImageLoadResult& result) {
+        if (objIdx >= (int)objects_.size() || objects_[objIdx].thingIdx != thingIdx) return;
+        if (result.success) {
+            if (isScreen)
+                objects_[objIdx].screenImagePath = result.filePath;
+            else
+                objects_[objIdx].marqueeImagePath = result.filePath;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: %s image ready for thingIdx=%d: %s\n",
+                                  isScreen ? "Screen" : "Marquee", thingIdx, result.filePath.c_str());
+        } else {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: %s image failed for thingIdx=%d (candidate %d/%d: %s), trying next\n",
+                                  isScreen ? "Screen" : "Marquee", thingIdx,
+                                  candidateIdx + 1, (int)candidates.size(), candidates[candidateIdx].c_str());
+            tryLoadImage(objIdx, thingIdx, candidates, candidateIdx + 1, isScreen);
+        }
+    });
+}
+
 void InstanceManager::initSpawnedObject(int thingIdx)
 {
     const Arcade::Item& item = lastPopped_.item;
@@ -504,43 +544,19 @@ void InstanceManager::initSpawnedObject(int thingIdx)
     obj.marqueeImageRequested = false;
     objects_.push_back(obj);
 
-    /* Request screen image from ImageLoader */
+    /* Request screen image with fallback chain */
     int objIdx = (int)objects_.size() - 1;
-    std::string screenUrl = getBestScreenUrl(item);
-
-    if (g_host.host_printf)
-        g_host.host_printf("InstanceManager: Screen image for item=%s: '%s'\n",
-                          item.id.c_str(), screenUrl.empty() ? "(none)" : screenUrl.c_str());
-
-    if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
+    auto screenCandidates = getScreenUrlCandidates(item);
+    if (!screenCandidates.empty() && g_imageLoader.isInitialized()) {
         objects_[objIdx].screenImageRequested = true;
-        g_imageLoader.loadAndCacheImage(screenUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
-            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
-                objects_[objIdx].screenImagePath = result.filePath;
-                if (g_host.host_printf)
-                    g_host.host_printf("InstanceManager: Screen image ready for thingIdx=%d: %s\n",
-                                      thingIdx, result.filePath.c_str());
-            }
-        });
+        tryLoadImage(objIdx, thingIdx, screenCandidates, 0, true);
     }
 
-    /* Request marquee image */
-    std::string marqueeUrl = getBestMarqueeUrl(item);
-
-    if (g_host.host_printf)
-        g_host.host_printf("InstanceManager: Marquee image for item=%s: '%s'\n",
-                          item.id.c_str(), marqueeUrl.empty() ? "(none)" : marqueeUrl.c_str());
-
-    if (!marqueeUrl.empty() && g_imageLoader.isInitialized()) {
+    /* Request marquee image with fallback chain */
+    auto marqueeCandidates = getMarqueeUrlCandidates(item);
+    if (!marqueeCandidates.empty() && g_imageLoader.isInitialized()) {
         objects_[objIdx].marqueeImageRequested = true;
-        g_imageLoader.loadAndCacheImage(marqueeUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
-            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
-                objects_[objIdx].marqueeImagePath = result.filePath;
-                if (g_host.host_printf)
-                    g_host.host_printf("InstanceManager: Marquee image ready for thingIdx=%d: %s\n",
-                                      thingIdx, result.filePath.c_str());
-            }
-        });
+        tryLoadImage(objIdx, thingIdx, marqueeCandidates, 0, false);
     }
 
     int newIndex = (int)objects_.size() - 1;
@@ -898,32 +914,18 @@ void InstanceManager::reloadImagesForThing(int thingIdx)
     Arcade::Item item = g_library.getItemById(obj.itemId);
     if (item.id.empty()) return;
 
-    std::string screenUrl = getBestScreenUrl(item);
-    if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
+    auto screenCandidates = getScreenUrlCandidates(item);
+    if (!screenCandidates.empty() && g_imageLoader.isInitialized()) {
         obj.screenImageRequested = true;
         obj.screenImagePath.clear();
-        g_imageLoader.loadAndCacheImage(screenUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
-            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
-                objects_[objIdx].screenImagePath = result.filePath;
-                if (g_host.host_printf)
-                    g_host.host_printf("InstanceManager: Screen image ready for thingIdx=%d: %s\n",
-                                      thingIdx, result.filePath.c_str());
-            }
-        });
+        tryLoadImage(objIdx, thingIdx, screenCandidates, 0, true);
     }
 
-    std::string marqueeUrl = getBestMarqueeUrl(item);
-    if (!marqueeUrl.empty() && g_imageLoader.isInitialized()) {
+    auto marqueeCandidates = getMarqueeUrlCandidates(item);
+    if (!marqueeCandidates.empty() && g_imageLoader.isInitialized()) {
         obj.marqueeImageRequested = true;
         obj.marqueeImagePath.clear();
-        g_imageLoader.loadAndCacheImage(marqueeUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
-            if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
-                objects_[objIdx].marqueeImagePath = result.filePath;
-                if (g_host.host_printf)
-                    g_host.host_printf("InstanceManager: Marquee image ready for thingIdx=%d: %s\n",
-                                      thingIdx, result.filePath.c_str());
-            }
-        });
+        tryLoadImage(objIdx, thingIdx, marqueeCandidates, 0, false);
     }
 }
 

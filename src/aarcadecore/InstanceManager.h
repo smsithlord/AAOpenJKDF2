@@ -210,6 +210,7 @@ private:
     SpawnRequest lastPopped_;
 
     void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);
+    void tryLoadImage(int objIdx, int thingIdx, std::vector<std::string> candidates, int candidateIdx, bool isScreen);
 };
 
 #endif
