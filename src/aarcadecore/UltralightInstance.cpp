@@ -126,8 +126,10 @@ AAPI_CALLBACK(js_manager_openMainMenu) {
 #include "InstanceManager.h"
 #include "SQLiteLibrary.h"
 #include "LibretroCoreConfig.h"
+#include "ImageLoader.h"
 extern InstanceManager g_instanceManager;
 extern SQLiteLibrary g_library;
+extern ImageLoader g_imageLoader;
 
 static void jsSetPropStr(JSContextRef ctx, JSObjectRef obj, const char* name, const std::string& value) {
     JSStringRef k = JSStringCreateWithUTF8CString(name);

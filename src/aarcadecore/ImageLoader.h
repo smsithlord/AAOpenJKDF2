@@ -36,6 +36,13 @@ public:
 
     bool getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut);
 
+    /* Save a snapshot of raw BGRA pixels to cache/urls/{hash}.png keyed by itemId */
+    bool saveSnapshot(const std::string& key, const uint8_t* bgraPixels, int width, int height);
+
+    /* Get snapshot path for a key (empty if not cached) */
+    std::string getSnapshotPath(const std::string& key);
+
+
     /* Called from image-loader.html JS */
     void onImageQueued(const std::string& url);  /* image downloaded, ready for capture */
     void onImageLoaded(bool success, const std::string& url, int rectX, int rectY, int rectW, int rectH);

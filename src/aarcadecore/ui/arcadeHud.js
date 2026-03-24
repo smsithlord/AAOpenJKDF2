@@ -1103,11 +1103,7 @@ const arcadeHud = (function() {
             imgDiv.className = 'aa-library-card-img';
 
             var imgUrl = getBestImage(entry);
-            if (imgUrl) {
-                loadCardImage(imgDiv, imgUrl);
-            } else {
-                imgDiv.textContent = '\uD83D\uDDBC';
-            }
+            loadCardImage(imgDiv, imgUrl, getSnapshotPath(entry.id));
 
             var titleDiv = document.createElement('div');
             titleDiv.className = 'aa-library-card-title';
@@ -1192,6 +1188,12 @@ const arcadeHud = (function() {
             return card;
         }
 
+        /* Snapshot path prediction using existing arcadeHud.predictCachePath */
+        function getSnapshotPath(itemId) {
+            if (!itemId) return '';
+            return arcadeHud.predictCachePath(itemId);
+        }
+
         function getBestImage(entry) {
             return entry.marquee || entry.screen || entry.preview || entry.file || '';
         }
@@ -1199,18 +1201,31 @@ const arcadeHud = (function() {
         function isImgUrl(url) {
             if (!url || typeof url !== 'string') return false;
             var lower = url.toLowerCase();
-            /* Accept any http(s) URL as potentially valid image */
-            if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0) return true;
-            var exts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+            /* Check for image file extensions anywhere in the URL */
+            var exts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
             for (var i = 0; i < exts.length; i++) {
                 if (lower.indexOf(exts[i]) !== -1) return true;
+            }
+            /* Check for image-related URL patterns */
+            var patterns = ['/image', '/screenshot', '/preview', '/thumb', '/poster', '/cover', '/header', '/capsule', '/page_bg'];
+            for (var p = 0; p < patterns.length; p++) {
+                if (lower.indexOf(patterns[p]) !== -1) return true;
             }
             return false;
         }
 
-        function loadCardImage(imgDiv, url) {
+        function loadCardImage(imgDiv, url, snapshotPath) {
             if (!isImgUrl(url)) {
-                imgDiv.textContent = '\uD83D\uDDBC';
+                /* No valid image URL — try snapshot fallback */
+                if (snapshotPath) {
+                    var snapImg = document.createElement('img');
+                    snapImg.src = snapshotPath;
+                    snapImg.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                    imgDiv.textContent = '';
+                    imgDiv.appendChild(snapImg);
+                } else {
+                    imgDiv.textContent = '\uD83D\uDDBC';
+                }
                 return;
             }
             if (typeof arcadeHud.loadImage === 'function') {
@@ -1218,12 +1233,37 @@ const arcadeHud = (function() {
                     if (result && result.filePath) {
                         var img = document.createElement('img');
                         img.src = result.filePath;
-                        img.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                        img.onerror = function() {
+                            /* Image file failed — try snapshot */
+                            if (snapshotPath) {
+                                var fallback = document.createElement('img');
+                                fallback.src = snapshotPath;
+                                fallback.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                                imgDiv.textContent = '';
+                                imgDiv.appendChild(fallback);
+                            } else {
+                                imgDiv.textContent = '\uD83D\uDDBC';
+                            }
+                        };
                         imgDiv.textContent = '';
                         imgDiv.appendChild(img);
+                    } else if (snapshotPath) {
+                        var fallback = document.createElement('img');
+                        fallback.src = snapshotPath;
+                        fallback.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                        imgDiv.textContent = '';
+                        imgDiv.appendChild(fallback);
                     }
                 }).catch(function() {
-                    imgDiv.textContent = '\uD83D\uDDBC';
+                    if (snapshotPath) {
+                        var fallback = document.createElement('img');
+                        fallback.src = snapshotPath;
+                        fallback.onerror = function() { imgDiv.textContent = '\uD83D\uDDBC'; };
+                        imgDiv.textContent = '';
+                        imgDiv.appendChild(fallback);
+                    } else {
+                        imgDiv.textContent = '\uD83D\uDDBC';
+                    }
                 });
             } else {
                 imgDiv.textContent = '\uD83D\uDDBC';
@@ -1348,6 +1388,7 @@ const arcadeHud = (function() {
 
         // Image loading
         loadImage: loadImage,
+        predictCachePath: predictCachePath,
 
         // Database
         getSupportedEntryTypes: getSupportedEntryTypes,

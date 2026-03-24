@@ -120,13 +120,21 @@ static bool isImageUrl(const std::string& url)
     return false;
 }
 
-/* Get the best screen image URL (priority: screen → preview → file → marquee fallback) */
+/* Get the best screen image URL (priority: screen → preview → file → marquee → snapshot fallback) */
 static std::string getBestScreenUrl(const Arcade::Item& item)
 {
     if (isImageUrl(item.screen)) return item.screen;
     if (isImageUrl(item.preview)) return item.preview;
     if (isImageUrl(item.file)) return item.file;
-    if (isImageUrl(item.marquee)) return item.marquee; /* fallback */
+    if (isImageUrl(item.marquee)) return item.marquee;
+    /* Snapshot fallback: check if we have a cached snapshot for the resolved URL */
+    if (g_imageLoader.isInitialized()) {
+        std::string resolvedUrl = InstanceManager::resolveUrl(item.file, item.preview, item.title);
+        if (!resolvedUrl.empty()) {
+            std::string snapPath = g_imageLoader.getSnapshotPath(resolvedUrl);
+            if (!snapPath.empty()) return snapPath;
+        }
+    }
     return "";
 }
 
@@ -1197,6 +1205,27 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
         if (!aarcadecore_getInputModeInstance() && !aarcadecore_getFullscreenInstance()) {
             UltralightManager_UnloadOverlay();
             aarcadecore_clearOverlayAssociation();
+        }
+    }
+
+    /* Capture snapshot of last rendered frame before removing task */
+    if (inst.taskIndex >= 0 && inst.browser && inst.browser->vtable->render) {
+        /* Find the resolved URL for this instance */
+        std::string snapshotUrl;
+        for (const auto& obj : objects_) {
+            if (obj.itemId == itemId && !obj.url.empty()) {
+                snapshotUrl = obj.url;
+                break;
+            }
+        }
+        if (!snapshotUrl.empty() && g_imageLoader.isInitialized()) {
+            const int snapW = 512, snapH = 512;
+            uint8_t* snapBuf = (uint8_t*)malloc(snapW * snapH * 4);
+            if (snapBuf) {
+                inst.browser->vtable->render(inst.browser, snapBuf, snapW, snapH, 0, 32);
+                g_imageLoader.saveSnapshot(snapshotUrl, snapBuf, snapW, snapH);
+                free(snapBuf);
+            }
         }
     }
 

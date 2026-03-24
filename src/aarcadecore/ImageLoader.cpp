@@ -204,6 +204,29 @@ std::string ImageLoader::getCachedFilePath(const std::string& url) {
     return "";
 }
 
+bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels, int width, int height) {
+    if (key.empty() || !bgraPixels || width <= 0 || height <= 0) return false;
+
+    std::string path = getCacheFilePath(key);
+
+    auto bitmap = Bitmap::Create(width, height, BitmapFormat::BGRA8_UNORM_SRGB);
+    uint8_t* dst = (uint8_t*)bitmap->LockPixels();
+    uint32_t rowBytes = bitmap->row_bytes();
+    for (int row = 0; row < height; row++)
+        memcpy(dst + row * rowBytes, bgraPixels + row * width * 4, width * 4);
+    bitmap->UnlockPixels();
+    bitmap->WritePNG(path.c_str());
+
+    if (g_host.host_printf)
+        g_host.host_printf("ImageLoader: Saved snapshot %s (%dx%d)\n", path.c_str(), width, height);
+    return true;
+}
+
+std::string ImageLoader::getSnapshotPath(const std::string& key) {
+    if (key.empty()) return "";
+    return getCachedFilePath(key);
+}
+
 // --- Public API ---
 
 void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(const ImageLoadResult&)> callback)
