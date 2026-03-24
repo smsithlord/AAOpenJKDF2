@@ -431,6 +431,7 @@ html, body {
 }
 
 .aa-library-card-img {
+    position: relative;
     width: 100%;
     background: rgba(0, 0, 0, 0.3);
     display: flex;
@@ -445,6 +446,22 @@ html, body {
     width: 100%;
     height: 100%;
     object-fit: contain;
+}
+.aa-library-count-badge {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    background: rgba(15, 157, 88, 0.85);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 8px;
+    padding: 0 4px;
+    pointer-events: none;
 }
 
 .aa-library-card-title {

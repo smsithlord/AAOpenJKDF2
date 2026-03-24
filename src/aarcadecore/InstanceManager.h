@@ -152,6 +152,10 @@ public:
     /* Check if a model's 3DO uses dynamic screen/marquee materials (cabinet) */
     bool isModelCabinet(const std::string& modelId);
 
+    /* Count how many spawned objects use a given item or model */
+    int countItemUsage(const std::string& itemId) const;
+    int countModelUsage(const std::string& modelId) const;
+
     /* Import adopted templates from addon-static.jkl into the library */
     struct ImportResult { int created; int total; };
     ImportResult importAdoptedTemplates();

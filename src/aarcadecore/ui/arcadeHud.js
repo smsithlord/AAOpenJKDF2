@@ -1172,6 +1172,14 @@ const arcadeHud = (function() {
                 });
             }
 
+            /* Instance count badge — appended to card (not imgDiv which gets cleared by async image load) */
+            if (entry.count && entry.count > 0) {
+                var badge = document.createElement('div');
+                badge.className = 'aa-library-count-badge';
+                badge.textContent = entry.count;
+                card.appendChild(badge);
+            }
+
             return card;
         }
 

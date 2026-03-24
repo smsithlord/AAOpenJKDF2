@@ -389,6 +389,25 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
     pendingSpawns_.push(req);
 }
 
+int InstanceManager::countItemUsage(const std::string& itemId) const
+{
+    if (itemId.empty()) return 0;
+    int count = 0;
+    for (const auto& obj : objects_) {
+        if (obj.itemId == itemId) count++;
+    }
+    return count;
+}
+
+int InstanceManager::countModelUsage(const std::string& modelId) const
+{
+    if (modelId.empty()) return 0;
+    int count = 0;
+    for (const auto& obj : objects_)
+        if (obj.modelId == modelId) count++;
+    return count;
+}
+
 void InstanceManager::requestSpawnModel(const std::string& modelId)
 {
     std::string tmpl = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);

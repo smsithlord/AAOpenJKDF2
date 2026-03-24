@@ -539,6 +539,8 @@ static JSObjectRef itemToJS(JSContextRef ctx, const Arcade::Item& item) {
     jsSetProp(ctx, o, "screen", item.screen);
     jsSetProp(ctx, o, "title", item.title);
     jsSetProp(ctx, o, "type", item.type);
+    int usage = g_instanceManager.countItemUsage(item.id);
+    if (usage > 0) jsSetInt(ctx, o, "count", usage);
     return o;
 }
 
@@ -555,6 +557,8 @@ static JSObjectRef modelToJS(JSContextRef ctx, const Arcade::Model& m) {
     jsSetProp(ctx, o, "id", m.id);
     jsSetProp(ctx, o, "title", m.title);
     jsSetProp(ctx, o, "screen", m.screen);
+    int usage = g_instanceManager.countModelUsage(m.id);
+    if (usage > 0) jsSetInt(ctx, o, "count", usage);
     return o;
 }
 
