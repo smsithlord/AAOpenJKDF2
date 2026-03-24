@@ -476,7 +476,10 @@ void ImageLoader::renderAndSave()
         }
     }
 
-    std::string outputPath = getCacheFilePath(origUrl);
+    /* Use the snapshot path if that's where the file came from, to avoid duplicating */
+    std::string outputPath = getCachedFilePath(origUrl, "snapshot");
+    if (outputPath.empty())
+        outputPath = getCacheFilePath(origUrl);
     cropped->WritePNG(outputPath.c_str());
 
     /* Cache raw BGRA pixels */

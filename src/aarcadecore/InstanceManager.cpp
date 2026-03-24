@@ -1208,8 +1208,10 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
     /* Capture snapshot of last rendered frame before removing task */
     if (inst.taskIndex >= 0 && inst.browser && inst.browser->vtable->render) {
         /* Use itemId as the snapshot key — matches getBestScreenUrl lookup */
+        /* Only save if no snapshot exists yet for this item */
         std::string snapshotKey = itemId;
-        if (!snapshotKey.empty() && g_imageLoader.isInitialized()) {
+        if (!snapshotKey.empty() && g_imageLoader.isInitialized()
+            && g_imageLoader.getSnapshotPath(snapshotKey).empty()) {
             const int snapW = 512, snapH = 512;
             uint8_t* snapBuf = (uint8_t*)malloc(snapW * snapH * 4);
             if (snapBuf) {
