@@ -43,6 +43,12 @@
             };
 
             img.onerror = function() {
+                const useVariationHTTPS = true;
+                if (useVariationHTTPS && url.indexOf('http://') === 0 && !img._retriedHttps) {
+                    img._retriedHttps = true;
+                    img.src = url.replace('http://', 'https://');
+                    return;
+                }
                 if (window.cppBridge && window.cppBridge.onImageLoaded) {
                     window.cppBridge.onImageLoaded(false, url, 0, 0, 0, 0);
                 }
