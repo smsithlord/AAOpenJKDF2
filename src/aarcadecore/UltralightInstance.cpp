@@ -357,6 +357,18 @@ AAPI_CALLBACK(js_manager_importDefaultLibrary) {
     return result;
 }
 
+AAPI_CALLBACK(js_manager_importAdoptedTemplates) {
+    auto result = g_instanceManager.importAdoptedTemplates();
+    JSObjectRef obj = JSObjectMake(ctx, nullptr, nullptr);
+    JSStringRef createdKey = JSStringCreateWithUTF8CString("created");
+    JSStringRef totalKey = JSStringCreateWithUTF8CString("total");
+    JSObjectSetProperty(ctx, obj, createdKey, JSValueMakeNumber(ctx, result.created), 0, nullptr);
+    JSObjectSetProperty(ctx, obj, totalKey, JSValueMakeNumber(ctx, result.total), 0, nullptr);
+    JSStringRelease(createdKey);
+    JSStringRelease(totalKey);
+    return obj;
+}
+
 AAPI_CALLBACK(js_manager_mergeLibrary) {
     if (argumentCount < 1) return JSValueMakeNull(ctx);
     std::string sourcePath = jsValueToString(ctx, arguments[0]);
@@ -475,6 +487,13 @@ AAPI_CALLBACK(js_manager_spawnItemObject) {
     }
 
     g_instanceManager.requestSpawn(item);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+AAPI_CALLBACK(js_manager_spawnModelObject) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string modelId = jsValueToString(ctx, arguments[0]);
+    g_instanceManager.requestSpawnModel(modelId);
     return JSValueMakeBoolean(ctx, true);
 }
 
@@ -606,6 +625,23 @@ AAPI_CALLBACK(js_aapi_getModelById) {
     Arcade::Model model = g_library.getModelById(id);
     if (model.id.empty()) return JSValueMakeNull(ctx);
     return modelToJS(ctx, model);
+}
+AAPI_CALLBACK(js_aapi_getModelPlatformFile) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string modelId = jsValueToString(ctx, arguments[0]);
+    std::string file = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);
+    JSStringRef str = JSStringCreateWithUTF8CString(file.c_str());
+    JSValueRef val = JSValueMakeString(ctx, str);
+    JSStringRelease(str);
+    return val;
+}
+AAPI_CALLBACK(js_aapi_updateModel) {
+    if (argumentCount < 3) return JSValueMakeBoolean(ctx, false);
+    std::string id = jsValueToString(ctx, arguments[0]);
+    std::string field = jsValueToString(ctx, arguments[1]);
+    std::string value = jsValueToString(ctx, arguments[2]);
+    bool ok = g_library.updateModel(id, field, value);
+    return JSValueMakeBoolean(ctx, ok);
 }
 AAPI_CALLBACK(js_aapi_getItemsTyped) {
     int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
@@ -879,6 +915,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
     addJSMethod(ctx, managerObj, "spawnItemObject", js_manager_spawnItemObject);
+    addJSMethod(ctx, managerObj, "spawnModelObject", js_manager_spawnModelObject);
     addJSMethod(ctx, managerObj, "openTaskMenu", js_manager_openTaskMenu);
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
     addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);
@@ -904,6 +941,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "toggleSlaveAimedObject", js_manager_toggleSlaveAimedObject);
     addJSMethod(ctx, managerObj, "isAimedObjectSlave", js_manager_isAimedObjectSlave);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
+    addJSMethod(ctx, managerObj, "importAdoptedTemplates", js_manager_importAdoptedTemplates);
     addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
     addJSMethod(ctx, managerObj, "getAllLibretroCores", js_manager_getAllLibretroCores);
     addJSMethod(ctx, managerObj, "updateLibretroCore", js_manager_updateLibretroCore);
@@ -917,6 +955,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     JSObjectRef libraryObj = JSObjectMake(ctx, nullptr, nullptr);
     addJSMethod(ctx, libraryObj, "getItemById", js_aapi_getItemById);
     addJSMethod(ctx, libraryObj, "getModelById", js_aapi_getModelById);
+    addJSMethod(ctx, libraryObj, "getModelPlatformFile", js_aapi_getModelPlatformFile);
+    addJSMethod(ctx, libraryObj, "updateModel", js_aapi_updateModel);
     addJSMethod(ctx, libraryObj, "getItems", js_aapi_getItemsTyped);
     addJSMethod(ctx, libraryObj, "searchItems", js_aapi_searchItemsTyped);
     addJSMethod(ctx, libraryObj, "getTypes", js_aapi_getTypesTyped);

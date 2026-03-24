@@ -146,6 +146,13 @@ public:
     /* Import default model entries into the library */
     int importDefaultLibrary();
 
+    /* Spawn a model-only object (no item, no embedded content) */
+    void requestSpawnModel(const std::string& modelId);
+
+    /* Import adopted templates from addon-static.jkl into the library */
+    struct ImportResult { int created; int total; };
+    ImportResult importAdoptedTemplates();
+
     /* Merge another library.db into the active library.
      * strategy: "skip" = INSERT OR IGNORE, "overwrite" = INSERT OR REPLACE */
     std::string mergeLibrary(const std::string& sourcePath, const std::string& strategy = "skip");

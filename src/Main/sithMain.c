@@ -4,6 +4,8 @@
 #include "Main/jkGame.h"
 #include "Main/Main.h"
 #include "World/sithWorld.h"
+#include "World/sithModel.h"
+#include "World/sithTemplate.h"
 #include "World/jkPlayer.h"
 #include "Engine/sithCollision.h"
 #include "World/sithActor.h"
@@ -129,9 +131,25 @@ void sithMain_Shutdown()
 
 int sithMain_Load(char *path)
 {
+    int addonModels = 0, addonTemplates = 0;
+    sithWorld_PreScanAddon("addon-static.jkl", &addonModels, &addonTemplates);
+    sithModel_addonReserve = addonModels;
+    sithTemplate_addonReserve = addonTemplates;
+
     sithWorld_pStatic = sithWorld_New();
     sithWorld_pStatic->level_type_maybe |= 1;
-    return sithWorld_Load(sithWorld_pStatic, path) != 0;
+
+    if (!sithWorld_Load(sithWorld_pStatic, path))
+    {
+        sithModel_addonReserve = 0;
+        sithTemplate_addonReserve = 0;
+        return 0;
+    }
+
+    sithModel_addonReserve = 0;
+    sithTemplate_addonReserve = 0;
+
+    return 1;
 }
 
 void sithMain_Free()

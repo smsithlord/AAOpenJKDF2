@@ -15,6 +15,8 @@
 typedef struct sithWorld sithWorld;
 typedef struct rdModel3 rdModel3;
 
+extern int sithModel_addonReserve;
+
 int sithModel_Startup();
 void sithModel_Shutdown();
 int sithModel_Load(sithWorld *world, int a2);

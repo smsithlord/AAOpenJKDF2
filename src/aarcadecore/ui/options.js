@@ -32,6 +32,32 @@ function initOptions() {
         var status = document.createElement('p');
         status.style.cssText = 'color:#aaa; padding:8px 0; margin:0;';
         content.appendChild(status);
+
+        var btn2 = document.createElement('button');
+        btn2.className = 'aa-btn';
+        btn2.style.marginTop = '12px';
+        btn2.textContent = 'Import Adopted Templates';
+        btn2.addEventListener('click', function() {
+            var result = null;
+            try {
+                if (window.aapi && aapi.manager && aapi.manager.importAdoptedTemplates) {
+                    result = aapi.manager.importAdoptedTemplates();
+                }
+            } catch (e) {
+                console.log('[options] importAdoptedTemplates error: ' + e);
+            }
+
+            if (result) {
+                status2.textContent = 'Created ' + result.created + ' of ' + result.total + ' adopted templates.';
+            } else {
+                status2.textContent = 'Import failed — bridge not available.';
+            }
+        });
+        content.appendChild(btn2);
+
+        var status2 = document.createElement('p');
+        status2.style.cssText = 'color:#aaa; padding:8px 0; margin:0;';
+        content.appendChild(status2);
     }
 
     function onEmbeddedTab(content) {

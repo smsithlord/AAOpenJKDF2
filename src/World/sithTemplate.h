@@ -15,6 +15,8 @@
 #define sithTemplate_GetEntryByName_ADDR (0x004DDE50)
 #define sithTemplate_CreateEntry_ADDR (0x004DDF30)
 
+extern int sithTemplate_addonReserve;
+
 int sithTemplate_Startup();
 void sithTemplate_Shutdown();
 int sithTemplate_New(sithWorld *world, unsigned int numTemplates);

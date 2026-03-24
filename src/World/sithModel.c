@@ -4,10 +4,12 @@
 #include "Engine/rdroid.h"
 #include "World/sithWorld.h"
 #include "General/stdConffile.h"
+#include "General/stdFnames.h"
 #include "stdPlatform.h"
 #include "jk.h"
 
 static stdHashTable* sithModel_hashtable;
+int sithModel_addonReserve = 0;
 
 int sithModel_Startup()
 {
@@ -35,7 +37,7 @@ int sithModel_Load(sithWorld *world, int a2)
     stdConffile_ReadArgs();
     if ( _memcmp(stdConffile_entry.args[0].value, "world", 6u) || _memcmp(stdConffile_entry.args[1].value, "models", 7u) )
         return 0;
-    world->numModels = _atoi(stdConffile_entry.args[2].value);
+    world->numModels = _atoi(stdConffile_entry.args[2].value) + sithModel_addonReserve;
     if ( !world->numModels )
         return 1;
 
@@ -59,6 +61,30 @@ int sithModel_Load(sithWorld *world, int a2)
         loadProgress = loadProgress + loadStep;
         sithWorld_UpdateLoadPercent(loadProgress);
     }
+
+    // If static world, also load addon model entries (conffile nesting)
+    if (world->level_type_maybe & 1) {
+        char addonPath[128];
+        char addonSection[64];
+        stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
+        if (stdConffile_OpenRead(addonPath)) {
+            while (stdConffile_ReadLine()) {
+                if (_sscanf(stdConffile_aLine, " section: %s", addonSection) == 1
+                    && !__strcmpi(addonSection, "models")) {
+                    if (stdConffile_ReadArgs()) { // skip "world models N" header
+                        while (stdConffile_ReadArgs()) {
+                            if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                                break;
+                            sithModel_LoadEntry(stdConffile_entry.args[1].value, 0);
+                        }
+                    }
+                    break;
+                }
+            }
+            stdConffile_Close();
+        }
+    }
+
     sithWorld_UpdateLoadPercent(70.0);
 
     return 1;

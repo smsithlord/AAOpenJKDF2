@@ -903,3 +903,95 @@ void sithWorld_SetChecksumExtraFunc(sithWorld_ChecksumHandler_t handler)
 {
     sithWorld_checksumExtraFunc = handler;
 }
+
+// Added: addon-static.jkl support
+
+void sithWorld_PreScanAddon(const char* jklPath, int* outModelCount, int* outTemplateCount)
+{
+    char path[128];
+    char section[64];
+
+    *outModelCount = 0;
+    *outTemplateCount = 0;
+
+    stdFnames_MakePath(path, 128, "jkl", jklPath);
+    if (!stdConffile_OpenRead(path))
+        return;
+
+    while (stdConffile_ReadLine())
+    {
+        if (_sscanf(stdConffile_aLine, " section: %s", section) == 1)
+        {
+            // After finding a section header, read the next args line for the count
+            if (stdConffile_ReadArgs())
+            {
+                if (!__strcmpi(section, "models") && stdConffile_entry.numArgs >= 3)
+                {
+                    *outModelCount = _atoi(stdConffile_entry.args[2].value);
+                }
+                else if (!__strcmpi(section, "templates") && stdConffile_entry.numArgs >= 3)
+                {
+                    *outTemplateCount = _atoi(stdConffile_entry.args[2].value);
+                }
+            }
+        }
+    }
+
+    stdConffile_Close();
+}
+
+int sithWorld_LoadAddon(sithWorld* world, const char* jklPath)
+{
+    char path[128];
+    char section[64];
+
+    stdFnames_MakePath(path, 128, "jkl", jklPath);
+    sithWorld_pLoading = world;
+
+    if (!stdConffile_OpenRead(path))
+    {
+        sithWorld_pLoading = 0;
+        return 0;
+    }
+
+    stdPlatform_Printf("OpenJKDF2: Loading addon JKL '%s'\n", jklPath);
+
+    while (stdConffile_ReadLine())
+    {
+        if (_sscanf(stdConffile_aLine, " section: %s", section) != 1)
+            continue;
+
+        if (!__strcmpi(section, "models"))
+        {
+            // Read "world models <N>" header
+            if (!stdConffile_ReadArgs())
+                continue;
+
+            // Read model entries until "end"
+            while (stdConffile_ReadArgs())
+            {
+                if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                    break;
+                sithModel_LoadEntry(stdConffile_entry.args[1].value, 0);
+            }
+        }
+        else if (!__strcmpi(section, "templates"))
+        {
+            // Read "world templates <N>" header
+            if (!stdConffile_ReadArgs())
+                continue;
+
+            // Read template entries until "end"
+            while (stdConffile_ReadArgs())
+            {
+                if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                    break;
+                sithTemplate_CreateEntry(world);
+            }
+        }
+    }
+
+    stdConffile_Close();
+    sithWorld_pLoading = 0;
+    return 1;
+}

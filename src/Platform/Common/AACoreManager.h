@@ -81,6 +81,9 @@ void AACoreManager_ExitFullscreen(void);
 /* Weapon slot key notification — returns true if the keypress should be swallowed */
 bool AACoreManager_OnWeaponSlotPressed(int slot);
 
+/* Asset adoption — extract aimed 3DO + materials to resource/ and update addon-static.jkl */
+bool AACoreManager_AdoptAimedModel(void);
+
 /* Per-thing render hooks — swap cloned texture before/after rdThing_Draw */
 void AACoreManager_PreRenderThing(void* pSithThing);
 void AACoreManager_PostRenderThing(void* pSithThing);

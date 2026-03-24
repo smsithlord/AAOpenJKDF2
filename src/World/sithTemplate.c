@@ -5,8 +5,11 @@
 #include "General/stdString.h"
 #include "General/stdConffile.h"
 #include "General/stdHashTable.h"
+#include "General/stdFnames.h"
 
 #include "jk.h"
+
+int sithTemplate_addonReserve = 0;
 
 int sithTemplate_Startup()
 {
@@ -25,6 +28,7 @@ void sithTemplate_Shutdown()
 
 int sithTemplate_New(sithWorld *world, unsigned int numTemplates)
 {
+    numTemplates += sithTemplate_addonReserve;
     world->templates = (sithThing*)pSithHS->alloc(sizeof(sithThing) * numTemplates);
     if (!world->templates)
         return 0;
@@ -88,6 +92,30 @@ int sithTemplate_Load(sithWorld *world, int a2)
             break;
         sithTemplate_CreateEntry(world);
     }
+
+    // If static world, also load addon template entries (conffile nesting)
+    if (world->level_type_maybe & 1) {
+        char addonPath[128];
+        char addonSection[64];
+        stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
+        if (stdConffile_OpenRead(addonPath)) {
+            while (stdConffile_ReadLine()) {
+                if (_sscanf(stdConffile_aLine, " section: %s", addonSection) == 1
+                    && !__strcmpi(addonSection, "templates")) {
+                    if (stdConffile_ReadArgs()) { // skip "world templates N" header
+                        while (stdConffile_ReadArgs()) {
+                            if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                                break;
+                            sithTemplate_CreateEntry(world);
+                        }
+                    }
+                    break;
+                }
+            }
+            stdConffile_Close();
+        }
+    }
+
     return 1;
 }
 

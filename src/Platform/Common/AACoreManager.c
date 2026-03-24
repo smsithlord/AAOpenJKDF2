@@ -13,18 +13,27 @@
 #include "../../stdPlatform.h"
 #include "../../World/sithThing.h"
 #include "../../World/sithTemplate.h"
+#include "../../Primitives/rdModel3.h"
 #include "../../Engine/sithCollision.h"
 #include "../../Gameplay/sithPlayer.h"
+#include "../../Gameplay/sithTime.h"
 #include "../../Primitives/rdMatrix.h"
 #include "../../Primitives/rdVector.h"
 #include "../../World/sithSector.h"
 #include "../../Raster/rdCache.h"
+#include "../../Main/jkRes.h"
+#include "../../General/stdFnames.h"
+#include "../../Devices/sithConsole.h"
 #include "globals.h"
 
 #include "SDL2_helper.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 /* DLL handle and function pointers */
 static void* g_dll = NULL;
@@ -715,10 +724,23 @@ static sithThing* aacore_spawn_at_position(float px, float py, float pz, int sec
     return spawned;
 }
 
+static int g_wasFullscreen = 0;
+
 void AACoreManager_Update(void)
 {
     if (g_fn_update)
         g_fn_update();
+
+    /* Pause/resume engine when entering/exiting fullscreen */
+    {
+        int isFullscreen = g_fn_is_fullscreen_active && g_fn_is_fullscreen_active();
+        if (isFullscreen && !g_wasFullscreen) {
+            sithTime_Pause();
+        } else if (!isFullscreen && g_wasFullscreen) {
+            sithTime_Resume();
+        }
+        g_wasFullscreen = isFullscreen;
+    }
 
     /* Lazy audio device init — open when a Libretro instance starts producing audio */
     if (g_audio_dev == 0 && g_fn_get_audio_sample_rate) {
@@ -1616,6 +1638,7 @@ bool AACoreManager_OnWeaponSlotPressed(int slot)
         case 2: return g_fn_action_command("ObjectRemove");
         case 3: return g_fn_action_command("ObjectClone");
         case 4: return g_fn_action_command("ObjectMove");
+        case 5: return AACoreManager_AdoptAimedModel();
         default: return false;
     }
 }
@@ -1791,4 +1814,355 @@ void AACoreManager_DrawOverlay(int screenWidth, int screenHeight)
     std3D_DrawUITexturedQuad(g_overlayTexture, 0.0f, 0.0f, (float)screenWidth, (float)screenHeight);
 
     /* Cursor is now handled by overlay.html JS — no host-side cursor */
+}
+
+/* ========================================================================
+ * Asset Adoption — extract 3DO + materials to resource folder, update addon-static.jkl
+ * ======================================================================== */
+
+/* Helper: copy a file from the GOB/resource layer to a disk path.
+ * Returns 1 on success, 0 on failure or if dest already exists. */
+static int AACoreManager_ExtractResourceFile(const char* srcSubpath, const char* destPath)
+{
+    /* Skip if destination already exists */
+    struct stat st;
+    if (stat(destPath, &st) == 0)
+        return 1; /* already exists, treat as success */
+
+    stdFile_t src = jkRes_FileOpen(srcSubpath, "rb");
+    if (!src) {
+        stdPlatform_Printf("AdoptModel: Could not open source '%s'\n", srcSubpath);
+        return 0;
+    }
+
+    int fileSize = jkRes_FileSize(src);
+    if (fileSize <= 0) {
+        jkRes_FileClose(src);
+        return 0;
+    }
+
+    void* buf = malloc(fileSize);
+    if (!buf) {
+        jkRes_FileClose(src);
+        return 0;
+    }
+
+    size_t bytesRead = jkRes_FileRead(src, buf, fileSize);
+    jkRes_FileClose(src);
+
+    if ((int)bytesRead != fileSize) {
+        free(buf);
+        return 0;
+    }
+
+    FILE* dest = fopen(destPath, "wb");
+    if (!dest) {
+        free(buf);
+        stdPlatform_Printf("AdoptModel: Could not create '%s'\n", destPath);
+        return 0;
+    }
+
+    fwrite(buf, 1, fileSize, dest);
+    fclose(dest);
+    free(buf);
+    return 1;
+}
+
+/* Helper: ensure a directory exists (simple single-level mkdir) */
+static void AACoreManager_EnsureDir(const char* path)
+{
+#ifdef _WIN32
+    _mkdir(path);
+#else
+    mkdir(path, 0755);
+#endif
+}
+
+/* Parsed entry from addon-static.jkl */
+typedef struct {
+    char modelFilename[64];
+    char templateLine[256];
+} AddonJklEntry;
+
+#define ADDON_JKL_MAX_ENTRIES 4096
+
+/* Read existing addon-static.jkl entries.
+ * Returns number of entries read. */
+static int AACoreManager_ReadAddonJkl(const char* jklPath, AddonJklEntry* models, int* modelCount,
+                                       AddonJklEntry* templates, int* templateCount)
+{
+    *modelCount = 0;
+    *templateCount = 0;
+
+    FILE* f = fopen(jklPath, "r");
+    if (!f) return 0;
+
+    char line[512];
+    int inModels = 0, inTemplates = 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        /* Strip newline */
+        char* nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        nl = strchr(line, '\r');
+        if (nl) *nl = '\0';
+
+        /* Skip empty lines */
+        if (line[0] == '\0') continue;
+
+        if (strstr(line, "SECTION: MODELS")) {
+            inModels = 1; inTemplates = 0;
+            /* Read and skip the "world models N" line */
+            if (fgets(line, sizeof(line), f)) {} /* skip header */
+            continue;
+        }
+        if (strstr(line, "SECTION: TEMPLATES")) {
+            inModels = 0; inTemplates = 1;
+            /* Read and skip the "world templates N" line */
+            if (fgets(line, sizeof(line), f)) {} /* skip header */
+            continue;
+        }
+
+        /* Check for "end" */
+        char* trimmed = line;
+        while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+        if (strncmp(trimmed, "end", 3) == 0 && (trimmed[3] == '\0' || trimmed[3] == ' ' || trimmed[3] == '\t' || trimmed[3] == '\r')) {
+            inModels = 0;
+            inTemplates = 0;
+            continue;
+        }
+
+        if (inModels && *modelCount < ADDON_JKL_MAX_ENTRIES) {
+            /* Format: "0: filename.3do" — extract filename after ": " */
+            char* colon = strchr(trimmed, ':');
+            if (colon) {
+                char* fname = colon + 1;
+                while (*fname == ' ' || *fname == '\t') fname++;
+                strncpy(models[*modelCount].modelFilename, fname, 63);
+                models[*modelCount].modelFilename[63] = '\0';
+                (*modelCount)++;
+            }
+        }
+
+        if (inTemplates && *templateCount < ADDON_JKL_MAX_ENTRIES) {
+            strncpy(templates[*templateCount].templateLine, trimmed, 255);
+            templates[*templateCount].templateLine[255] = '\0';
+            /* Extract model filename from template line (model3d=xxx.3do) */
+            char* model3d = strstr(trimmed, "model3d=");
+            if (model3d) {
+                model3d += 8;
+                char* end = model3d;
+                while (*end && *end != ' ' && *end != '\t') end++;
+                int len = (int)(end - model3d);
+                if (len > 63) len = 63;
+                strncpy(templates[*templateCount].modelFilename, model3d, len);
+                templates[*templateCount].modelFilename[len] = '\0';
+            }
+            (*templateCount)++;
+        }
+    }
+
+    fclose(f);
+    return 1;
+}
+
+/* Write addon-static.jkl with the given entries */
+static int AACoreManager_WriteAddonJkl(const char* jklPath, AddonJklEntry* models, int modelCount,
+                                        AddonJklEntry* templates, int templateCount)
+{
+    FILE* f = fopen(jklPath, "w");
+    if (!f) {
+        stdPlatform_Printf("AdoptModel: Could not write '%s'\n", jklPath);
+        return 0;
+    }
+
+    fprintf(f, "SECTION: MODELS\n");
+    fprintf(f, "world models %d\n", modelCount);
+    for (int i = 0; i < modelCount; i++) {
+        fprintf(f, "%d:\t%s\n", i, models[i].modelFilename);
+    }
+    fprintf(f, "end\n");
+    fprintf(f, "\n");
+    fprintf(f, "SECTION: TEMPLATES\n");
+    fprintf(f, "world templates %d\n", templateCount);
+    for (int i = 0; i < templateCount; i++) {
+        fprintf(f, "%s\n", templates[i].templateLine);
+    }
+    fprintf(f, "end\n");
+
+    fclose(f);
+    return 1;
+}
+
+/* Main adoption function — called from host when player aims at a thing and presses the adopt key */
+bool AACoreManager_AdoptAimedModel(void)
+{
+    /* Raycast to find any non-managed sithThing the player is looking at */
+    sithThing* player = sithPlayer_pLocalPlayerThing;
+    if (!player || !player->sector) {
+        sithConsole_Print("AdoptModel: No player.");
+        return false;
+    }
+
+    rdMatrix34 aimMatrix;
+    _memcpy(&aimMatrix, &player->lookOrientation, sizeof(aimMatrix));
+    rdMatrix_PreRotate34(&aimMatrix, &player->actorParams.eyePYR);
+    rdVector3 lookDir = aimMatrix.lvec;
+
+    rdVector3 eyePos = player->position;
+    rdVector_Add3Acc(&eyePos, &player->actorParams.eyeOffset);
+    sithSector* eyeSector = sithCollision_GetSectorLookAt(
+        player->sector, &player->position, &eyePos, 0.0f);
+    if (!eyeSector) eyeSector = player->sector;
+
+    sithThing* thing = NULL;
+    sithCollision_SearchRadiusForThings(eyeSector, player,
+        &eyePos, &lookDir, 50.0f, 0.025f, 0);
+    sithCollisionSearchEntry* hit = sithCollision_NextSearchResult();
+    while (hit) {
+        if ((hit->hitType & SITHCOLLISION_THING) && hit->receiver) {
+            sithThing* candidate = hit->receiver;
+            /* Skip things managed by Anarchy Manager */
+            int isManaged = 0;
+            for (int i = 0; i < g_thingTaskCount; i++) {
+                if (g_thingTaskMap[i].thingIdx == candidate->thingIdx) {
+                    isManaged = 1;
+                    break;
+                }
+            }
+            if (!isManaged && candidate->rdthing.model3) {
+                thing = candidate;
+                break;
+            }
+        }
+        hit = sithCollision_NextSearchResult();
+    }
+    sithCollision_SearchClose();
+
+    if (!thing) {
+        sithConsole_Print("AdoptModel: No 3DO object in crosshair.");
+        return false;
+    }
+
+    /* Get the 3DO model */
+    rdModel3* model = thing->rdthing.model3;
+    const char* modelFilename = model->filename;
+    float size = thing->collideSize;
+    float moveSize = thing->moveSize;
+
+    /* Use model radius as fallback if sizes are zero */
+    if (size <= 0.0f) size = model->radius;
+    if (moveSize <= 0.0f) moveSize = model->radius;
+
+    /* === Pre-check: build template name and check for duplicates before extracting === */
+
+    /* Build template name: aaojk_<name_without_ext> */
+    char templateName[64];
+    strncpy(templateName, modelFilename, 63);
+    templateName[63] = '\0';
+    char* dot = strrchr(templateName, '.');
+    if (dot) *dot = '\0';
+    char fullTemplateName[80];
+    snprintf(fullTemplateName, sizeof(fullTemplateName), "aaojk_%s", templateName);
+
+    const char* addonJklPath = "resource/jkl/addon-static.jkl";
+
+    /* Read existing entries */
+    AddonJklEntry* existingModels = (AddonJklEntry*)malloc(sizeof(AddonJklEntry) * ADDON_JKL_MAX_ENTRIES);
+    AddonJklEntry* existingTemplates = (AddonJklEntry*)malloc(sizeof(AddonJklEntry) * ADDON_JKL_MAX_ENTRIES);
+    int existingModelCount = 0, existingTemplateCount = 0;
+
+    if (!existingModels || !existingTemplates) {
+        free(existingModels);
+        free(existingTemplates);
+        sithConsole_Print("AdoptModel: Memory allocation failed.");
+        return false;
+    }
+
+    AACoreManager_ReadAddonJkl(addonJklPath, existingModels, &existingModelCount,
+                                existingTemplates, &existingTemplateCount);
+
+    /* Check for duplicate model filename */
+    for (int i = 0; i < existingModelCount; i++) {
+        if (strcmp(existingModels[i].modelFilename, modelFilename) == 0) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Warning: '%s' already adopted.", modelFilename);
+            sithConsole_Print(msg);
+            free(existingModels);
+            free(existingTemplates);
+            return false;
+        }
+    }
+
+    /* Check for duplicate template name */
+    for (int i = 0; i < existingTemplateCount; i++) {
+        /* Template line starts with the template name */
+        char existingTmpl[128];
+        if (sscanf(existingTemplates[i].templateLine, "%127s", existingTmpl) == 1) {
+            if (strcmp(existingTmpl, fullTemplateName) == 0) {
+                char msg[128];
+                snprintf(msg, sizeof(msg), "Warning: template '%s' already exists.", fullTemplateName);
+                sithConsole_Print(msg);
+                free(existingModels);
+                free(existingTemplates);
+                return false;
+            }
+        }
+    }
+
+    stdPlatform_Printf("AdoptModel: Adopting '%s' (size=%f, movesize=%f)\n", modelFilename, size, moveSize);
+
+    /* === Step 1: Extract .3do file to resource/3do/ === */
+    AACoreManager_EnsureDir("resource");
+    AACoreManager_EnsureDir("resource/3do");
+    AACoreManager_EnsureDir("resource/mat");
+    AACoreManager_EnsureDir("resource/jkl");
+
+    char srcPath[256], destPath[256];
+    snprintf(srcPath, sizeof(srcPath), "3do/%s", modelFilename);
+    snprintf(destPath, sizeof(destPath), "resource/3do/%s", modelFilename);
+    AACoreManager_ExtractResourceFile(srcPath, destPath);
+
+    /* === Step 2: Extract all referenced .mat files === */
+    for (uint32_t i = 0; i < model->numMaterials; i++) {
+        if (!model->materials[i]) continue;
+        const char* matFilename = model->materials[i]->mat_fpath;
+        if (!matFilename || !matFilename[0]) continue;
+
+        snprintf(srcPath, sizeof(srcPath), "mat/%s", matFilename);
+        snprintf(destPath, sizeof(destPath), "resource/mat/%s", matFilename);
+        AACoreManager_ExtractResourceFile(srcPath, destPath);
+    }
+
+    /* === Step 3: Update addon-static.jkl === */
+
+    /* Add new model entry */
+    if (existingModelCount < ADDON_JKL_MAX_ENTRIES) {
+        strncpy(existingModels[existingModelCount].modelFilename, modelFilename, 63);
+        existingModels[existingModelCount].modelFilename[63] = '\0';
+        existingModelCount++;
+    }
+
+    /* Build template line */
+    if (existingTemplateCount < ADDON_JKL_MAX_ENTRIES) {
+        snprintf(existingTemplates[existingTemplateCount].templateLine,
+                 sizeof(existingTemplates[existingTemplateCount].templateLine),
+                 "%s\t_walkstruct\tsize=%f\tmovesize=%f\tmodel3d=%s",
+                 fullTemplateName, size, moveSize, modelFilename);
+        strncpy(existingTemplates[existingTemplateCount].modelFilename, modelFilename, 63);
+        existingTemplates[existingTemplateCount].modelFilename[63] = '\0';
+        existingTemplateCount++;
+    }
+
+    /* Write updated addon-static.jkl */
+    AACoreManager_WriteAddonJkl(addonJklPath, existingModels, existingModelCount,
+                                 existingTemplates, existingTemplateCount);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Adopted: %s (template: %s)", modelFilename, fullTemplateName);
+    sithConsole_Print(msg);
+
+    free(existingModels);
+    free(existingTemplates);
+    return true;
 }

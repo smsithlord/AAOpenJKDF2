@@ -56,6 +56,9 @@ void sithWorld_ResetSectorRuntimeAlteredVars(sithWorld *pWorld);
 void sithWorld_GetMemorySize(sithWorld *pWorld, int *outAllocated, int *outQuantity);
 void sithWorld_SetChecksumExtraFunc(sithWorld_ChecksumHandler_t handler); // MOTS added
 
+// Added: addon-static.jkl support
+void sithWorld_PreScanAddon(const char* jklPath, int* outModelCount, int* outTemplateCount);
+int sithWorld_LoadAddon(sithWorld* world, const char* jklPath);
 
 //static int (*sithWorld_NewEntry)(sithWorld *pWorld) = (void*)sithWorld_NewEntry_ADDR;
 //static void (*sithWorld_sub_4D0A20)(sithWorld *pWorld) = (void*)sithWorld_sub_4D0A20_ADDR;

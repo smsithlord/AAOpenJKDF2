@@ -916,3 +916,20 @@ std::string SQLiteLibrary::createModel(const std::string& title, const std::stri
                           title.c_str(), modelId.c_str(), file.c_str());
     return modelId;
 }
+
+bool SQLiteLibrary::updateModel(const std::string& id, const std::string& field, const std::string& value)
+{
+    if (!db_ || id.empty()) return false;
+
+    // Only allow updating known columns
+    if (field != "title" && field != "screen") return false;
+
+    std::string sql = "UPDATE models SET " + field + " = ? WHERE id = ?";
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) return false;
+    sqlite3_bind_text(stmt, 1, value.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, id.c_str(), -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE;
+}

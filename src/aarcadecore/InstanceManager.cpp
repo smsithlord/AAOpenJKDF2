@@ -293,12 +293,15 @@ void InstanceManager::onMapLoaded()
             g_host.host_printf("InstanceManager: Restoring %d objects\n", (int)savedObjects.size());
 
         for (const auto& obj : savedObjects) {
-            /* Look up the item from the database */
-            Arcade::Item item = g_library.getItemById(obj.item);
-            if (item.id.empty()) {
-                if (g_host.host_printf)
-                    g_host.host_printf("InstanceManager: WARNING: Item '%s' not found, skipping object\n", obj.item.c_str());
-                continue;
+            /* Look up the item from the database (may be empty for model-only objects) */
+            Arcade::Item item;
+            if (!obj.item.empty()) {
+                item = g_library.getItemById(obj.item);
+                if (item.id.empty()) {
+                    if (g_host.host_printf)
+                        g_host.host_printf("InstanceManager: WARNING: Item '%s' not found, skipping object\n", obj.item.c_str());
+                    continue;
+                }
             }
 
             /* Parse position and rotation from strings */
@@ -376,6 +379,32 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
             req.modelId = g_library.createModel("Movie Stand Standard", OPENJK_PLATFORM_ID, defaultTemplate);
         req.templateName = defaultTemplate;
     }
+    req.hasExplicitPosition = false;
+    req.posX = req.posY = req.posZ = 0;
+    req.sectorId = -1;
+    req.rotX = req.rotY = req.rotZ = 0;
+    req.scale = 1.0f;
+    req.slave = 0;
+    pendingSpawns_.push(req);
+}
+
+void InstanceManager::requestSpawnModel(const std::string& modelId)
+{
+    std::string tmpl = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);
+    if (tmpl.empty()) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: No template found for model %s\n", modelId.c_str());
+        return;
+    }
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Model spawn - model=%s template=%s\n",
+                          modelId.c_str(), tmpl.c_str());
+
+    SpawnRequest req;
+    // Empty item — no embedded content, no dynamic textures
+    req.modelId = modelId;
+    req.templateName = tmpl;
     req.hasExplicitPosition = false;
     req.posX = req.posY = req.posZ = 0;
     req.sectorId = -1;
@@ -910,6 +939,87 @@ int InstanceManager::importDefaultLibrary()
         g_host.host_printf("InstanceManager: importDefaultLibrary created %d of %d models\n",
             created, (int)(sizeof(defaults) / sizeof(defaults[0])));
     return created;
+}
+
+InstanceManager::ImportResult InstanceManager::importAdoptedTemplates()
+{
+    ImportResult result = { 0, 0 };
+
+    FILE* f = fopen("resource/jkl/addon-static.jkl", "r");
+    if (!f) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: No addon-static.jkl found\n");
+        return result;
+    }
+
+    // Parse template names from TEMPLATES section
+    std::vector<std::string> templateNames;
+    char line[512];
+    bool inTemplates = false;
+
+    while (fgets(line, sizeof(line), f)) {
+        // Strip newline
+        char* nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        nl = strchr(line, '\r');
+        if (nl) *nl = '\0';
+
+        char* trimmed = line;
+        while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+        if (trimmed[0] == '\0') continue;
+
+        if (strstr(trimmed, "SECTION: TEMPLATES") || strstr(trimmed, "section: templates")) {
+            inTemplates = true;
+            // Skip the "world templates N" header line
+            if (fgets(line, sizeof(line), f)) {}
+            continue;
+        }
+
+        if (inTemplates) {
+            if (strncmp(trimmed, "end", 3) == 0 &&
+                (trimmed[3] == '\0' || trimmed[3] == ' ' || trimmed[3] == '\t' || trimmed[3] == '\r')) {
+                break;
+            }
+            // First token is the template name
+            char tmplName[128];
+            if (sscanf(trimmed, "%127s", tmplName) == 1) {
+                templateNames.push_back(tmplName);
+            }
+        }
+    }
+    fclose(f);
+
+    result.total = (int)templateNames.size();
+
+    for (const auto& tmpl : templateNames) {
+        std::string existing = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, tmpl);
+        if (existing.empty()) {
+            // Derive title: strip "aaojk_" prefix, replace '_' with ' ', title-case
+            std::string title = tmpl;
+            if (title.find("aaojk_") == 0) title = title.substr(6);
+            for (size_t i = 0; i < title.size(); i++) {
+                if (title[i] == '_') title[i] = ' ';
+            }
+            // Title-case each word
+            bool capitalize = true;
+            for (size_t i = 0; i < title.size(); i++) {
+                if (capitalize && title[i] >= 'a' && title[i] <= 'z') {
+                    title[i] -= 32;
+                }
+                capitalize = (title[i] == ' ');
+            }
+
+            g_library.createModel(title, OPENJK_PLATFORM_ID, tmpl);
+            result.created++;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Created adopted model '%s' (%s)\n", title.c_str(), tmpl.c_str());
+        }
+    }
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: importAdoptedTemplates created %d of %d models\n",
+            result.created, result.total);
+    return result;
 }
 
 std::string InstanceManager::mergeLibrary(const std::string& sourcePath, const std::string& strategy)

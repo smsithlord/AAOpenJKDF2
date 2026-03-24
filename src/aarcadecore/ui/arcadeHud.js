@@ -1145,11 +1145,19 @@ const arcadeHud = (function() {
 
             card.appendChild(actions);
 
-            // Click to spawn (items type) or show title
+            // Click to spawn (items or models)
             if (state.type === 'items' && entry.id) {
                 card.addEventListener('click', function() {
                     if (window.aapi && aapi.manager && aapi.manager.spawnItemObject) {
                         aapi.manager.spawnItemObject(entry.id);
+                        aapi.manager.closeMenu();
+                    }
+                });
+            }
+            if (state.type === 'models' && entry.id) {
+                card.addEventListener('click', function() {
+                    if (window.aapi && aapi.manager && aapi.manager.spawnModelObject) {
+                        aapi.manager.spawnModelObject(entry.id);
                         aapi.manager.closeMenu();
                     }
                 });

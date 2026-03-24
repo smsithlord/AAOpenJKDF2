@@ -1005,6 +1005,14 @@ AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
     if (strcmp(cmd, "ObjectClone") == 0) {
         const SpawnedObject* obj = g_instanceManager.getAimedObject();
         if (!obj) return false;
+        if (obj->itemId.empty()) {
+            /* Model-only object — clone without item */
+            if (!obj->modelId.empty()) {
+                g_instanceManager.requestSpawnModel(obj->modelId);
+                return true;
+            }
+            return false;
+        }
         Arcade::Item item = g_library.getItemById(obj->itemId);
         if (item.id.empty()) return false;
         g_instanceManager.requestSpawn(item, obj->modelId, obj->scale);

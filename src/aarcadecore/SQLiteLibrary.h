@@ -58,6 +58,7 @@ public:
     std::string findModelPlatformFile(const std::string& modelId, const std::string& platformKey);
     std::string findModelByPlatformFile(const std::string& platformKey, const std::string& file);
     std::string createModel(const std::string& title, const std::string& platformKey, const std::string& file);
+    bool updateModel(const std::string& id, const std::string& field, const std::string& value);
     std::string createMap(const std::string& title, const std::string& platformKey, const std::string& file);
     std::string findInstanceByMap(const std::string& mapId);
     std::string createInstance(const std::string& title, const std::string& mapId);
