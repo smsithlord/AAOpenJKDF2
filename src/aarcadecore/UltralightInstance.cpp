@@ -308,6 +308,8 @@ AAPI_CALLBACK(js_manager_deactivateInstance) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+static JSObjectRef itemToJS(JSContextRef ctx, const Arcade::Item& item);
+
 AAPI_CALLBACK(js_manager_getAimedObjectInfo) {
     const SpawnedObject* obj = g_instanceManager.getAimedObject();
     if (!obj) return JSValueMakeNull(ctx);
@@ -319,6 +321,13 @@ AAPI_CALLBACK(js_manager_getAimedObjectInfo) {
     jsSetPropStr(ctx, o, "objectKey", obj->objectKey);
     jsSetPropStr(ctx, o, "url", obj->url);
     jsSetPropStr(ctx, o, "title", item.title.empty() ? obj->modelId : item.title);
+
+    if (!item.id.empty()) {
+        JSObjectRef itemObj = itemToJS(ctx, item);
+        JSStringRef k = JSStringCreateWithUTF8CString("item");
+        JSObjectSetProperty(ctx, o, k, itemObj, 0, nullptr);
+        JSStringRelease(k);
+    }
 
     JSStringRef tk = JSStringCreateWithUTF8CString("thingIdx");
     JSObjectSetProperty(ctx, o, tk, JSValueMakeNumber(ctx, obj->thingIdx), 0, nullptr);
@@ -345,6 +354,22 @@ AAPI_CALLBACK(js_manager_isAimedObjectSlave) {
     const SpawnedObject* obj = g_instanceManager.getAimedObject();
     if (!obj) return JSValueMakeBoolean(ctx, false);
     return JSValueMakeBoolean(ctx, obj->slave);
+}
+
+AAPI_CALLBACK(js_manager_cloneAimedObject) {
+    const SpawnedObject* obj = g_instanceManager.getAimedObject();
+    if (!obj) return JSValueMakeBoolean(ctx, false);
+    if (obj->itemId.empty()) {
+        if (!obj->modelId.empty()) {
+            g_instanceManager.requestSpawnModel(obj->modelId);
+            return JSValueMakeBoolean(ctx, true);
+        }
+        return JSValueMakeBoolean(ctx, false);
+    }
+    Arcade::Item item = g_library.getItemById(obj->itemId);
+    if (item.id.empty()) return JSValueMakeBoolean(ctx, false);
+    g_instanceManager.requestSpawn(item, obj->modelId, obj->scale);
+    return JSValueMakeBoolean(ctx, true);
 }
 
 AAPI_CALLBACK(js_manager_importDefaultLibrary) {
@@ -1009,6 +1034,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "destroyAimedObject", js_manager_destroyAimedObject);
     addJSMethod(ctx, managerObj, "toggleSlaveAimedObject", js_manager_toggleSlaveAimedObject);
     addJSMethod(ctx, managerObj, "isAimedObjectSlave", js_manager_isAimedObjectSlave);
+    addJSMethod(ctx, managerObj, "cloneAimedObject", js_manager_cloneAimedObject);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
     addJSMethod(ctx, managerObj, "importAdoptedTemplates", js_manager_importAdoptedTemplates);
     addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
