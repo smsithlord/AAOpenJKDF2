@@ -653,6 +653,28 @@ AAPI_CALLBACK(js_aapi_updateModel) {
     bool ok = g_library.updateModel(id, field, value);
     return JSValueMakeBoolean(ctx, ok);
 }
+AAPI_CALLBACK(js_aapi_createItem) {
+    if (argumentCount < 3) return JSValueMakeNull(ctx);
+    std::string title = jsValueToString(ctx, arguments[0]);
+    std::string type = jsValueToString(ctx, arguments[1]);
+    std::string file = jsValueToString(ctx, arguments[2]);
+    std::string newId = g_library.createItem(title, type, file);
+    if (newId.empty()) return JSValueMakeNull(ctx);
+    JSStringRef str = JSStringCreateWithUTF8CString(newId.c_str());
+    JSValueRef val = JSValueMakeString(ctx, str);
+    JSStringRelease(str);
+    return val;
+}
+AAPI_CALLBACK(js_aapi_findItemByFile) {
+    if (argumentCount < 1) return JSValueMakeNull(ctx);
+    std::string file = jsValueToString(ctx, arguments[0]);
+    std::string id = g_library.findItemByFile(file);
+    if (id.empty()) return JSValueMakeNull(ctx);
+    JSStringRef str = JSStringCreateWithUTF8CString(id.c_str());
+    JSValueRef val = JSValueMakeString(ctx, str);
+    JSStringRelease(str);
+    return val;
+}
 AAPI_CALLBACK(js_aapi_getItemsTyped) {
     int offset, limit; parseOffsetLimit(ctx, argumentCount, arguments, offset, limit);
     std::string typeFilter = (argumentCount > 2) ? jsValueToString(ctx, arguments[2]) : "";
@@ -968,6 +990,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, libraryObj, "getModelById", js_aapi_getModelById);
     addJSMethod(ctx, libraryObj, "getModelPlatformFile", js_aapi_getModelPlatformFile);
     addJSMethod(ctx, libraryObj, "updateModel", js_aapi_updateModel);
+    addJSMethod(ctx, libraryObj, "createItem", js_aapi_createItem);
+    addJSMethod(ctx, libraryObj, "findItemByFile", js_aapi_findItemByFile);
     addJSMethod(ctx, libraryObj, "getItems", js_aapi_getItemsTyped);
     addJSMethod(ctx, libraryObj, "searchItems", js_aapi_searchItemsTyped);
     addJSMethod(ctx, libraryObj, "getTypes", js_aapi_getTypesTyped);

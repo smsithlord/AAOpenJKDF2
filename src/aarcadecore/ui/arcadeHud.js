@@ -762,6 +762,15 @@ const arcadeHud = (function() {
         searchInput.placeholder = 'Search...';
         bar.appendChild(searchInput);
 
+        var addNewBtn = document.createElement('button');
+        addNewBtn.className = 'aa-library-type-btn';
+        addNewBtn.innerHTML = '<img src="icons/plusicon.png" class="aa-library-bar-icon">';
+        addNewBtn.title = 'Add New Item';
+        addNewBtn.addEventListener('click', function() {
+            window.location.href = 'file:///aarcadecore/ui/createItem.html';
+        });
+        bar.appendChild(addNewBtn);
+
         var typesDiv = document.createElement('div');
         typesDiv.className = 'aa-library-types';
 

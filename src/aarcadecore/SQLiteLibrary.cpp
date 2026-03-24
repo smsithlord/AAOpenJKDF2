@@ -66,6 +66,40 @@ Arcade::Item SQLiteLibrary::getItemById(const std::string& id)
     return item;
 }
 
+std::string SQLiteLibrary::createItem(const std::string& title, const std::string& type, const std::string& file)
+{
+    if (!db_) return "";
+    std::string itemId = Arcade::generateFirebasePushId();
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "INSERT INTO items (id, title, type, file) VALUES (?, ?, ?, ?)";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, itemId.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, title.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, type.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 4, file.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+    return itemId;
+}
+
+std::string SQLiteLibrary::findItemByFile(const std::string& file)
+{
+    if (!db_ || file.empty()) return "";
+
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "SELECT id FROM items WHERE file = ? LIMIT 1";
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return "";
+
+    sqlite3_bind_text(stmt, 1, file.c_str(), -1, SQLITE_TRANSIENT);
+    std::string result;
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+        result = getStr(stmt, 0);
+    sqlite3_finalize(stmt);
+    return result;
+}
+
 std::vector<Arcade::Item> SQLiteLibrary::getItems(int offset, int limit, const std::string& typeFilter)
 {
     std::vector<Arcade::Item> results;

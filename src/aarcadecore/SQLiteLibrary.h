@@ -26,6 +26,9 @@ public:
     std::vector<Arcade::Item> getItems(int offset, int limit, const std::string& typeFilter = "");
     std::vector<Arcade::Item> searchItems(const std::string& query, int limit, const std::string& typeFilter = "");
 
+    std::string createItem(const std::string& title, const std::string& type, const std::string& file);
+    std::string findItemByFile(const std::string& file);
+
     // Types
     std::vector<Arcade::Type> getTypes();
 
