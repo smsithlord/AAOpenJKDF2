@@ -149,6 +149,9 @@ public:
     /* Spawn a model-only object (no item, no embedded content) */
     void requestSpawnModel(const std::string& modelId);
 
+    /* Check if a model's 3DO uses dynamic screen/marquee materials (cabinet) */
+    bool isModelCabinet(const std::string& modelId);
+
     /* Import adopted templates from addon-static.jkl into the library */
     struct ImportResult { int created; int total; };
     ImportResult importAdoptedTemplates();

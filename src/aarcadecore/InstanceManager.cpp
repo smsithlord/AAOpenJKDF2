@@ -415,6 +415,14 @@ void InstanceManager::requestSpawnModel(const std::string& modelId)
     pendingSpawns_.push(req);
 }
 
+bool InstanceManager::isModelCabinet(const std::string& modelId)
+{
+    if (!g_host.is_template_cabinet) return false;
+    std::string tmpl = g_library.findModelPlatformFile(modelId, OPENJK_PLATFORM_ID);
+    if (tmpl.empty()) return false;
+    return g_host.is_template_cabinet(tmpl.c_str()) != 0;
+}
+
 void InstanceManager::requestSpawn(const Arcade::Item& item, const std::string& modelId, float scale)
 {
     if (g_host.host_printf)

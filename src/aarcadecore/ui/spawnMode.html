@@ -133,9 +133,12 @@
     </style>
 </head>
 <body>
-    <div class="spawn-label">SPAWN MODE</div>
+    <div class="spawn-label" id="spawnLabel">SPAWN MODE</div>
     <div class="model-name" id="modelName"></div>
-    <div class="model-selector" id="modelList"></div>
+    <div class="model-selector">
+        <div id="modelListHeader" style="padding:4px 14px;color:#666;font-size:10px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:2px;"></div>
+        <div id="modelList"></div>
+    </div>
     <div class="transform-panel" id="transformPanel">
         <h3>Transform</h3>
         <div class="transform-row">
@@ -196,12 +199,35 @@
     var modelListEl = document.getElementById('modelList');
     var modelNameEl = document.getElementById('modelName');
 
-    /* Load available models from bridge */
+    /* Detect cabinet vs prop mode */
+    var isPropMode = true;
     try {
-        if (typeof aapi !== 'undefined' && aapi.library && aapi.library.getModels) {
-            models = aapi.library.getModels(0, 500) || [];
+        if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnItemId) {
+            var spawnItemId = aapi.manager.getSpawnItemId();
+            isPropMode = !spawnItemId;
         }
     } catch (e) {}
+    document.getElementById('spawnLabel').textContent = isPropMode ? 'SPAWN PROP' : 'SPAWN CABINET';
+    document.getElementById('modelListHeader').textContent = isPropMode ? 'Props' : 'Cabinets';
+
+    /* Load available models from bridge and filter by mode */
+    var allModels = [];
+    try {
+        if (typeof aapi !== 'undefined' && aapi.library && aapi.library.getModels) {
+            allModels = aapi.library.getModels(0, 500) || [];
+        }
+    } catch (e) {}
+
+    /* Filter: props show non-cabinet models, cabinets show only dynamic-material models */
+    for (var fi = 0; fi < allModels.length; fi++) {
+        var isCab = false;
+        try {
+            if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.isModelCabinet)
+                isCab = aapi.manager.isModelCabinet(allModels[fi].id);
+        } catch (e) {}
+        if (isPropMode ? !isCab : isCab)
+            models.push(allModels[fi]);
+    }
 
     /* Set initial model index from current spawn/move object */
     try {

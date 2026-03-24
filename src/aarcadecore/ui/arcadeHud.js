@@ -1075,6 +1075,13 @@ const arcadeHud = (function() {
                 return;
             }
             for (var i = 0; i < entries.length; i++) {
+                /* In models view, hide cabinet models (they're accessed via items) */
+                if (state.type === 'models' && entries[i].id) {
+                    try {
+                        if (window.aapi && aapi.manager && aapi.manager.isModelCabinet &&
+                            aapi.manager.isModelCabinet(entries[i].id)) continue;
+                    } catch (e) {}
+                }
                 grid.appendChild(createCard(entries[i]));
             }
         }
@@ -1145,8 +1152,8 @@ const arcadeHud = (function() {
 
             card.appendChild(actions);
 
-            // Click to spawn (items or models)
-            if (state.type === 'items' && entry.id) {
+            // Click to spawn (items or models — use entryMode to handle favorites mixed lists)
+            if (entryMode === 'items' && entry.id) {
                 card.addEventListener('click', function() {
                     if (window.aapi && aapi.manager && aapi.manager.spawnItemObject) {
                         aapi.manager.spawnItemObject(entry.id);
@@ -1154,7 +1161,7 @@ const arcadeHud = (function() {
                     }
                 });
             }
-            if (state.type === 'models' && entry.id) {
+            if (entryMode === 'models' && entry.id) {
                 card.addEventListener('click', function() {
                     if (window.aapi && aapi.manager && aapi.manager.spawnModelObject) {
                         aapi.manager.spawnModelObject(entry.id);

@@ -111,6 +111,7 @@ static aarcadecore_action_command_t g_fn_action_command = NULL;
 
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
+static int  host_is_template_cabinet(const char* templateName);
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -399,6 +400,7 @@ void AACoreManager_Init(void)
     callbacks.host_printf = host_printf;
     callbacks.get_key_state = host_get_key_state;
     callbacks.get_current_map = host_get_current_map;
+    callbacks.is_template_cabinet = host_is_template_cabinet;
 
     if (!g_fn_init(&callbacks)) {
         stdPlatform_Printf("AACoreManager: DLL init failed\n");
@@ -1651,6 +1653,24 @@ static void host_get_current_map(char* mapKeyOut, int mapKeySize)
                 sithWorld_pCurrentWorld->episodeName,
                 sithWorld_pCurrentWorld->map_jkl_fname);
     }
+}
+
+/* Check if a template's 3DO model uses dynamic screen/marquee materials */
+static int host_is_template_cabinet(const char* templateName)
+{
+    if (!templateName) return 0;
+    sithThing* tmpl = sithTemplate_GetEntryByName(templateName);
+    if (!tmpl) return 0;
+    rdModel3* model = tmpl->rdthing.model3;
+    if (!model) return 0;
+    for (uint32_t i = 0; i < model->numMaterials; i++) {
+        if (!model->materials[i]) continue;
+        const char* matName = model->materials[i]->mat_fpath;
+        if (!matName) continue;
+        if (strstr(matName, "dynscreen") || strstr(matName, "dynmarquee"))
+            return 1;
+    }
+    return 0;
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)

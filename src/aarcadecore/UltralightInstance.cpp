@@ -490,6 +490,12 @@ AAPI_CALLBACK(js_manager_spawnItemObject) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+AAPI_CALLBACK(js_manager_isModelCabinet) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string modelId = jsValueToString(ctx, arguments[0]);
+    return JSValueMakeBoolean(ctx, g_instanceManager.isModelCabinet(modelId));
+}
+
 AAPI_CALLBACK(js_manager_spawnModelObject) {
     if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
     std::string modelId = jsValueToString(ctx, arguments[0]);
@@ -916,6 +922,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
     addJSMethod(ctx, managerObj, "spawnItemObject", js_manager_spawnItemObject);
     addJSMethod(ctx, managerObj, "spawnModelObject", js_manager_spawnModelObject);
+    addJSMethod(ctx, managerObj, "isModelCabinet", js_manager_isModelCabinet);
     addJSMethod(ctx, managerObj, "openTaskMenu", js_manager_openTaskMenu);
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
     addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);

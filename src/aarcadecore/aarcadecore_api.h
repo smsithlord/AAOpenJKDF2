@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* API version — bump when the interface changes */
-#define AARCADECORE_API_VERSION 3
+#define AARCADECORE_API_VERSION 4
 
 /* DLL export/import macros */
 #ifdef _WIN32
@@ -39,12 +39,14 @@ extern "C" {
 typedef void (*AACore_PrintfFn)(const char* fmt, ...);
 typedef int  (*AACore_GetKeyStateFn)(int key_index);
 typedef void (*AACore_GetCurrentMapFn)(char* mapKeyOut, int mapKeySize);
+typedef int  (*AACore_IsTemplateCabinetFn)(const char* templateName);
 
 typedef struct AACoreHostCallbacks {
     int api_version;
     AACore_PrintfFn          host_printf;
     AACore_GetKeyStateFn     get_key_state;
     AACore_GetCurrentMapFn   get_current_map;
+    AACore_IsTemplateCabinetFn is_template_cabinet;
 } AACoreHostCallbacks;
 
 /* ========================================================================
