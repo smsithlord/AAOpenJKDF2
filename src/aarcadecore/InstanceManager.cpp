@@ -243,6 +243,7 @@ void InstanceManager::onMapUnloaded()
     /* Clear spawned objects and state */
     objects_.clear();
     selectedObjectIndex_ = -1;
+    spawnTransformSet_ = false;
     currentInstanceId_.clear();
     currentMapId_.clear();
 }
@@ -519,11 +520,14 @@ void InstanceManager::initSpawnedObject(int thingIdx)
 
 void InstanceManager::confirmSpawn(int thingIdx)
 {
-    /* Update scale from spawn transform before position is reported and saved */
+    /* Update scale from spawn transform before position is reported and saved.
+     * Skip for restores (objectKey set) — they already have the correct saved scale. */
     if (spawnTransformSet_) {
         for (auto& obj : objects_) {
             if (obj.thingIdx == thingIdx) {
-                obj.scale = spawnScale_;
+                if (lastPopped_.objectKey.empty()) {
+                    obj.scale = spawnScale_;
+                }
                 break;
             }
         }
