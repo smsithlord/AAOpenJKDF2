@@ -71,6 +71,9 @@ void AACoreManager_CancelSpawn(void);
 /* Tab menu — open to specific tab */
 void AACoreManager_OpenTabMenuToTab(int tabIndex);
 
+/* Create item page with pre-filled file/URL */
+void AACoreManager_OpenCreateItemWithFile(const char* file);
+
 /* Build context menu */
 void AACoreManager_ToggleBuildContextMenu(void);
 

@@ -920,6 +920,24 @@ void Window_SdlUpdate()
                     }
                     break; /* AArcade consumed the key — don't forward to game */
                 }
+                if (event.key.keysym.sym == SDLK_v && (SDL_GetModState() & KMOD_CTRL))
+                {
+                    /* Read clipboard and open Create Item page if text is available */
+                    char clipText[2048] = {0};
+                    if (OpenClipboard(NULL)) {
+                        HANDLE h = GetClipboardData(CF_TEXT);
+                        if (h) {
+                            const char* text = (const char*)GlobalLock(h);
+                            if (text && text[0])
+                                strncpy(clipText, text, sizeof(clipText) - 1);
+                            GlobalUnlock(h);
+                        }
+                        CloseClipboard();
+                    }
+                    if (clipText[0])
+                        AACoreManager_OpenCreateItemWithFile(clipText);
+                    break;
+                }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     /* AArcade intercepts escape — aaMainMenu_Update handles it via SDL.

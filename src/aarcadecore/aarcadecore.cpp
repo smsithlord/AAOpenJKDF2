@@ -913,6 +913,7 @@ AARCADECORE_EXPORT void aarcadecore_set_aimed_thing(int thingIdx)
 
 void UltralightManager_OpenTabMenu(void);
 void UltralightManager_OpenTabMenuToTab(int tabIndex);
+void UltralightManager_OpenCreateItem(const char* file);
 void UltralightManager_EnterSpawnMode(void);
 void UltralightManager_ExitSpawnMode(void);
 bool UltralightManager_IsSpawnModeOpen(void);
@@ -941,6 +942,13 @@ AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex)
         UltralightManager_OpenTabMenuToTab(tabIndex);
     else
         UltralightManager_OpenTabMenu();
+}
+
+AARCADECORE_EXPORT void aarcadecore_open_create_item(const char* file)
+{
+    if (UltralightManager_IsMainMenuOpen())
+        UltralightManager_ToggleMainMenu();
+    UltralightManager_OpenCreateItem(file);
 }
 
 void UltralightManager_OpenBuildContextMenu(void);

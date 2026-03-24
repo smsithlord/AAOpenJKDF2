@@ -174,6 +174,38 @@ void UltralightManager_OpenTabMenuToTab(int tabIndex)
     UltralightManager_OpenTabMenu();
 }
 
+static void urlEncodeInto(char* dst, int dstSize, const char* src)
+{
+    int pos = 0;
+    for (int i = 0; src[i] && pos < dstSize - 4; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+            || c == '-' || c == '_' || c == '.' || c == '~') {
+            dst[pos++] = c;
+        } else {
+            pos += snprintf(dst + pos, dstSize - pos, "%%%02X", c);
+        }
+    }
+    dst[pos] = '\0';
+}
+
+void UltralightManager_OpenCreateItem(const char* file)
+{
+    if (!g_hudInstance) return;
+    g_instanceManager.deselectOnly();
+
+    char encoded[4096];
+    urlEncodeInto(encoded, sizeof(encoded), file);
+
+    char url[8192];
+    snprintf(url, sizeof(url), "file:///aarcadecore/ui/createItem.html?file=%s", encoded);
+
+    if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening create item with file=%s\n", file);
+    UltralightInstance_LoadURL(g_hudInstance, url);
+    g_mainMenuOpen = true;
+    g_overlayLoaded = false;
+}
+
 int UltralightManager_ConsumeRequestedTab(void)
 {
     int idx = g_requestedTabIndex;

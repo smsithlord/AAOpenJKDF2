@@ -222,6 +222,9 @@ AARCADECORE_EXPORT bool aarcadecore_is_spawn_mode_active(void);
 /* Open tab menu to a specific tab index (0=Tasks, 1=Library, etc.) */
 AARCADECORE_EXPORT void aarcadecore_open_tab_menu_to_tab(int tabIndex);
 
+/* Open Create Item page with a pre-filled file/URL */
+AARCADECORE_EXPORT void aarcadecore_open_create_item(const char* file);
+
 /* Toggle the build context menu overlay */
 AARCADECORE_EXPORT void aarcadecore_toggle_build_context_menu(void);
 
@@ -310,6 +313,7 @@ typedef void  (*aarcadecore_enter_spawn_mode_t)(void);
 typedef void  (*aarcadecore_exit_spawn_mode_t)(void);
 typedef bool  (*aarcadecore_is_spawn_mode_active_t)(void);
 typedef void  (*aarcadecore_open_tab_menu_to_tab_t)(int tabIndex);
+typedef void  (*aarcadecore_open_create_item_t)(const char* file);
 typedef void  (*aarcadecore_toggle_build_context_menu_t)(void);
 typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);
