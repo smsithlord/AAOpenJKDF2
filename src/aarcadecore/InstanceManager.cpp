@@ -1207,20 +1207,14 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
 
     /* Capture snapshot of last rendered frame before removing task */
     if (inst.taskIndex >= 0 && inst.browser && inst.browser->vtable->render) {
-        /* Find the resolved URL for this instance */
-        std::string snapshotUrl;
-        for (const auto& obj : objects_) {
-            if (obj.itemId == itemId && !obj.url.empty()) {
-                snapshotUrl = obj.url;
-                break;
-            }
-        }
-        if (!snapshotUrl.empty() && g_imageLoader.isInitialized()) {
+        /* Use itemId as the snapshot key — matches getBestScreenUrl lookup */
+        std::string snapshotKey = itemId;
+        if (!snapshotKey.empty() && g_imageLoader.isInitialized()) {
             const int snapW = 512, snapH = 512;
             uint8_t* snapBuf = (uint8_t*)malloc(snapW * snapH * 4);
             if (snapBuf) {
                 inst.browser->vtable->render(inst.browser, snapBuf, snapW, snapH, 0, 32);
-                g_imageLoader.saveSnapshot(snapshotUrl, snapBuf, snapW, snapH);
+                g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
                 free(snapBuf);
             }
         }

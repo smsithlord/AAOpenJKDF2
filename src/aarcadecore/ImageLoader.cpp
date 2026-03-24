@@ -236,7 +236,25 @@ bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels
 
 std::string ImageLoader::getSnapshotPath(const std::string& key) {
     if (key.empty()) return "";
-    return getCachedFilePath(key);
+    std::string path = getCacheFilePath(key);
+#ifdef _WIN32
+    DWORD attrs = GetFileAttributesA(path.c_str());
+    if (attrs != INVALID_FILE_ATTRIBUTES) return path;
+    /* Try without .\ prefix in case CWD is different */
+    if (path.substr(0, 2) == ".\\") {
+        std::string altPath = path.substr(2);
+        attrs = GetFileAttributesA(altPath.c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES) return altPath;
+    }
+    /* Try with ../ prefix for DLL running from subdirectory */
+    std::string parentPath = "..\\" + path;
+    attrs = GetFileAttributesA(parentPath.c_str());
+    if (attrs != INVALID_FILE_ATTRIBUTES) return parentPath;
+#else
+    FILE* f = fopen(path.c_str(), "rb");
+    if (f) { fclose(f); return path; }
+#endif
+    return "";
 }
 
 // --- Public API ---
