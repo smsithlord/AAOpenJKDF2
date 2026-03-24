@@ -680,6 +680,14 @@ AAPI_CALLBACK(js_aapi_updateModel) {
     bool ok = g_library.updateModel(id, field, value);
     return JSValueMakeBoolean(ctx, ok);
 }
+AAPI_CALLBACK(js_aapi_updateItem) {
+    if (argumentCount < 3) return JSValueMakeBoolean(ctx, false);
+    std::string id = jsValueToString(ctx, arguments[0]);
+    std::string field = jsValueToString(ctx, arguments[1]);
+    std::string value = jsValueToString(ctx, arguments[2]);
+    bool ok = g_library.updateItem(id, field, value);
+    return JSValueMakeBoolean(ctx, ok);
+}
 AAPI_CALLBACK(js_aapi_createItem) {
     if (argumentCount < 3) return JSValueMakeNull(ctx);
     std::string title = jsValueToString(ctx, arguments[0]);
@@ -1018,6 +1026,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, libraryObj, "getModelById", js_aapi_getModelById);
     addJSMethod(ctx, libraryObj, "getModelPlatformFile", js_aapi_getModelPlatformFile);
     addJSMethod(ctx, libraryObj, "updateModel", js_aapi_updateModel);
+    addJSMethod(ctx, libraryObj, "updateItem", js_aapi_updateItem);
     addJSMethod(ctx, libraryObj, "createItem", js_aapi_createItem);
     addJSMethod(ctx, libraryObj, "findItemByFile", js_aapi_findItemByFile);
     addJSMethod(ctx, libraryObj, "getItems", js_aapi_getItemsTyped);

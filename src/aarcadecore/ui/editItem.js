@@ -13,10 +13,14 @@ function initEditItem() {
 
     var title = (item && item.title) ? 'Item Properties: ' + item.title : 'Item Properties';
 
-    /* Placeholder save function — will use JS bridge in next task */
     function saveItemAttribute(field, value) {
-        console.log('[editItem] saveItemAttribute: field=' + field + ' value=' + value + ' itemId=' + itemId);
-        /* TODO: aapi.library.updateItem(itemId, field, value) */
+        try {
+            if (window.aapi && aapi.library && aapi.library.updateItem) {
+                aapi.library.updateItem(itemId, field, value);
+            }
+        } catch (e) {
+            console.log('[editItem] save error: ' + e);
+        }
     }
 
     /* Flash saved highlight on an input */
@@ -169,6 +173,7 @@ function initEditItem() {
         form.appendChild(r2.row);
 
         var r3 = createRow('appicon.png', 'Open With', item ? item.app : '', {
+            field: 'app',
             type: 'select',
             options: appOptions,
             actions: [
@@ -187,6 +192,7 @@ function initEditItem() {
         form.appendChild(r3.row);
 
         var r4 = createRow('fileicon.png', 'File Target', item ? item.file : '', {
+            field: 'file',
             actions: [
                 { icon: '<img src="icons/browseicon.png" class="aa-edit-action-icon">', title: 'Browse for file' }
             ]
@@ -201,9 +207,9 @@ function initEditItem() {
         var form = document.createElement('table');
         form.className = 'aa-edit-form';
 
-        form.appendChild(createRow('screenicon.png', 'Screen Image', item ? item.screen : '').row);
-        form.appendChild(createRow('marqueeicon.png', 'Marquee Image', item ? item.marquee : '').row);
-        form.appendChild(createRow('previewicon.png', 'Preview Website', item ? item.preview : '').row);
+        form.appendChild(createRow('screenicon.png', 'Screen Image', item ? item.screen : '', { field: 'screen' }).row);
+        form.appendChild(createRow('marqueeicon.png', 'Marquee Image', item ? item.marquee : '', { field: 'marquee' }).row);
+        form.appendChild(createRow('previewicon.png', 'Preview Website', item ? item.preview : '', { field: 'preview' }).row);
 
         content.appendChild(form);
     }

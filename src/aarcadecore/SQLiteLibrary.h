@@ -28,6 +28,7 @@ public:
 
     std::string createItem(const std::string& title, const std::string& type, const std::string& file);
     std::string findItemByFile(const std::string& file);
+    bool updateItem(const std::string& id, const std::string& field, const std::string& value);
 
     // Types
     std::vector<Arcade::Type> getTypes();
