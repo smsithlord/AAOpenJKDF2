@@ -36,8 +36,11 @@ public:
 
     bool getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut);
 
-    /* Save a snapshot of raw BGRA pixels to cache/urls/{hash}.png keyed by itemId */
+    /* Save a snapshot of raw BGRA pixels to cache/snapshots/{hash}.png keyed by itemId */
     bool saveSnapshot(const std::string& key, const uint8_t* bgraPixels, int width, int height);
+
+    /* Save a thumbnail (resized to max 512px) to cache/thumbnails/{hash}.png keyed by modelId */
+    bool saveThumbnail(const std::string& key, const uint8_t* rgbaPixels, int width, int height);
 
     /* Get snapshot path for a key (empty if not cached) */
     std::string getSnapshotPath(const std::string& key);

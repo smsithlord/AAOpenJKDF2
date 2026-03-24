@@ -21,13 +21,23 @@ function initBuildContextMenu() {
     if (window.aapi && aapi.manager && aapi.manager.isAimedObjectSlave)
         isSlave = aapi.manager.isAimedObjectSlave();
 
-    var title = info.title || info.itemId || 'Unknown';
-    content.innerHTML =
+    var isModel = !info.itemId && info.modelId;
+    var title = info.title || info.itemId || info.modelId || 'Unknown';
+    var html =
         '<div class="aa-object-title">' + arcadeHud.ui.escapeHtml(title) + '</div>' +
         '<div class="aa-object-info">' + arcadeHud.ui.escapeHtml(info.url || '') + '</div>' +
-        '<button class="aa-btn" onclick="onMoveObject()">Move Object</button>' +
-        '<button class="aa-btn" id="mirrorBtn" onclick="onToggleMirror()">' + (isSlave ? 'Disable Mirror' : 'Enable Mirror') + '</button>' +
+        '<button class="aa-btn" onclick="onMoveObject()">Move Object</button>';
+
+    if (isModel) {
+        html += '<button class="aa-btn" onclick="onCaptureThumbnail()">Capture Thumbnail</button>';
+    }
+
+    html += '<button class="aa-btn" id="mirrorBtn" onclick="onToggleMirror()">' + (isSlave ? 'Disable Mirror' : 'Enable Mirror') + '</button>' +
         '<button class="aa-btn aa-btn-danger" onclick="onDestroyObject()">Destroy Object</button>';
+    content.innerHTML = html;
+
+    /* Store modelId for thumbnail capture */
+    window._buildContextModelId = info.modelId || '';
 }
 
 function onMoveObject() {
@@ -42,6 +52,13 @@ function onToggleMirror() {
         var newState = aapi.manager.toggleSlaveAimedObject();
         var btn = document.getElementById('mirrorBtn');
         if (btn) btn.textContent = newState ? 'Disable Mirror' : 'Enable Mirror';
+    }
+}
+
+function onCaptureThumbnail() {
+    var modelId = window._buildContextModelId;
+    if (modelId) {
+        window.location.href = 'file:///aarcadecore/ui/modelThumbnailMaker.html?modelId=' + encodeURIComponent(modelId);
     }
 }
 

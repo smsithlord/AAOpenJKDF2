@@ -315,9 +315,10 @@ AAPI_CALLBACK(js_manager_getAimedObjectInfo) {
     Arcade::Item item = g_library.getItemById(obj->itemId);
     JSObjectRef o = JSObjectMake(ctx, nullptr, nullptr);
     jsSetPropStr(ctx, o, "itemId", obj->itemId);
+    jsSetPropStr(ctx, o, "modelId", obj->modelId);
     jsSetPropStr(ctx, o, "objectKey", obj->objectKey);
     jsSetPropStr(ctx, o, "url", obj->url);
-    jsSetPropStr(ctx, o, "title", item.title);
+    jsSetPropStr(ctx, o, "title", item.title.empty() ? obj->modelId : item.title);
 
     JSStringRef tk = JSStringCreateWithUTF8CString("thingIdx");
     JSObjectSetProperty(ctx, o, tk, JSValueMakeNumber(ctx, obj->thingIdx), 0, nullptr);
@@ -496,6 +497,30 @@ AAPI_CALLBACK(js_manager_isModelCabinet) {
     if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
     std::string modelId = jsValueToString(ctx, arguments[0]);
     return JSValueMakeBoolean(ctx, g_instanceManager.isModelCabinet(modelId));
+}
+
+AAPI_CALLBACK(js_manager_captureThumbnail) {
+    /* captureThumbnail(modelId, x, y, w, h) — capture game pixels and save as model thumbnail */
+    if (argumentCount < 5) return JSValueMakeBoolean(ctx, false);
+    std::string modelId = jsValueToString(ctx, arguments[0]);
+    int x = (int)JSValueToNumber(ctx, arguments[1], nullptr);
+    int y = (int)JSValueToNumber(ctx, arguments[2], nullptr);
+    int w = (int)JSValueToNumber(ctx, arguments[3], nullptr);
+    int h = (int)JSValueToNumber(ctx, arguments[4], nullptr);
+
+    if (modelId.empty() || w <= 0 || h <= 0) return JSValueMakeBoolean(ctx, false);
+
+    /* Call host to capture game framebuffer pixels */
+    if (!g_host.capture_rect_pixels) return JSValueMakeBoolean(ctx, false);
+    void* pixels = nullptr;
+    int capturedW = 0, capturedH = 0;
+    if (!g_host.capture_rect_pixels(x, y, w, h, &pixels, &capturedW, &capturedH))
+        return JSValueMakeBoolean(ctx, false);
+
+    /* Save as thumbnail (resized to max 512) */
+    bool ok = g_imageLoader.saveThumbnail(modelId, (const uint8_t*)pixels, capturedW, capturedH);
+    free(pixels);
+    return JSValueMakeBoolean(ctx, ok);
 }
 
 AAPI_CALLBACK(js_manager_spawnModelObject) {
@@ -950,6 +975,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
     addJSMethod(ctx, managerObj, "spawnItemObject", js_manager_spawnItemObject);
     addJSMethod(ctx, managerObj, "spawnModelObject", js_manager_spawnModelObject);
+    addJSMethod(ctx, managerObj, "captureThumbnail", js_manager_captureThumbnail);
     addJSMethod(ctx, managerObj, "isModelCabinet", js_manager_isModelCabinet);
     addJSMethod(ctx, managerObj, "openTaskMenu", js_manager_openTaskMenu);
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);

@@ -112,6 +112,7 @@ static aarcadecore_action_command_t g_fn_action_command = NULL;
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
 static int  host_is_template_cabinet(const char* templateName);
+static int  host_capture_rect_pixels(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -401,6 +402,7 @@ void AACoreManager_Init(void)
     callbacks.get_key_state = host_get_key_state;
     callbacks.get_current_map = host_get_current_map;
     callbacks.is_template_cabinet = host_is_template_cabinet;
+    callbacks.capture_rect_pixels = host_capture_rect_pixels;
 
     if (!g_fn_init(&callbacks)) {
         stdPlatform_Printf("AACoreManager: DLL init failed\n");
@@ -1671,6 +1673,49 @@ static int host_is_template_cabinet(const char* templateName)
             return 1;
     }
     return 0;
+}
+
+/* Capture a rect of game framebuffer pixels via glReadPixels.
+ * Input coords are in overlay space (1920x1080), scaled to actual framebuffer size. */
+static int host_capture_rect_pixels(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH)
+{
+    if (!pixelsOut || !outW || !outH || w <= 0 || h <= 0) return 0;
+
+    /* Scale from overlay coords (1920x1080) to actual framebuffer size */
+    int fbW = Window_xSize;
+    int fbH = Window_ySize;
+    int fbX = x * fbW / 1920;
+    int fbY = y * fbH / 1080;
+    int fbRectW = w * fbW / 1920;
+    int fbRectH = h * fbH / 1080;
+    if (fbRectW <= 0 || fbRectH <= 0) return 0;
+
+    /* Clamp to framebuffer bounds */
+    if (fbX < 0) fbX = 0;
+    if (fbY < 0) fbY = 0;
+    if (fbX + fbRectW > fbW) fbRectW = fbW - fbX;
+    if (fbY + fbRectH > fbH) fbRectH = fbH - fbY;
+
+    uint8_t* data = (uint8_t*)malloc(fbRectW * fbRectH * 4);
+    if (!data) return 0;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadPixels(fbX, fbY, fbRectW, fbRectH, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+    /* glReadPixels returns bottom-up; flip vertically */
+    int rowBytes = fbRectW * 4;
+    uint8_t* row = (uint8_t*)malloc(rowBytes);
+    for (int top = 0, bot = fbRectH - 1; top < bot; top++, bot--) {
+        memcpy(row, data + top * rowBytes, rowBytes);
+        memcpy(data + top * rowBytes, data + bot * rowBytes, rowBytes);
+        memcpy(data + bot * rowBytes, row, rowBytes);
+    }
+    free(row);
+
+    *pixelsOut = data;
+    *outW = fbRectW;
+    *outH = fbRectH;
+    return 1;
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)

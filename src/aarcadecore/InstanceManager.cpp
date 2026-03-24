@@ -512,8 +512,8 @@ void InstanceManager::initSpawnedObject(int thingIdx)
         g_host.host_printf("InstanceManager: Screen image for item=%s: '%s'\n",
                           item.id.c_str(), screenUrl.empty() ? "(none)" : screenUrl.c_str());
 
-    /* If screenUrl is a local snapshot path, set directly (pixels already in pixelCache_) */
-    if (!screenUrl.empty() && screenUrl[0] == '.') {
+    /* If screenUrl is a local snapshot path, set directly (pixels already in pixelCache from saveSnapshot) */
+    if (!screenUrl.empty() && screenUrl.find(".\\cache\\snapshots\\") == 0) {
         objects_[objIdx].screenImagePath = screenUrl;
         objects_[objIdx].screenImageRequested = true;
     } else if (!screenUrl.empty() && g_imageLoader.isInitialized()) {

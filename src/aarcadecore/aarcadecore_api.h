@@ -40,6 +40,7 @@ typedef void (*AACore_PrintfFn)(const char* fmt, ...);
 typedef int  (*AACore_GetKeyStateFn)(int key_index);
 typedef void (*AACore_GetCurrentMapFn)(char* mapKeyOut, int mapKeySize);
 typedef int  (*AACore_IsTemplateCabinetFn)(const char* templateName);
+typedef int  (*AACore_CaptureRectPixelsFn)(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
 
 typedef struct AACoreHostCallbacks {
     int api_version;
@@ -47,6 +48,7 @@ typedef struct AACoreHostCallbacks {
     AACore_GetKeyStateFn     get_key_state;
     AACore_GetCurrentMapFn   get_current_map;
     AACore_IsTemplateCabinetFn is_template_cabinet;
+    AACore_CaptureRectPixelsFn capture_rect_pixels;
 } AACoreHostCallbacks;
 
 /* ========================================================================

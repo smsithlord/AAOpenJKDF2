@@ -1103,7 +1103,11 @@ const arcadeHud = (function() {
             imgDiv.className = 'aa-library-card-img';
 
             var imgUrl = getBestImage(entry);
-            loadCardImage(imgDiv, imgUrl, getSnapshotPath(entry.id));
+            /* Items fall back to snapshots, models fall back to thumbnails */
+            var fallbackPath = (entry.type !== undefined)
+                ? getSnapshotPath(entry.id)
+                : getModelThumbnailPath(entry.id);
+            loadCardImage(imgDiv, imgUrl, fallbackPath);
 
             var titleDiv = document.createElement('div');
             titleDiv.className = 'aa-library-card-title';
@@ -1192,6 +1196,11 @@ const arcadeHud = (function() {
         function getSnapshotPath(itemId) {
             if (!itemId) return '';
             return arcadeHud.predictCachePath(itemId).replace('cache/urls/', 'cache/snapshots/');
+        }
+
+        function getModelThumbnailPath(modelId) {
+            if (!modelId) return '';
+            return arcadeHud.predictCachePath(modelId).replace('cache/urls/', 'cache/thumbnails/');
         }
 
         function getBestImage(entry) {

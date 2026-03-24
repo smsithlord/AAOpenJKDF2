@@ -247,6 +247,65 @@ std::string ImageLoader::getSnapshotPath(const std::string& key) {
     return getCachedFilePath(key, "snapshot");
 }
 
+bool ImageLoader::saveThumbnail(const std::string& key, const uint8_t* rgbaPixels, int width, int height) {
+    if (key.empty() || !rgbaPixels || width <= 0 || height <= 0) return false;
+
+    /* Calculate target size: max 512 on longest side, preserve aspect ratio */
+    int maxDim = 512;
+    int targetW = width, targetH = height;
+    if (width > maxDim || height > maxDim) {
+        if (width >= height) {
+            targetW = maxDim;
+            targetH = (int)((float)height * maxDim / width);
+        } else {
+            targetH = maxDim;
+            targetW = (int)((float)width * maxDim / height);
+        }
+    }
+    if (targetW < 1) targetW = 1;
+    if (targetH < 1) targetH = 1;
+
+    /* Build output path: cache/thumbnails/{hash[0]}/{hash}.png */
+    std::string hash = calculateKodiHash(normalizeUrl(key));
+    MKDIR(".\\cache");
+    MKDIR(".\\cache\\thumbnails");
+    std::string dir = ".\\cache\\thumbnails\\" + hash.substr(0, 1);
+    MKDIR(dir.c_str());
+    std::string path = dir + "\\" + hash + ".png";
+
+    /* Delete existing file so WritePNG can overwrite */
+#ifdef _WIN32
+    DeleteFileA(path.c_str());
+#else
+    remove(path.c_str());
+#endif
+
+    /* Create bitmap at target size, downsample with nearest-neighbor */
+    auto bitmap = Bitmap::Create(targetW, targetH, BitmapFormat::BGRA8_UNORM_SRGB);
+    uint8_t* dst = (uint8_t*)bitmap->LockPixels();
+    uint32_t dstRowBytes = bitmap->row_bytes();
+    for (int ty = 0; ty < targetH; ty++) {
+        int sy = ty * height / targetH;
+        for (int tx = 0; tx < targetW; tx++) {
+            int sx = tx * width / targetW;
+            int srcOff = (sy * width + sx) * 4;
+            int dstOff = ty * dstRowBytes + tx * 4;
+            /* RGBA → BGRA */
+            dst[dstOff + 0] = rgbaPixels[srcOff + 2]; /* B */
+            dst[dstOff + 1] = rgbaPixels[srcOff + 1]; /* G */
+            dst[dstOff + 2] = rgbaPixels[srcOff + 0]; /* R */
+            dst[dstOff + 3] = rgbaPixels[srcOff + 3]; /* A */
+        }
+    }
+    bitmap->UnlockPixels();
+    bitmap->WritePNG(path.c_str());
+
+    if (g_host.host_printf)
+        g_host.host_printf("ImageLoader: Saved thumbnail %s (%dx%d from %dx%d)\n",
+                          path.c_str(), targetW, targetH, width, height);
+    return true;
+}
+
 // --- Public API ---
 
 void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(const ImageLoadResult&)> callback)
