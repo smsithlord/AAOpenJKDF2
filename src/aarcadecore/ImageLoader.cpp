@@ -314,6 +314,7 @@ void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(c
 
     /* Check disk cache first — if cached AND pixels in memory, complete immediately */
     std::string cached = getCachedFilePath(url);
+    if (cached.empty()) cached = getCachedFilePath(url, "snapshot");
     if (!cached.empty()) {
         std::lock_guard<std::mutex> pxLock(pixelCacheMutex_);
         if (pixelCache_.find(cached) != pixelCache_.end()) {
@@ -445,12 +446,32 @@ void ImageLoader::renderAndSave()
     {
         std::lock_guard<std::mutex> lock(pendingMutex_);
         for (auto& pair : pendingImages_) {
-            std::string fileUrl = "file:///" + getCachedFilePath(pair.second.url);
-            for (char& c : fileUrl) { if (c == '\\') c = '/'; }
-            if (pair.second.url == captureUrl_ || fileUrl == captureUrl_) {
+            if (pair.second.url == captureUrl_) {
                 origUrl = pair.second.url;
                 hash = pair.first;
                 break;
+            }
+            /* Check if captureUrl_ is the file:// version of this pending's cached path */
+            std::string cachedPath = getCachedFilePath(pair.second.url);
+            if (!cachedPath.empty()) {
+                std::string fileUrl = "file:///" + cachedPath;
+                for (char& c : fileUrl) { if (c == '\\') c = '/'; }
+                if (fileUrl == captureUrl_) {
+                    origUrl = pair.second.url;
+                    hash = pair.first;
+                    break;
+                }
+            }
+            /* Also check snapshot cache */
+            std::string snapPath = getCachedFilePath(pair.second.url, "snapshot");
+            if (!snapPath.empty()) {
+                std::string fileUrl = "file:///" + snapPath;
+                for (char& c : fileUrl) { if (c == '\\') c = '/'; }
+                if (fileUrl == captureUrl_) {
+                    origUrl = pair.second.url;
+                    hash = pair.first;
+                    break;
+                }
             }
         }
     }
