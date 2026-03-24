@@ -1191,7 +1191,7 @@ const arcadeHud = (function() {
         /* Snapshot path prediction using existing arcadeHud.predictCachePath */
         function getSnapshotPath(itemId) {
             if (!itemId) return '';
-            return arcadeHud.predictCachePath(itemId);
+            return arcadeHud.predictCachePath(itemId).replace('cache/urls/', 'cache/snapshots/');
         }
 
         function getBestImage(entry) {

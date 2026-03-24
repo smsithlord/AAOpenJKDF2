@@ -84,7 +84,7 @@ private:
     std::string normalizeUrl(const std::string& url);
     std::string calculateKodiHash(const std::string& normalizedUrl);
     std::string getCacheFilePath(const std::string& url);
-    std::string getCachedFilePath(const std::string& url);
+    std::string getCachedFilePath(const std::string& url, const std::string& cacheType = "url");
     void sendUrlToJS(const std::string& url);
     void showNextAndCapture();
     void renderAndSave();

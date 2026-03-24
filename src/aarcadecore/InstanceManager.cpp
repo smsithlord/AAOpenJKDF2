@@ -130,7 +130,7 @@ static std::string getBestScreenUrl(const Arcade::Item& item)
     /* Snapshot fallback: check if we have a cached snapshot keyed by item.id */
     if (!item.id.empty()) {
         std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
-        if (!snapPath.empty()) return item.id;
+        if (!snapPath.empty()) return snapPath;
     }
     return "";
 }
@@ -512,7 +512,11 @@ void InstanceManager::initSpawnedObject(int thingIdx)
         g_host.host_printf("InstanceManager: Screen image for item=%s: '%s'\n",
                           item.id.c_str(), screenUrl.empty() ? "(none)" : screenUrl.c_str());
 
-    if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
+    /* If screenUrl is a local snapshot path, set directly (pixels already in pixelCache_) */
+    if (!screenUrl.empty() && screenUrl[0] == '.') {
+        objects_[objIdx].screenImagePath = screenUrl;
+        objects_[objIdx].screenImageRequested = true;
+    } else if (!screenUrl.empty() && g_imageLoader.isInitialized()) {
         objects_[objIdx].screenImageRequested = true;
         g_imageLoader.loadAndCacheImage(screenUrl, [this, objIdx, thingIdx](const ImageLoadResult& result) {
             if (result.success && objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {

@@ -192,8 +192,11 @@ std::string ImageLoader::getCacheFilePath(const std::string& url) {
     return dir + "\\" + hash + ".png";
 }
 
-std::string ImageLoader::getCachedFilePath(const std::string& url) {
-    std::string path = getCacheFilePath(url);
+std::string ImageLoader::getCachedFilePath(const std::string& url, const std::string& cacheType) {
+    std::string hash = calculateKodiHash(normalizeUrl(url));
+    std::string subfolder = hash.substr(0, 1);
+    std::string base = (cacheType == "snapshot") ? ".\\cache\\snapshots" : cacheBasePath_;
+    std::string path = base + "\\" + subfolder + "\\" + hash + ".png";
 #ifdef _WIN32
     DWORD attrs = GetFileAttributesA(path.c_str());
     if (attrs != INVALID_FILE_ATTRIBUTES) return path;
@@ -207,7 +210,12 @@ std::string ImageLoader::getCachedFilePath(const std::string& url) {
 bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels, int width, int height) {
     if (key.empty() || !bgraPixels || width <= 0 || height <= 0) return false;
 
-    std::string path = getCacheFilePath(key);
+    std::string hash = calculateKodiHash(normalizeUrl(key));
+    MKDIR(".\\cache");
+    MKDIR(".\\cache\\snapshots");
+    std::string dir = ".\\cache\\snapshots\\" + hash.substr(0, 1);
+    MKDIR(dir.c_str());
+    std::string path = dir + "\\" + hash + ".png";
 
     auto bitmap = Bitmap::Create(width, height, BitmapFormat::BGRA8_UNORM_SRGB);
     uint8_t* dst = (uint8_t*)bitmap->LockPixels();
@@ -236,25 +244,7 @@ bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels
 
 std::string ImageLoader::getSnapshotPath(const std::string& key) {
     if (key.empty()) return "";
-    std::string path = getCacheFilePath(key);
-#ifdef _WIN32
-    DWORD attrs = GetFileAttributesA(path.c_str());
-    if (attrs != INVALID_FILE_ATTRIBUTES) return path;
-    /* Try without .\ prefix in case CWD is different */
-    if (path.substr(0, 2) == ".\\") {
-        std::string altPath = path.substr(2);
-        attrs = GetFileAttributesA(altPath.c_str());
-        if (attrs != INVALID_FILE_ATTRIBUTES) return altPath;
-    }
-    /* Try with ../ prefix for DLL running from subdirectory */
-    std::string parentPath = "..\\" + path;
-    attrs = GetFileAttributesA(parentPath.c_str());
-    if (attrs != INVALID_FILE_ATTRIBUTES) return parentPath;
-#else
-    FILE* f = fopen(path.c_str(), "rb");
-    if (f) { fclose(f); return path; }
-#endif
-    return "";
+    return getCachedFilePath(key, "snapshot");
 }
 
 // --- Public API ---
