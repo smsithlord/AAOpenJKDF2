@@ -1066,6 +1066,51 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
 }
 
 /* ========================================================================
+ * Clipboard implementation for Ultralight (Win32)
+ * ======================================================================== */
+
+class ArcadeClipboard : public ultralight::Clipboard {
+public:
+    void Clear() override {
+        if (OpenClipboard(NULL)) {
+            EmptyClipboard();
+            CloseClipboard();
+        }
+    }
+
+    String ReadPlainText() override {
+        if (!OpenClipboard(NULL)) return String();
+        HANDLE h = GetClipboardData(CF_UNICODETEXT);
+        if (!h) { CloseClipboard(); return String(); }
+        const Char16* text = (const Char16*)GlobalLock(h);
+        if (!text) { CloseClipboard(); return String(); }
+        size_t len = wcslen((const wchar_t*)text);
+        String result(text, len);
+        GlobalUnlock(h);
+        CloseClipboard();
+        return result;
+    }
+
+    void WritePlainText(const String& text) override {
+        if (!OpenClipboard(NULL)) return;
+        EmptyClipboard();
+        String16 utf16 = text.utf16();
+        size_t len = utf16.length();
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (len + 1) * sizeof(Char16));
+        if (h) {
+            Char16* dst = (Char16*)GlobalLock(h);
+            memcpy(dst, utf16.data(), len * sizeof(Char16));
+            dst[len] = 0;
+            GlobalUnlock(h);
+            SetClipboardData(CF_UNICODETEXT, h);
+        }
+        CloseClipboard();
+    }
+};
+
+static ArcadeClipboard g_clipboard;
+
+/* ========================================================================
  * EmbeddedInstance vtable implementations
  * ======================================================================== */
 
@@ -1081,6 +1126,7 @@ static bool ul_init(EmbeddedInstance* inst)
     Platform::instance().set_config(config);
     Platform::instance().set_font_loader(GetPlatformFontLoader());
     Platform::instance().set_file_system(GetPlatformFileSystem("./"));
+    Platform::instance().set_clipboard(&g_clipboard);
 
     /* Create renderer */
     data->renderer = Renderer::Create();
@@ -1252,13 +1298,16 @@ static void ul_key_char(EmbeddedInstance* inst, unsigned int unicode_char, int m
     UltralightData* data = (UltralightData*)inst->user_data;
     if (!data->initialized || !data->view) return;
 
+    /* Suppress character input when Ctrl is held — accelerators (Ctrl+C/V/X/A)
+       are already handled by kType_RawKeyDown, don't also type the letter */
+    if (modifiers & AACORE_MOD_CTRL) return;
+
     KeyEvent evt;
     evt.type = KeyEvent::kType_Char;
     evt.virtual_key_code = 0;
     evt.native_key_code = 0;
     evt.modifiers = 0;
     if (modifiers & AACORE_MOD_ALT)   evt.modifiers |= KeyEvent::kMod_AltKey;
-    if (modifiers & AACORE_MOD_CTRL)  evt.modifiers |= KeyEvent::kMod_CtrlKey;
     if (modifiers & AACORE_MOD_SHIFT) evt.modifiers |= KeyEvent::kMod_ShiftKey;
 
     unsigned short buf[3] = {0};
