@@ -127,13 +127,10 @@ static std::string getBestScreenUrl(const Arcade::Item& item)
     if (isImageUrl(item.preview)) return item.preview;
     if (isImageUrl(item.file)) return item.file;
     if (isImageUrl(item.marquee)) return item.marquee;
-    /* Snapshot fallback: check if we have a cached snapshot for the resolved URL */
-    if (g_imageLoader.isInitialized()) {
-        std::string resolvedUrl = InstanceManager::resolveUrl(item.file, item.preview, item.title);
-        if (!resolvedUrl.empty()) {
-            std::string snapPath = g_imageLoader.getSnapshotPath(resolvedUrl);
-            if (!snapPath.empty()) return snapPath;
-        }
+    /* Snapshot fallback: check if we have a cached snapshot keyed by item.id */
+    if (!item.id.empty()) {
+        std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
+        if (!snapPath.empty()) return item.id;
     }
     return "";
 }

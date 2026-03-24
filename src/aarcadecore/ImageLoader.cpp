@@ -217,6 +217,18 @@ bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels
     bitmap->UnlockPixels();
     bitmap->WritePNG(path.c_str());
 
+    /* Also add to pixelCache_ so loadAndCacheImage can complete immediately */
+    {
+        CachedPixels cp;
+        cp.width = (uint32_t)width;
+        cp.height = (uint32_t)height;
+        size_t pixelBytes = (size_t)width * height * 4;
+        cp.pixels = (uint8_t*)malloc(pixelBytes);
+        memcpy(cp.pixels, bgraPixels, pixelBytes);
+        std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+        pixelCache_[path] = cp;
+    }
+
     if (g_host.host_printf)
         g_host.host_printf("ImageLoader: Saved snapshot %s (%dx%d)\n", path.c_str(), width, height);
     return true;
