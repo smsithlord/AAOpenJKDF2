@@ -1107,11 +1107,14 @@ const arcadeHud = (function() {
             card.appendChild(imgDiv);
             card.appendChild(titleDiv);
 
+            /* Determine entry mode: items have a 'type' field, models don't */
+            var entryMode = (entry.type !== undefined) ? 'items' : 'models';
+
             /* Action buttons (hover-only): edit + favorite */
             var actions = document.createElement('div');
             actions.className = 'aa-library-card-actions';
 
-            /* Edit button — all types */
+            /* Edit button — all types (use entryMode for correct page in favorites) */
             var editBtn = document.createElement('button');
             editBtn.className = 'aa-library-edit-btn';
             editBtn.innerHTML = '<img src="icons/editicon.png" class="aa-edit-card-icon">';
@@ -1122,14 +1125,13 @@ const arcadeHud = (function() {
                     ev.stopPropagation();
                     window.location.href = 'file:///aarcadecore/ui/' + page + '.html?id=' + encodeURIComponent(eId);
                 });
-            })(state.type, entry.id);
+            })(entryMode, entry.id);
             actions.appendChild(editBtn);
 
             /* Favorite star — items and models only */
-            if (state.type === 'items' || state.type === 'models') {
+            if (entryMode === 'items' || entryMode === 'models') {
                 var favBtn = document.createElement('button');
                 favBtn.className = 'aa-library-fav-btn';
-                var entryMode = (entry.type !== undefined) ? 'items' : 'models';
                 var entryIsFav = isFavorite(entryMode, entry.id);
                 favBtn.innerHTML = entryIsFav ? '<img src="icons/favoriteicon.png" class="aa-fav-icon">' : '<img src="icons/favoriteiconhollow.png" class="aa-fav-icon">';
                 if (entryIsFav) card.classList.add('aa-fav-tile');
