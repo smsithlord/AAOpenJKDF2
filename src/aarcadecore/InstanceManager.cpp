@@ -143,6 +143,10 @@ static std::vector<std::string> getMarqueeUrlCandidates(const Arcade::Item& item
     if (!item.preview.empty()) urls.push_back(item.preview);
     if (!item.file.empty()) urls.push_back(item.file);
     if (!item.screen.empty()) urls.push_back(item.screen);
+    if (!item.id.empty()) {
+        std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
+        if (!snapPath.empty()) urls.push_back(item.id);
+    }
     return urls;
 }
 
