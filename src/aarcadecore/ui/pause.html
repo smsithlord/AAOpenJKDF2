@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Paused</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.6);
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .corner-badge {
+            position: absolute;
+            bottom: -60px;
+            right: -60px;
+            width: 360px;
+            height: 360px;
+            background: rgba(30, 28, 26, 0.9);
+            transform: rotate(-45deg);
+            transform-origin: center center;
+        }
+        .badge-content {
+            position: absolute;
+            bottom: 30px;
+            right: 40px;
+            text-align: right;
+            color: rgba(255, 255, 255, 0.45);
+        }
+        .badge-content img {
+            width: 80px;
+            height: auto;
+            opacity: 0.4;
+            margin-bottom: 8px;
+        }
+        .badge-content .status {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        .badge-content .hint {
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="corner-badge"></div>
+    <div class="badge-content">
+        <img src="icons/aalogo.png" alt="AA"><br>
+        <div class="status">Paused</div>
+        <div class="hint">Press Escape to Resume</div>
+    </div>
+    <script>
+        setTimeout(function() {
+            if (window.aapi && aapi.manager && aapi.manager.requestDeepSleep) {
+                aapi.manager.requestDeepSleep();
+            }
+        }, 500);
+    </script>
+</body>
+</html>

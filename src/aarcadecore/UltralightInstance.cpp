@@ -7,6 +7,8 @@
  */
 
 #include "aarcadecore_internal.h"
+#include "ItemLauncher.h"
+#include "VideoPlayerInstance.h"
 #include <Ultralight/Ultralight.h>
 #include <Ultralight/MouseEvent.h>
 #include <Ultralight/ScrollEvent.h>
@@ -99,6 +101,11 @@ AAPI_CALLBACK(js_manager_openEngineMenu) {
     UltralightManager_RequestEngineMenu();
     return JSValueMakeBoolean(ctx, true);
 }
+extern bool g_deepSleepRequested;
+AAPI_CALLBACK(js_manager_requestDeepSleep) {
+    g_deepSleepRequested = true;
+    return JSValueMakeBoolean(ctx, true);
+}
 AAPI_CALLBACK(js_manager_startLibretro) {
     UltralightManager_RequestStartLibretro();
     return JSValueMakeBoolean(ctx, true);
@@ -174,6 +181,7 @@ AAPI_CALLBACK(js_manager_getOverlayInstanceInfo) {
             case EMBEDDED_STEAMWORKS_BROWSER: itype = "swb"; break;
             case EMBEDDED_LIBRETRO: itype = "libretro"; break;
             case EMBEDDED_ULTRALIGHT: itype = "ultralight"; break;
+            case EMBEDDED_VIDEO_PLAYER: itype = "videoplayer"; break;
             default: break;
         }
     }
@@ -185,6 +193,12 @@ AAPI_CALLBACK(js_manager_getOverlayInstanceInfo) {
         LRDataFull* lrd = (LRDataFull*)target->user_data;
         if (lrd->core_path) jsSetPropStr(ctx, obj, "corePath", std::string(lrd->core_path));
         if (lrd->game_path) jsSetPropStr(ctx, obj, "gamePath", std::string(lrd->game_path));
+    }
+
+    /* File path for Video Player */
+    if (target && target->type == EMBEDDED_VIDEO_PLAYER && target->vtable->get_title) {
+        const char* vf = target->vtable->get_title(target);
+        if (vf) jsSetPropStr(ctx, obj, "videoFile", std::string(vf));
     }
 
     return obj;
@@ -354,6 +368,47 @@ AAPI_CALLBACK(js_manager_isAimedObjectSlave) {
     const SpawnedObject* obj = g_instanceManager.getAimedObject();
     if (!obj) return JSValueMakeBoolean(ctx, false);
     return JSValueMakeBoolean(ctx, obj->slave);
+}
+
+AAPI_CALLBACK(js_manager_launchItem) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string itemId = jsValueToString(ctx, arguments[0]);
+    bool ok = ItemLauncher::launch(itemId);
+    return JSValueMakeBoolean(ctx, ok);
+}
+
+AAPI_CALLBACK(js_manager_getVideoTimeInfo) {
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (!target || target->type != EMBEDDED_VIDEO_PLAYER) return JSValueMakeNull(ctx);
+
+    double pos = 0, dur = 0;
+    VideoPlayerInstance_GetTimeInfo(target, &pos, &dur);
+
+    JSObjectRef obj = JSObjectMake(ctx, nullptr, nullptr);
+    JSStringRef kPos = JSStringCreateWithUTF8CString("position");
+    JSObjectSetProperty(ctx, obj, kPos, JSValueMakeNumber(ctx, pos), 0, nullptr);
+    JSStringRelease(kPos);
+    JSStringRef kDur = JSStringCreateWithUTF8CString("duration");
+    JSObjectSetProperty(ctx, obj, kDur, JSValueMakeNumber(ctx, dur), 0, nullptr);
+    JSStringRelease(kDur);
+    return obj;
+}
+
+AAPI_CALLBACK(js_manager_seekVideo) {
+    if (argumentCount < 1) return JSValueMakeUndefined(ctx);
+    double pos = JSValueToNumber(ctx, arguments[0], nullptr);
+    EmbeddedInstance* target = aarcadecore_getInputModeInstance();
+    if (!target) target = aarcadecore_getFullscreenInstance();
+    if (target) VideoPlayerInstance_Seek(target, pos);
+    return JSValueMakeUndefined(ctx);
+}
+
+AAPI_CALLBACK(js_manager_refreshItemTextures) {
+    if (argumentCount < 1) return JSValueMakeUndefined(ctx);
+    std::string itemId = jsValueToString(ctx, arguments[0]);
+    g_instanceManager.refreshItemTextures(itemId);
+    return JSValueMakeUndefined(ctx);
 }
 
 AAPI_CALLBACK(js_manager_cloneAimedObject) {
@@ -1003,6 +1058,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     JSObjectRef managerObj = JSObjectMake(ctx, nullptr, nullptr);
     addJSMethod(ctx, managerObj, "closeMenu", js_manager_closeMenu);
     addJSMethod(ctx, managerObj, "openEngineMenu", js_manager_openEngineMenu);
+    addJSMethod(ctx, managerObj, "requestDeepSleep", js_manager_requestDeepSleep);
     addJSMethod(ctx, managerObj, "startLibretro", js_manager_startLibretro);
     addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
@@ -1035,6 +1091,10 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "toggleSlaveAimedObject", js_manager_toggleSlaveAimedObject);
     addJSMethod(ctx, managerObj, "isAimedObjectSlave", js_manager_isAimedObjectSlave);
     addJSMethod(ctx, managerObj, "cloneAimedObject", js_manager_cloneAimedObject);
+    addJSMethod(ctx, managerObj, "launchItem", js_manager_launchItem);
+    addJSMethod(ctx, managerObj, "refreshItemTextures", js_manager_refreshItemTextures);
+    addJSMethod(ctx, managerObj, "getVideoTimeInfo", js_manager_getVideoTimeInfo);
+    addJSMethod(ctx, managerObj, "seekVideo", js_manager_seekVideo);
     addJSMethod(ctx, managerObj, "importDefaultLibrary", js_manager_importDefaultLibrary);
     addJSMethod(ctx, managerObj, "importAdoptedTemplates", js_manager_importAdoptedTemplates);
     addJSMethod(ctx, managerObj, "mergeLibrary", js_manager_mergeLibrary);
@@ -1149,6 +1209,7 @@ static bool ul_init(EmbeddedInstance* inst)
     /* Setup Platform handlers */
     Config config;
     config.resource_path_prefix = "./resources/";
+    config.cache_path = "./cache/ultralight/";
     Platform::instance().set_config(config);
     Platform::instance().set_font_loader(GetPlatformFontLoader());
     Platform::instance().set_file_system(GetPlatformFileSystem("./"));

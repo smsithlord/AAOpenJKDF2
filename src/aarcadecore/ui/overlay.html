@@ -126,7 +126,20 @@
             <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
             <input type="text" id="fileInput" readonly style="flex:1;" />
         </div>
+        <div class="address-bar" id="videoBar">
+            <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
+            <input type="text" id="videoFileInput" readonly style="flex:1; margin-right:12px;" />
+        </div>
         <div class="overlay-tab" id="tab">Web Browser</div>
+    </div>
+    <div id="timelineBar" style="display:none; position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.98); padding:8px 20px 12px; pointer-events:auto;">
+        <div id="timelineTrack" style="position:relative; height:8px; background:rgba(255,255,255,0.15); border-radius:4px; cursor:pointer;">
+            <div id="timelineFill" style="position:absolute; top:0; left:0; height:100%; background:rgba(15,157,88,0.9); border-radius:4px; pointer-events:none;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:4px;">
+            <span id="timePos" style="color:#aaa; font-size:12px;">0:00</span>
+            <span id="timeDur" style="color:#aaa; font-size:12px;">0:00</span>
+        </div>
     </div>
     <div class="overlay-cursor" id="cursor"><img src="cursors/default.png" alt=""></div>
 <script>
@@ -140,7 +153,17 @@
     var btnBack = document.getElementById('btnBack');
     var btnForward = document.getElementById('btnForward');
     var btnReload = document.getElementById('btnReload');
+    var videoBar = document.getElementById('videoBar');
+    var videoFileInput = document.getElementById('videoFileInput');
+    var timelineBar = document.getElementById('timelineBar');
+    var timelineTrack = document.getElementById('timelineTrack');
+    var timelineFill = document.getElementById('timelineFill');
+    var timePos = document.getElementById('timePos');
+    var timeDur = document.getElementById('timeDur');
     var barOpen = false;
+    var isVideoPlayer = false;
+    var timelineInterval = null;
+    var currentVideoFile = '';
 
     /* Navigation buttons */
     btnBack.addEventListener('click', function(e) {
@@ -156,10 +179,53 @@
         e.stopPropagation();
     });
 
+    function formatTime(secs) {
+        secs = Math.floor(secs || 0);
+        var m = Math.floor(secs / 60);
+        var s = secs % 60;
+        return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    function updateTimeline() {
+        if (!isVideoPlayer) return;
+        try {
+            var info = aapi.manager.getVideoTimeInfo();
+            if (info) {
+                var pct = info.duration > 0 ? (info.position / info.duration * 100) : 0;
+                timelineFill.style.width = pct + '%';
+                timePos.textContent = formatTime(info.position);
+                timeDur.textContent = formatTime(info.duration);
+            }
+        } catch (e) {}
+    }
+
+    function startTimelinePolling() {
+        if (timelineInterval) return;
+        timelineInterval = setInterval(updateTimeline, 500);
+    }
+
+    function stopTimelinePolling() {
+        if (timelineInterval) { clearInterval(timelineInterval); timelineInterval = null; }
+    }
+
+    timelineTrack.addEventListener('click', function(e) {
+        var rect = timelineTrack.getBoundingClientRect();
+        var pct = (e.clientX - rect.left) / rect.width;
+        if (pct < 0) pct = 0;
+        if (pct > 1) pct = 1;
+        try {
+            var info = aapi.manager.getVideoTimeInfo();
+            if (info && info.duration > 0) {
+                aapi.manager.seekVideo(pct * info.duration);
+            }
+        } catch (ex) {}
+    });
+
     function toggleBar() {
         barOpen = !barOpen;
         addressBar.className = barOpen ? 'address-bar open' : 'address-bar';
         libretroBar.className = barOpen ? 'address-bar open' : 'address-bar';
+        videoBar.className = barOpen ? 'address-bar open' : 'address-bar';
         tab.className = barOpen ? 'overlay-tab active' : 'overlay-tab';
     }
 
@@ -169,7 +235,8 @@
     });
 
     document.addEventListener('click', function(e) {
-        if (barOpen && !document.getElementById('bar').contains(e.target)) {
+        if (barOpen && !document.getElementById('bar').contains(e.target)
+            && !timelineBar.contains(e.target)) {
             toggleBar();
         }
     });
@@ -210,9 +277,29 @@
             tab.textContent = 'Libretro';
             addressBar.style.display = 'none';
             libretroBar.style.display = '';
+            videoBar.style.display = 'none';
+            timelineBar.style.display = 'none';
+            isVideoPlayer = false;
+            stopTimelinePolling();
             coreInput.value = state.corePath || '';
             fileInput.value = state.gamePath || '';
+        } else if (state.instanceType === 'videoplayer') {
+            tab.textContent = 'Video Player';
+            addressBar.style.display = 'none';
+            libretroBar.style.display = 'none';
+            videoBar.style.display = '';
+            isVideoPlayer = true;
+            currentVideoFile = state.videoFile || state.url || '';
+            videoFileInput.value = currentVideoFile;
+            saveCounter = 0;
+            timelineBar.style.display = '';
+            startTimelinePolling();
+
         } else {
+            isVideoPlayer = false;
+            videoBar.style.display = 'none';
+            timelineBar.style.display = 'none';
+            stopTimelinePolling();
             tab.textContent = 'Web Browser';
             addressBar.style.display = '';
             libretroBar.style.display = 'none';

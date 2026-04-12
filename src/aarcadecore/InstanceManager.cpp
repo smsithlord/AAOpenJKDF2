@@ -7,6 +7,8 @@
 EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const char* material_name);
 void SteamworksWebBrowserInstance_Destroy(EmbeddedInstance* inst);
 EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* game_path, const char* material_name);
+extern "C" EmbeddedInstance* VideoPlayerInstance_Create(const char* file_path, const char* material_name);
+extern "C" void VideoPlayerInstance_Destroy(EmbeddedInstance* inst);
 void LibretroInstance_Destroy(EmbeddedInstance* inst);
 
 /* Exposed from aarcadecore.cpp */
@@ -120,6 +122,22 @@ static bool isImageUrl(const std::string& url)
     return false;
 }
 
+/* Check if a file path looks like a video file */
+static bool isVideoFile(const std::string& file)
+{
+    if (file.empty()) return false;
+    std::string lower = file;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    const char* exts[] = {".mp4", ".mpeg", ".mpg", ".avi", ".mkv", ".mov",
+                          ".wmv", ".flv", ".webm", ".m4v", ".ts"};
+    for (const char* ext : exts) {
+        size_t pos = lower.rfind(ext);
+        if (pos != std::string::npos && pos + strlen(ext) == lower.size())
+            return true;
+    }
+    return false;
+}
+
 /* Build ordered list of screen image URL candidates (screen → preview → file → snapshot → marquee) */
 static std::vector<std::string> getScreenUrlCandidates(const Arcade::Item& item)
 {
@@ -178,43 +196,54 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
     /* Decide which embedded instance type to create based on item data */
     EmbeddedInstance* task = nullptr;
 
-    /* Determine if this item should use Libretro instead of SWB */
-    bool useLibretro = false;
-    std::string coreDll, gamePath;
-
-    /* Case 1: item.file is a full local path (drive letter + colon) */
-    if (item.file.size() >= 2 && isalpha((unsigned char)item.file[0]) && item.file[1] == ':') {
-        coreDll = g_coreConfigMgr.findCoreForFile(item.file);
-        if (!coreDll.empty()) {
-            useLibretro = true;
-            gamePath = item.file;
-        }
+    /* Check for video files first — use mpv video player */
+    bool useVideo = isVideoFile(item.file);
+    if (useVideo) {
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: '%s' is a video file — creating VideoPlayer instance\n",
+                              item.file.c_str());
+        task = VideoPlayerInstance_Create(item.file.c_str(), "DynScreen.mat");
     }
 
-    /* Case 2: item has an "Open With" app whose file paths overlap with a Libretro core's content paths */
-    if (!useLibretro && !item.app.empty() && !item.file.empty()) {
-        auto appFilepaths = g_library.getAppFilepaths(item.app);
-        if (!appFilepaths.empty()) {
-            std::vector<std::pair<std::string, std::string>> appPaths;
-            for (const auto& fp : appFilepaths)
-                appPaths.push_back({fp.path, fp.extensions});
-            coreDll = g_coreConfigMgr.findCoreMatchingAppPaths(appPaths);
+    if (!useVideo) {
+        /* Determine if this item should use Libretro instead of SWB */
+        bool useLibretro = false;
+        std::string coreDll, gamePath;
+
+        /* Case 1: item.file is a full local path (drive letter + colon) */
+        if (item.file.size() >= 2 && isalpha((unsigned char)item.file[0]) && item.file[1] == ':') {
+            coreDll = g_coreConfigMgr.findCoreForFile(item.file);
             if (!coreDll.empty()) {
-                gamePath = g_coreConfigMgr.resolveFileInCorePaths(coreDll, item.file);
-                if (!gamePath.empty()) useLibretro = true;
+                useLibretro = true;
+                gamePath = item.file;
             }
         }
-    }
 
-    if (useLibretro) {
-        std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
-        if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
-                              item.file.c_str(), coreDll.c_str(), gamePath.c_str());
-        task = LibretroInstance_Create(corePath.c_str(), gamePath.c_str(), "DynScreen.mat");
-    } else {
-        /* Default: Steamworks Web Browser */
-        task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "DynScreen.mat");
+        /* Case 2: item has an "Open With" app whose file paths overlap with a Libretro core's content paths */
+        if (!useLibretro && !item.app.empty() && !item.file.empty()) {
+            auto appFilepaths = g_library.getAppFilepaths(item.app);
+            if (!appFilepaths.empty()) {
+                std::vector<std::pair<std::string, std::string>> appPaths;
+                for (const auto& fp : appFilepaths)
+                    appPaths.push_back({fp.path, fp.extensions});
+                coreDll = g_coreConfigMgr.findCoreMatchingAppPaths(appPaths);
+                if (!coreDll.empty()) {
+                    gamePath = g_coreConfigMgr.resolveFileInCorePaths(coreDll, item.file);
+                    if (!gamePath.empty()) useLibretro = true;
+                }
+            }
+        }
+
+        if (useLibretro) {
+            std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
+                                  item.file.c_str(), coreDll.c_str(), gamePath.c_str());
+            task = LibretroInstance_Create(corePath.c_str(), gamePath.c_str(), "DynScreen.mat");
+        } else {
+            /* Default: Steamworks Web Browser */
+            task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "DynScreen.mat");
+        }
     }
 
     if (task && task->vtable->init(task)) {
@@ -222,7 +251,8 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
         inst.taskIndex = aarcadecore_addTask(task);
         if (g_host.host_printf)
             g_host.host_printf("InstanceManager: Created %s instance for item=%s (taskIndex=%d)\n",
-                              task->type == EMBEDDED_LIBRETRO ? "Libretro" : "SteamworksWebBrowser",
+                              task->type == EMBEDDED_LIBRETRO ? "Libretro" :
+                              task->type == EMBEDDED_VIDEO_PLAYER ? "VideoPlayer" : "SteamworksWebBrowser",
                               item.id.c_str(), inst.taskIndex);
     } else {
         if (g_host.host_printf)
@@ -933,6 +963,31 @@ void InstanceManager::reloadImagesForThing(int thingIdx)
     }
 }
 
+void InstanceManager::refreshItemTextures(const std::string& itemId)
+{
+    if (itemId.empty()) return;
+
+    /* Clear pixelCache entries for this item's cached image paths */
+    for (auto& obj : objects_) {
+        if (obj.itemId != itemId) continue;
+        if (!obj.screenImagePath.empty())
+            g_imageLoader.clearPixelCache(obj.screenImagePath);
+        if (!obj.marqueeImagePath.empty())
+            g_imageLoader.clearPixelCache(obj.marqueeImagePath);
+    }
+
+    /* Reload images and reset host texture polling for each instance */
+    for (auto& obj : objects_) {
+        if (obj.itemId != itemId) continue;
+        reloadImagesForThing(obj.thingIdx);
+        if (g_host.reset_thing_texture)
+            g_host.reset_thing_texture(obj.thingIdx);
+    }
+
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Refreshing textures for item %s\n", itemId.c_str());
+}
+
 std::string InstanceManager::getTemplateForThing(int thingIdx) const
 {
     for (const auto& obj : objects_) {
@@ -981,6 +1036,32 @@ int InstanceManager::importDefaultLibrary()
         g_host.host_printf("InstanceManager: importDefaultLibrary created %d of %d models\n",
             created, (int)(sizeof(defaults) / sizeof(defaults[0])));
     return created;
+}
+
+bool InstanceManager::registerAdoptedTemplate(const char* templateName)
+{
+    if (!templateName || !templateName[0]) return false;
+
+    std::string tmpl(templateName);
+    std::string existing = g_library.findModelByPlatformFile(OPENJK_PLATFORM_ID, tmpl);
+    if (!existing.empty()) return false; /* already in library */
+
+    /* Derive title: strip "aaojk_" prefix, replace '_' with ' ', title-case */
+    std::string title = tmpl;
+    if (title.find("aaojk_") == 0) title = title.substr(6);
+    for (size_t i = 0; i < title.size(); i++) {
+        if (title[i] == '_') title[i] = ' ';
+    }
+    bool capitalize = true;
+    for (size_t i = 0; i < title.size(); i++) {
+        if (capitalize && title[i] >= 'a' && title[i] <= 'z') title[i] -= 32;
+        capitalize = (title[i] == ' ');
+    }
+
+    g_library.createModel(title, OPENJK_PLATFORM_ID, tmpl);
+    if (g_host.host_printf)
+        g_host.host_printf("InstanceManager: Registered adopted template '%s' as '%s'\n", templateName, title.c_str());
+    return true;
 }
 
 InstanceManager::ImportResult InstanceManager::importAdoptedTemplates()
@@ -1233,10 +1314,13 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
         aarcadecore_removeTask(inst.taskIndex);
     }
     if (inst.browser) {
-        if (inst.browser->type == EMBEDDED_LIBRETRO)
+        if (inst.browser->type == EMBEDDED_LIBRETRO) {
             LibretroInstance_Destroy(inst.browser);
-        else
+        } else if (inst.browser->type == EMBEDDED_VIDEO_PLAYER) {
+            VideoPlayerInstance_Destroy(inst.browser);
+        } else {
             SteamworksWebBrowserInstance_Destroy(inst.browser);
+        }
         inst.browser = nullptr;
     }
 

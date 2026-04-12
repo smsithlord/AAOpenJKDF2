@@ -175,6 +175,7 @@ static void notifyOverlayState(void)
             case EMBEDDED_STEAMWORKS_BROWSER: instanceType = "swb"; break;
             case EMBEDDED_LIBRETRO: instanceType = "libretro"; break;
             case EMBEDDED_ULTRALIGHT: instanceType = "ultralight"; break;
+            case EMBEDDED_VIDEO_PLAYER: instanceType = "videoplayer"; break;
             default: break;
         }
     }
@@ -195,6 +196,13 @@ static void notifyOverlayState(void)
         if (lrd->game_path) jsonEscapeStr(gamePathEsc, sizeof(gamePathEsc), lrd->game_path);
     }
 
+    /* Extract file path for Video Player instances */
+    char videoFileEsc[1024] = "";
+    if (target && target->type == EMBEDDED_VIDEO_PLAYER && target->vtable->get_title) {
+        const char* vf = target->vtable->get_title(target);
+        if (vf) jsonEscapeStr(videoFileEsc, sizeof(videoFileEsc), vf);
+    }
+
     bool canBack = target && target->vtable->can_go_back ? target->vtable->can_go_back(target) : false;
     bool canFwd = target && target->vtable->can_go_forward ? target->vtable->can_go_forward(target) : false;
 
@@ -203,7 +211,7 @@ static void notifyOverlayState(void)
         "{\"mode\":\"%s\",\"isFullscreen\":%s,\"isInputMode\":%s,"
         "\"url\":\"%s\",\"title\":\"%s\",\"itemId\":\"%s\","
         "\"instanceType\":\"%s\",\"canGoBack\":%s,\"canGoForward\":%s,"
-        "\"corePath\":\"%s\",\"gamePath\":\"%s\"}",
+        "\"corePath\":\"%s\",\"gamePath\":\"%s\",\"videoFile\":\"%s\"}",
         mode,
         g_fullscreenInstance ? "true" : "false",
         g_inputModeInstance ? "true" : "false",
@@ -211,7 +219,7 @@ static void notifyOverlayState(void)
         instanceType,
         canBack ? "true" : "false",
         canFwd ? "true" : "false",
-        corePathEsc, gamePathEsc);
+        corePathEsc, gamePathEsc, videoFileEsc);
 
     UltralightManager_NotifyOverlayMode(json);
 }
@@ -992,6 +1000,11 @@ AARCADECORE_EXPORT bool aarcadecore_is_task_visible(int taskIndex)
     return task->lastSeenFrame >= g_engineFrame - 1;
 }
 
+AARCADECORE_EXPORT bool aarcadecore_register_adopted_template(const char* templateName)
+{
+    return g_instanceManager.registerAdoptedTemplate(templateName);
+}
+
 AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd)
 {
     if (!cmd) return false;
@@ -1096,4 +1109,27 @@ AARCADECORE_EXPORT void aarcadecore_exit_input_mode(void)
 AARCADECORE_EXPORT bool aarcadecore_is_input_mode_active(void)
 {
     return g_inputModeInstance != NULL;
+}
+
+/* ========================================================================
+ * Deep sleep — DLL can request sleep, host notifies state changes
+ * ======================================================================== */
+
+bool g_deepSleepRequested = false;
+static bool g_isDeepSleeping = false;
+
+AARCADECORE_EXPORT bool aarcadecore_deep_sleep_requested(void)
+{
+    if (g_deepSleepRequested) {
+        g_deepSleepRequested = false; /* fire & forget */
+        return true;
+    }
+    return false;
+}
+
+AARCADECORE_EXPORT void aarcadecore_deep_sleep_changed(bool sleeping)
+{
+    g_isDeepSleeping = sleeping;
+    if (g_host.host_printf)
+        g_host.host_printf("aarcadecore: Deep sleep %s\n", sleeping ? "entered" : "exited");
 }

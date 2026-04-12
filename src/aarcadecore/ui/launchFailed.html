@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Launch Failed</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="arcadeHud.js"></script>
+</head>
+<body>
+<script>
+    arcadeHud.initialize();
+    var content = arcadeHud.ui.createWindow({
+        title: 'Launch Failed',
+        showBack: true,
+        showClose: true,
+        onBack: function() { window.history.back(); },
+        onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); }
+    });
+    content.innerHTML = '<div class="aa-empty-message">Something went wrong.</div>';
+</script>
+</body>
+</html>

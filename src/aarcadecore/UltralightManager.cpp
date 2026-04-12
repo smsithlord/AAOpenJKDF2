@@ -99,6 +99,11 @@ EmbeddedInstance* UltralightManager_GetActive(void)
     return (g_mainMenuOpen || g_spawnModeOpen) ? g_hudInstance : NULL;
 }
 
+EmbeddedInstance* UltralightManager_GetHudInstance(void)
+{
+    return g_hudInstance;
+}
+
 void UltralightManager_OpenMainMenu(void)
 {
     if (g_mainMenuOpen || !g_hudInstance) return;

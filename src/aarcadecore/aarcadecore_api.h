@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* API version — bump when the interface changes */
-#define AARCADECORE_API_VERSION 4
+#define AARCADECORE_API_VERSION 5
 
 /* DLL export/import macros */
 #ifdef _WIN32
@@ -41,6 +41,7 @@ typedef int  (*AACore_GetKeyStateFn)(int key_index);
 typedef void (*AACore_GetCurrentMapFn)(char* mapKeyOut, int mapKeySize);
 typedef int  (*AACore_IsTemplateCabinetFn)(const char* templateName);
 typedef int  (*AACore_CaptureRectPixelsFn)(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
+typedef void (*AACore_ResetThingTextureFn)(int thingIdx);
 
 typedef struct AACoreHostCallbacks {
     int api_version;
@@ -49,6 +50,7 @@ typedef struct AACoreHostCallbacks {
     AACore_GetCurrentMapFn   get_current_map;
     AACore_IsTemplateCabinetFn is_template_cabinet;
     AACore_CaptureRectPixelsFn capture_rect_pixels;
+    AACore_ResetThingTextureFn reset_thing_texture;
 } AACoreHostCallbacks;
 
 /* ========================================================================
@@ -240,8 +242,17 @@ AARCADECORE_EXPORT void aarcadecore_mark_thing_seen(int thingIdx);
 /* Check if a task should be rendered this frame (visibility throttling) */
 AARCADECORE_EXPORT bool aarcadecore_is_task_visible(int taskIndex);
 
+/* Register an adopted template into the library (creates model entry if not exists) */
+AARCADECORE_EXPORT bool aarcadecore_register_adopted_template(const char* templateName);
+
 /* Action command dispatch — returns true if command was handled */
 AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd);
+
+/* Deep sleep — engine idles at minimal CPU until woken by Escape key.
+ * aarcadecore_deep_sleep_requested: DLL returns true once to request sleep (fire & forget, auto-clears).
+ * aarcadecore_deep_sleep_changed:   Host calls into DLL just before sleeping (true) or just after waking (false). */
+AARCADECORE_EXPORT bool aarcadecore_deep_sleep_requested(void);
+AARCADECORE_EXPORT void aarcadecore_deep_sleep_changed(bool sleeping);
 
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
@@ -319,7 +330,10 @@ typedef bool  (*aarcadecore_is_fullscreen_active_t)(void);
 typedef void  (*aarcadecore_exit_fullscreen_t)(void);
 typedef void  (*aarcadecore_mark_thing_seen_t)(int thingIdx);
 typedef bool  (*aarcadecore_is_task_visible_t)(int taskIndex);
+typedef bool  (*aarcadecore_register_adopted_template_t)(const char* templateName);
 typedef bool  (*aarcadecore_action_command_t)(const char* cmd);
+typedef bool  (*aarcadecore_deep_sleep_requested_t)(void);
+typedef void  (*aarcadecore_deep_sleep_changed_t)(bool sleeping);
 
 #ifdef __cplusplus
 }

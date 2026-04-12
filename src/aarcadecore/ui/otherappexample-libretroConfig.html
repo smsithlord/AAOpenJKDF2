@@ -1,0 +1,1665 @@
+<html>
+	<head>
+		<link rel="stylesheet" type="text/css" href="asset://ui/hud.css"></link>
+		<script src="asset://ui/hud.js"></script>
+		<script>
+			var cores;
+			var response = aaapi.cmdEx("libretroGetAllDLLs");
+			cores = response.cores;
+			cores.sort(function(a, b) {
+			    return a.file.toLowerCase().localeCompare(b.file.toLowerCase());
+			});
+
+			var extendedInfo = {
+				"fbneo_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Gold standard, most actively maintained, best compatibility. Sometimes needs BIOS"
+				},
+				"mame_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Most accurate, very demanding. Sometimes needs BIOS"
+				},
+				"mame2010_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Good balance of accuracy and performance. Sometimes needs BIOS"
+				},
+				"mame2003_plus_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Improved 2003 with extra games/fixes. Sometimes needs BIOS"
+				},
+				"mame2003_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Solid for low-end hardware. Sometimes needs BIOS"
+				},
+				"mame2000_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Very lightweight but limited compatibility. Sometimes needs BIOS"
+				},
+				"geolith_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Neo Geo only, newer and promising but niche. Needs BIOS"
+				},
+				"fbalpha2012_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Outdated, superseded by FBNeo. Sometimes needs BIOS"
+				},
+				"fbalpha2012_neogeo_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Outdated, Neo Geo only. Needs BIOS"
+				},
+				"fbalpha2012_cps1_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Outdated, CPS1 only. No BIOS needed"
+				},
+				"fbalpha2012_cps2_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Outdated, CPS2 only. No BIOS needed"
+				},
+				"fbalpha2012_cps3_libretro.dll": {
+					"systems": "Arcade",
+					"notes": "Outdated, CPS3 only. No BIOS needed"
+				},
+				"genesis_plus_gx_libretro.dll": {
+					"systems": "Genesis, SegaCD",
+					"notes": "Best overall Genesis/CD core, also handles Master System, Game Gear, SG-1000. Sometimes needs BIOS"
+				},
+				"genesis_plus_gx_wide_libretro.dll": {
+					"systems": "Genesis, SegaCD",
+					"notes": "Same as Genesis Plus GX with widescreen hack. Sometimes needs BIOS"
+				},
+				"blastem_libretro.dll": {
+					"systems": "Genesis",
+					"notes": "Very high accuracy, cycle-accurate, no CD or 32X support. No BIOS needed"
+				},
+				"picodrive_libretro.dll": {
+					"systems": "Genesis, 32x, SegaCD",
+					"notes": "Less accurate but fast, only core with 32X support, also handles Sega CD. Sometimes needs BIOS"
+				},
+				"clownmdemu_libretro.dll": {
+					"systems": "Genesis",
+					"notes": "Newer, promising accuracy, still maturing. No BIOS needed"
+				},
+				"bsnes_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Most accurate, cycle-accurate. No BIOS needed"
+				},
+				"bsnes_hd_beta_libretro.dll": {
+					"systems": "SNES",
+					"notes": "bsnes accuracy with widescreen/HD features. No BIOS needed"
+				},
+				"bsnes-jg_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Clean fork of bsnes, very accurate. No BIOS needed"
+				},
+				"mesen-s_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Excellent accuracy, great debugging. No BIOS needed"
+				},
+				"snes9x_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Best balance of accuracy and performance. No BIOS needed"
+				},
+				"bsnes_mercury_accuracy_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Older bsnes fork. No BIOS needed"
+				},
+				"bsnes2014_accuracy_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Older bsnes snapshot. No BIOS needed"
+				},
+				"bsnes_mercury_balanced_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Balanced accuracy/performance fork. No BIOS needed"
+				},
+				"bsnes2014_balanced_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Balanced 2014 snapshot. No BIOS needed"
+				},
+				"bsnes_mercury_performance_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Performance-focused fork. No BIOS needed"
+				},
+				"bsnes2014_performance_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Performance 2014 snapshot. No BIOS needed"
+				},
+				"mednafen_snes_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Older bsnes port. No BIOS needed"
+				},
+				"snes9x2010_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Good for weaker hardware. No BIOS needed"
+				},
+				"bsnes_cplusplus98_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Very old port, legacy. No BIOS needed"
+				},
+				"snes9x2005_plus_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Very lightweight. No BIOS needed"
+				},
+				"snes9x2005_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Very lightweight. No BIOS needed"
+				},
+				"snes9x2002_libretro.dll": {
+					"systems": "SNES",
+					"notes": "Lowest resource use, lowest accuracy. No BIOS needed"
+				},
+				"mesen_libretro.dll": {
+					"systems": "NES",
+					"notes": "Most accurate NES emulator. No BIOS needed"
+				},
+				"fceumm_libretro.dll": {
+					"systems": "NES",
+					"notes": "Great compatibility, lots of features. No BIOS needed"
+				},
+				"nestopia_libretro.dll": {
+					"systems": "NES",
+					"notes": "Very good accuracy, cycle-accurate. No BIOS needed"
+				},
+				"quicknes_libretro.dll": {
+					"systems": "NES",
+					"notes": "Fast but less accurate, good for low-end. No BIOS needed"
+				},
+				"fixnes_libretro.dll": {
+					"systems": "NES",
+					"notes": "Minimal, experimental. No BIOS needed"
+				},
+				"sameboy_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Most accurate GB/GBC emulator. No BIOS needed"
+				},
+				"gambatte_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Excellent accuracy, long-trusted. No BIOS needed"
+				},
+				"gearboy_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Solid accuracy. No BIOS needed"
+				},
+				"DoubleCherryGB_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Unique multi-GB link feature. No BIOS needed"
+				},
+				"tgbdual_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Link cable support, but dated. No BIOS needed"
+				},
+				"fixgb_libretro.dll": {
+					"systems": "GameBoy",
+					"notes": "Minimal, experimental. No BIOS needed"
+				},
+				"mgba_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Best overall: accuracy, features, active development. Sometimes needs BIOS"
+				},
+				"vbam_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Good compatibility, heavier than mGBA. Sometimes needs BIOS"
+				},
+				"gpsp_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Very fast, great for low-end hardware. Sometimes needs BIOS"
+				},
+				"vba_next_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Lighter VBA fork, decent. Sometimes needs BIOS"
+				},
+				"mednafen_gba_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Adequate but not standout. Sometimes needs BIOS"
+				},
+				"skyemu_libretro.dll": {
+					"systems": "GBA",
+					"notes": "Newer multi-system core, still maturing. Sometimes needs BIOS"
+				},
+				"mednafen_psx_hw_libretro.dll": {
+					"systems": "PSX",
+					"notes": "Best: high accuracy with GPU enhancements. Needs BIOS"
+				},
+				"swanstation_libretro.dll": {
+					"systems": "PSX",
+					"notes": "Duckstation fork, great accuracy and enhancements. Needs BIOS"
+				},
+				"mednafen_psx_libretro.dll": {
+					"systems": "PSX",
+					"notes": "Very accurate, software rendering only. Needs BIOS"
+				},
+				"pcsx_rearmed_libretro.dll": {
+					"systems": "PSX",
+					"notes": "Best for low-end/ARM devices, less accurate. Needs BIOS"
+				},
+				"mupen64plus_next_libretro.dll": {
+					"systems": "N64",
+					"notes": "Better compatibility, actively maintained, ParaLLEl RDP support. No BIOS needed"
+				},
+				"parallel_n64_libretro.dll": {
+					"systems": "N64",
+					"notes": "Older, less maintained, but still functional. No BIOS needed"
+				},
+				"mednafen_saturn_libretro.dll": {
+					"systems": "Saturn",
+					"notes": "Most accurate, gold standard, very CPU-demanding. Needs BIOS"
+				},
+				"yabasanshiro_libretro.dll": {
+					"systems": "Saturn",
+					"notes": "Good compatibility, lighter, OpenGL renderer. Needs BIOS"
+				},
+				"yabause_libretro.dll": {
+					"systems": "Saturn",
+					"notes": "Older, largely superseded by YabaSanshiro. Needs BIOS"
+				},
+				"flycast_libretro.dll": {
+					"systems": "DC",
+					"notes": "Best Dreamcast core, good compatibility, hardware-accelerated rendering. Needs BIOS"
+				},
+				"ppsspp_libretro.dll": {
+					"systems": "PSP",
+					"notes": "Excellent PSP emulator, high compatibility, hardware-accelerated rendering. No BIOS needed"
+				},
+				"play_libretro.dll": {
+					"systems": "PS2",
+					"notes": "Only PS2 Libretro core; limited compatibility, still maturing. Does NOT support STATE saves. Needs BIOS"
+				}
+			};
+		</script>
+		<style>
+			.coreFolderEntry:hover
+			{
+				background-color: rgba(200, 200, 200, 0.5);
+			}
+
+			.coreFolderActions
+			{
+				visibility: hidden;
+				pointer-events: none;
+			}
+
+			.coreFolderEntry:hover .coreFolderActions
+			{
+				visibility: visible;
+				pointer-events: all;
+			}
+
+			.onlyIfCoreSelected
+			{
+				display: none;
+			}
+
+			/*
+			.inputOptionToggle
+			{
+				display: inline-block;
+				width: 60px;
+				height: 20px;
+				vertical-align: middle;
+				border-radius: 6px;
+				border-style: solid;
+				border-width: 2px;
+			}
+
+			.inputOptionToggle div
+			{
+				display: inline-block;
+				width: 24px;
+				height: 14px;
+				float: left;
+				border-style: solid;
+				border-width: 3px;
+				border-radius: 4px;
+				vertical-align: middle;
+			}
+
+			.inputOptionToggle:hover
+			{
+			}
+
+			.inputOptionToggle div.toggleSwitchOn
+			{
+				float: right;
+			}
+
+			.inputOptionToggle:hover div
+			{
+			}
+
+			.inputOptionToggle:hover div.toggleSwitchOn
+			{
+			}
+			*/
+
+			.inputOptionToggle
+			{
+				display: inline-block;
+				width: 60px;
+				height: 20px;
+				vertical-align: middle;
+				border-radius: 6px;
+				border-style: solid;
+				border-width: 2px;
+			}
+
+			.inputOptionToggle div
+			{
+				display: inline-block;
+				width: 24px;
+				height: 14px;
+				float: left;
+				border-style: solid;
+				border-width: 3px;
+				border-radius: 4px;
+				vertical-align: middle;
+			}
+
+			.inputOptionToggle:hover
+			{
+			}
+
+			.inputOptionToggle div.toggleSwitchOn
+			{
+				float: right;
+			}
+
+			.inputOptionToggle:hover div
+			{
+			}
+
+			.inputOptionToggle:hover div.toggleSwitchOn
+			{
+			}
+
+			.inputOptionTitle
+			{
+				display: inline-block;
+				vertical-align: middle;
+				margin-right: 10px;
+				color: #999;
+				font-style: italic;
+			}
+
+			.inputOptionContainer
+			{
+				display: inline-block;
+				float: right;
+				vertical-align: middle;
+				margin-right: 5px;
+			}
+
+			.toggleButton
+			{
+				display: inline-block;
+				float: right;
+				vertical-align: middle;
+				margin: 0;
+				margin-right: 5px;
+				border: 2px solid pink;
+			}
+
+			.inputOptionContainer input
+			{
+				background-color: transparent;
+				border: 1px solid red;
+				font-family: Arial;
+				font-weight: 900;
+				font-size: 18px;
+				padding-left: 2px;
+				padding-right: 2px;
+				color: #bbb;
+				background-color: rgb(8, 8, 8);
+				border-radius: 6px;
+				border: 3px solid rgb(30, 30, 30);
+				border-top: 3px solid rgb(50, 50, 50);
+				border-left: 3px solid rgb(50, 50, 50);
+				text-align: right;
+			}
+
+			.inputOptionContainer:hover input
+			{
+				border: 3px solid rgb(40, 40, 40);
+				border-top: 3px solid rgb(70, 70, 70);
+				border-left: 3px solid rgb(70, 70, 70);
+			}
+
+			.categoryContainer
+			{
+				width: 100%;
+				background-color: rgba(50, 50, 50, 0.5);
+				font-weight: bold;
+				font-family: Arial;
+				border-radius: 10px;
+			}
+
+			.categoryTitle
+			{
+				padding: 10px;
+				letter-spacing: 0.2em;
+				font-style: italic;
+			}
+
+			.optionContainer
+			{
+				font-weight: bold;
+				font-family: Arial;
+				padding: 8px;
+				height: 25px;
+				border-radius: 10px;
+				background-color: rgba(10, 10, 10, 0.5);
+			}
+
+			.optionContainer:nth-child(even)
+			{
+				background-color: rgba(30, 30, 30, 0.3);
+			}
+
+			.optionTitle
+			{
+				float: left;
+				margin-left: 5px;
+			}
+
+			.optionsContainer
+			{
+				margin-left: 15px;
+				margin-right: 15px;
+				margin-bottom: 15px;
+			}
+
+			input[type=range]
+			{
+	    		-webkit-appearance: none;
+	    		border-radius: 3px;
+	    		border-style: solid;
+	    		border-width: 1px;
+	    		height: 8px;
+	    		border-color: #bbb;
+			}
+
+			input[type=range]::-webkit-slider-runnable-track
+			{
+				border: 0;
+				background-color: transparent;
+			}
+
+			input[type=range]::-webkit-slider-thumb
+			{
+				-webkit-appearance: none;
+				width: 15px;
+				height: 24px;
+				background-color: #ddd;
+				border: 1px solid #bbb;
+				border-radius: 20%;
+			}
+
+			input[type=range]:hover::-webkit-slider-thumb
+			{
+				background-color: #E5F1FB;
+				border: 1px solid #0078D7;
+			}
+		</style>
+	</head>
+	<body>
+
+		<div style="pointer-events: none; position: absolute; left: 0; top: 0; right: 0; bottom: 0;">
+		<table style="width: 100%; height: 100%;">
+		<tr ><td valign="middle" align="center">
+		<div style="display: inline-block;">
+
+		<script>
+			var uiBack = arcadeHud.getParameterByName("uiback");
+			if( !uiBack )
+				uiBack = "window.location='asset://ui/embeddedApps.html';";
+			var windowHeaderHTML = arcadeHud.generateWindowHeaderHTML("Libretro Properties", "", true, true, uiBack, "aaapi.cmd('deactivateInputMode');");
+			document.write(windowHeaderHTML);
+		</script>
+
+		<!--<form id="entryForm" style="margin: 0;">-->
+
+		<script>
+			var windowTabsHeaderHTML = arcadeHud.generateWindowTabsHeaderHTML({
+				"tabs": [
+					{
+						"id": "general",
+						"title": "General"
+					},
+					{
+						"id": "cores",
+						"title": "Cores"
+					},
+					{
+						"id": "about",
+						"title": "About"
+					}
+				]
+			});
+			document.write(windowTabsHeaderHTML);
+		</script>
+
+		<div class="aaTabContent aaThemeColorTwoHighBackgroundColor aaThemeColorTwoLowBorderColor" tabid="general">
+			<table class="aaKeyValueTable" style="width: 100%;" cellspacing="0"></table>
+		</div>
+
+		<div class="aaTabContent aaThemeColorTwoHighBackgroundColor aaThemeColorTwoLowBorderColor" tabid="cores">
+			<table cellspacing="0" cellpadding="0">
+				<tr><td>
+					<div class="aaTextColorTwoColor aaTitleTextSizeFontSize">
+						All Detected Cores
+					</div>
+				</td><td align="center">
+					<div id="coreTitle" class="aaThemeColorOneColor aaTitleTextSizeFontSize aaTitleText">
+						- no core selected -
+					</div>
+					<div id="coreSubtitle" class="aaTextColorTwoColor" style="display: none; font-size: 11px; font-family: Arial; margin-top: 4px; line-height: 1.4;">
+					</div>
+				</td></tr>
+				<tr><td align="center">
+					<div class="aaTextSizeFontSize aaTextColorTwoColor">
+						<select id="dllList" size="20" class="aaTextSizeFontSize aaScrollBars helpNote" help="Remember, you only need to configure the core you want to enable & use!<br />Addon cores are DLL files in: Anarchy Arcade/aarcade_user/libretro/cores" style="width: 300px; height: 500px; border-radius: 10px;">
+						</select>
+					</div>
+				</td><td valign="top" class="aaTextColorTwoColor" style="padding-left: 20px; min-width: 400px;" align="center">
+					<div class="onlyIfCoreSelected aaTextSizeFontSize aaScrollBars" style="font-family: Arial; height: 500px; overflow-y: auto; overflow-x: hidden; padding-right: 10px;">
+						<form id="entryForm" style="margin: 0; padding: 0;" corefile="">
+					 		<table class="aaTextColorTwoColor" cellspacing="0" cellpadding="3" style="width: 100%;">
+					 			<tr style="display: none;"><td colspan="2" style="padding-top: 20px;">
+									<div style="text-align: center; padding: 10px;" class="aaTextSizeFontSize aaThemeColorOneShadedBackground aaTextColorOneColor aaTitleText">
+										Core Options
+									</div>
+								</td></tr>
+					 			<tr>
+					 				<td valign="middle" style="font-weight: 900; padding-top: 30px; text-align: right;">
+					 					Enabled:
+					 				</td>
+					 				<td valign="middle" style="padding-top: 30px; text-align: left;">
+					 					<div id="enabledToggle" class="inputOptionToggle aaThemeColorTwoLowBorderColor aaThemeColorTwoHoverShadedBackground" onclick="onEnabledClicked(this);">
+					 						<div class="aaThemeColorTwoLowBackgroundColor aaThemeColorTwoLowBorderColor">
+					 						</div>
+					 					</div>
+					 				</td>
+					 			</tr>
+					 			<tr>
+					 				<td valign="middle" style="font-weight: 900; text-align: right;">
+					 					Auto Cart Saves:
+					 				</td>
+					 				<td valign="middle" style="text-align: left;">
+					 					<div id="cartToggle" class="inputOptionToggle aaThemeColorTwoLowBorderColor aaThemeColorTwoHoverShadedBackground" onclick="onCartClicked(this);">
+					 						<div class="aaThemeColorTwoLowBackgroundColor aaThemeColorTwoLowBorderColor">
+					 						</div>
+					 					</div>
+					 				</td>
+					 			</tr>
+					 			<tr>
+					 				<td valign="middle" style="font-weight: 900; padding-bottom: 30px; text-align: right;">
+					 					Auto State Saves:
+					 				</td>
+					 				<td valign="middle" style="padding-bottom: 30px; text-align: left;">
+					 					<div id="stateToggle" class="inputOptionToggle aaThemeColorTwoLowBorderColor aaThemeColorTwoHoverShadedBackground" onclick="onStateClicked(this);">
+					 						<div class="aaThemeColorTwoLowBackgroundColor aaThemeColorTwoLowBorderColor">
+					 						</div>
+					 					</div>
+					 				</td>
+					 			</tr>
+					 			<tr style="display: none;"><td style="font-weight: 900;" valign="top">
+				 					Priority:
+				 				</td><td style="padding-bottom: 20px;">
+				 					<select style="width: 100%;" id="priorityBox">
+				 						<option value=0>0 (default)</option>
+				 						<option value=1>1</option>
+				 						<option value=2>2</option>
+				 						<option value=3>3</option>
+				 						<option value=4>4</option>
+				 						<option value=5>5</option>
+				 						<option value=6>6</option>
+				 						<option value=7>7</option>
+				 						<option value=8>8</option>
+				 						<option value=9>9</option>
+				 						<option value=10>10 (max)</option>
+				 					</select>
+					 			</td></tr>
+					 			<tbody class="aaThemeColorOneShadedBackground" id="coreFoldersHeader">
+						 			<tr><td colspan="2">
+										<div style="text-align: center; padding: 10px;" class="aaTextSizeFontSize aaTextColorOneColor aaTitleText">
+											Associated Content Folders
+										</div>
+									</td></tr>
+								</tbody>
+					 			<tr id="noCoreFolders"><td colspan="2">
+									<div style="text-align: center; padding: 10px;" class="aaTextSizeFontSize aaTextColorTwoColor">
+										<div style="display: inline-block; width: 300px;">
+											No content folders or file extensions specified yet.<br /><br />
+											You must add at least 1 content folder that this core is allowed to run files from for it to work.
+										</div>
+									</div>
+								</td></tr>
+								<tbody class="coreFolderEntry">
+								<!--
+						 			<tr><td style="font-weight: 900; padding-left: 10px;">
+					 					Content Folder:
+					 				</td><td style="padding-right: 10px;">
+					 					<input type="text" size="40" style="width: 100%;" placeholder="Any (all folders accepted)" />
+					 				</td></tr>
+						 			<tr><td style="font-weight: 900; padding-left: 10px;">
+					 					File Extensions:
+					 				</td><td style="padding-right: 10px;">
+					 					<input type="text" size="40" style="width: 100%;" placeholder="Any (all extensions accepted)" />
+					 				</td></tr>
+					 				<tr><td colspan="2" align="right">
+					 					<div class="coreFolderActions">
+					 						<input type="button" class="aaButton aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="Remove Folder" />
+					 					</div>
+					 				</td></tr>
+					 			</tbody>
+					 			<tbody class="coreFolderEntry">
+						 			<tr><td style="font-weight: 900; padding-left: 10px;">
+					 					Content Folder:
+					 				</td><td style="padding-right: 10px;">
+					 					<input type="text" size="40" style="width: 100%;" placeholder="Any (all folders accepted)" />
+					 				</td></tr>
+						 			<tr><td style="font-weight: 900; padding-left: 10px;">
+					 					File Extensions:
+					 				</td><td style="padding-right: 10px;">
+					 					<input type="text" size="40" style="width: 100%;" placeholder="Any (all extensions accepted)" />
+					 				</td></tr>
+					 				<tr><td colspan="2" align="right">
+					 					<div class="coreFolderActions">
+					 						<input type="button" class="aaButton aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="Remove Folder" />
+					 					</div>
+					 				</td></tr>
+					 			-->
+					 			</tbody>
+					 			<tr><td colspan="2">
+					 				<input type="button" class="aaButton aaBigButton aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="Add Another Content Folder" style="width: 100%;" onclick="addNewContentFolder();" />
+					 			</td></tr>
+					 			<tr><td colspan="2" align="center">
+					 				<input type="button" class="aaButton aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor helpNote" help="This resets the options normally available in the Libretro Options menu for the core at runtime back to their default states, for this core only." value="Reset Core Runtime Options" style="margin-top: 10px;" onclick="resetCoreOptions();" />
+					 				<div id="resetCoreOptionsMsg" class="aaTitleText aaThemeColorOneColor" style="display: none; text-align: center; padding: 6px; font-size: 12px;">Core options reset!</div>
+					 			</td></tr>
+					 		</table>
+					 		<input type="submit" value="Submit" style="position: absolute; pointer-events: none; visibility: hidden;" />
+					 	</form>
+				 	</div>
+				 	<div id="noCoreSelected" class="aaTextSizeFontSize aaTextColorTwoColor aaThemeColorTwoBorderColor aaThemeColorTwoLowBackgroundColor" style="margin-top: 20px; border-style: solid; border-width: 1px; padding: 20px;">
+				 		<div style="display: inline-block; width: 220px; font-family: Arial;">
+				 			Select a core from the list to configure its options.<br /><br />
+				 			Cores highlighted in <font class="aaThemeColorOneBackgroundColor" style="font-weight: 900; padding-left: 4px; padding-right: 4px;">BLUE</font> are currently <b>ENABLED</b>.
+				 		</div>
+				 	</div>
+				</td></tr>
+			</table>
+		</div>
+
+		<!--<div class="aaWindowPaneContent aaWindowPaneContentScrollable aaScrollBars aaThemeColorTwoHighBackgroundColor aaThemeColorTwoLowBorderColor aaTextSizeFontSize aaTextColorTwoColor" style="max-height: 600px;">-->
+		<div class="aaScrollBars aaTabContent aaThemeColorTwoHighBackgroundColor aaThemeColorTwoLowBorderColor aaTextSizeFontSize aaTextColorTwoColor" style="max-height: 600px; max-width: 700px;" tabid="about">
+			<div onclick="aaapi.cmd('popout', 'libretro');" style="text-align: center;">
+				<script>
+					var iconHTML = arcadeHud.generateIconHTML("libretrologo.png", 305, 57, "aaThemeColorOneColor");
+					document.write(iconHTML);
+				</script>
+				<br />
+				<div class="aaTitleText aaThemeColorOneColor aaTitleSizeFontSize">
+					<div style="display: inline; text-decoration: underline;">Visit Libretro Website</div>
+					<div style="display: inline; position: relative; top: -4px;">
+						<script>
+							var iconHTML = arcadeHud.generateIconHTML("popouticon.png", 24, 24, "aaThemeColorOneColor");
+							document.write(iconHTML);
+						</script>
+					</div>
+				</div>
+			</div>
+			<br />
+			Libretro is a library programming interface. Programs get ported to this library and can then be run with any libretro-compatible frontend.<br />
+			<br />
+			Libretro programs are called cores.  They are DLL files (instead of EXE files) that can be embedded into frontends, such as Anarchy Arcade, and run directly on in-game screens.<br />
+			<br />
+			<b>FFMPEG</b> is the <b>only</b> core that comes bundled with AArcade by default. It allows you to play your local video files on the in-game screens.<br />
+			<br />
+			AArcade is also compatible with many other Libretro cores.  You just have to set them up as addons first.<br />
+			<br /><br />
+			<font class="aaThemeColorOneColor aaTitleText aaTitleTextSizeFontSize">Addon Cores</font><br /><br />
+			<font style="font-weight: bold;">NOTE:</font> Addon cores are 3rd party apps so you might have to look up their websites to find help or further instructions on how to use or configure them.<br />
+			<ol>
+				<li style="margin-bottom: 10px;">
+					<div>
+						<b>Download Cores From:</b><br />
+						<input type="text" size="57" value="https://buildbot.libretro.com/nightly/windows/x86/latest/" style="border: 0; background-color: inherit;" class="aaTextSizeFontSize aaTextColorTwoColor" readonly=true onclick="this.select();" />
+					</div>
+				</li>
+				<li style="margin-bottom: 10px;">
+					<div>
+						<b>Unzip Cores To:</b><br />
+						Anarchy Arcade/aarcade_user/libretro/cores
+					</div>
+				</li>
+				<li style="margin-bottom: 10px;">
+					<div>
+						<b>Enable Cores At Menu:</b><br />
+						Main Menu > Settings > Embedded > Libretro
+					</div>
+				</li>
+				<li style="margin-bottom: 10px;">
+					<div>
+						<b>Add Content Folders:</b><br />
+						You need to specify which folders contain files that a core is able to run at that same menu.
+					</div>
+				</li>
+			</ol>
+			<br />
+
+<font class="aaThemeColorOneColor aaTitleText aaTitleTextSizeFontSize">Cores That Work</font><br /><br />
+			<font style="font-weight: bold;">(ARCADE)</font><br />
+			<ul style="margin: 0;">
+				<li>mame_libretro (expects NEOGEO bios in /mame/bios)</li>
+				<li>fbneo_libretro</li>
+			</ul>
+			<font style="font-weight: bold;">(GENESIS)</font><br />
+			<ul style="margin: 0;">
+				<li>picodrive_libretro</li>
+				<li>genesis_plus_gx_libretro</li>
+				<li>genesis_plus_gx_wide_libretro</li>
+				<li>blastem_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(SEGA CD)</font><br />
+			<ul style="margin: 0;">
+				<li>picodrive_libretro</li>
+				<li>genesis_plus_gx_libretro</li>
+				<li>genesis_plus_gx_wide_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(32X)</font><br />
+			<ul style="margin: 0;">
+				<li>picodrive_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(SNES)</font><br />
+			<ul style="margin: 0;">
+				<li>bsnes_libretro</li>
+				<li>bsnes_hd_beta_libretro</li>
+				<li>snes9x_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(NES)</font><br />
+			<ul style="margin: 0;">
+				<li>fceumm_libretro</li>
+				<li>nestopia_libretro</li>
+				<li>mesen_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(GAMEBOY)</font><br />
+			<ul style="margin: 0;">
+				<li>gambatte_libretro</li>
+				<li>gearboy_libretro</li>
+				<li>sameboy_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(GBA)</font><br />
+			<ul style="margin: 0;">
+				<li>mgba_libretro</li>
+				<li>vbam_libretro</li>
+				<li>vba_next_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(PSX)</font><br />
+			<ul style="margin: 0;">
+				<li>mednafen_psx_hw_libretro</li>
+				<li>mednafen_psx_libretro</li>
+				<li>swanstation_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(N64)</font><br />
+			<ul style="margin: 0;">
+				<li>mupen64plus_next_libretro</li>
+				<li>parallel_n64_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(SATURN)</font><br />
+			<ul style="margin: 0;">
+				<li>mednafen_saturn_libretro</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(PS2)</font><br />
+			<ul style="margin: 0;">
+				<li>play_libretro (VERY slow)</li>
+			</ul>
+			<br />
+			<font style="font-weight: bold;">(PSP)</font><br />
+			<ul style="margin: 0;">
+				<li>ppsspp_libretro</li>
+			</ul>
+			<br />
+			<br />
+			<font class="aaThemeColorOneColor aaTitleText aaTitleTextSizeFontSize">Cores That DO NOT Work</font><br /><br />
+
+			<ul style="margin: 0;">
+				<li>flycast_libretro</li>
+				<li>yabasanshiro_libretro</li>
+			</ul>
+			<br />
+			<br />
+
+			<font class="aaThemeColorOneColor aaTitleText aaTitleTextSizeFontSize">System BIOS</font><br /><br />
+			Some cores expect BIOS to be present. Those often go into your ROM folder, <b>or</b> into this folder (unless otherwise noted in the core list):
+			<div>
+				<input type="text" size="63" value="Anarchy Arcade/aarcade_user/libretro/system/CORE_NAME_HERE/" style="border: 0; background-color: inherit;" class="aaTextSizeFontSize aaTextColorTwoColor" readonly=true onclick="this.select();" />
+			</div>
+
+			<br /><br />
+
+
+			<font class="aaThemeColorOneColor aaTitleText aaTitleTextSizeFontSize">Technical Notes</font><br />
+			<ul>
+				<li>AArcade supports 32bit Libretro DLLs only.</li>
+				<li>Untested cores not listed here <b>MAY</b> work fine. They just haven't been tested yet.</li>
+				<li>All compatibility lists last updated February 2026.</li>
+			</ul>
+		</div>
+
+		<script>
+			var windowTabsFooterHTML = arcadeHud.generateWindowTabsFooterHTML();
+			document.write(windowTabsFooterHTML);
+		</script>
+
+		<table class="aaWindowActions" style="position: absolute; pointer-events: none; visibility: hidden;">
+			<tr>
+				<td>
+				</td>
+				<td style="width: 1%; white-space: nowrap;">
+					<input type="button" class="aaButton aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="OK" />
+					<input type="button" class="aaButton aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="Cancel" />
+					<input type="submit" class="aaButton aaButtonDisabled aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" value="Apply" />
+				</td>
+			</tr>
+		</table>
+
+		<!--</form>-->
+
+		<script>
+			var windowFooterHTML = arcadeHud.generateWindowFooterHTML();
+			document.write(windowFooterHTML);
+		</script>
+
+		</div>
+		</td></tr>
+		</table>
+		</div>
+
+		<a href="javascript:location.reload();" class="devReload">&bull;&nbsp;</a>
+
+		<script>
+			var dllListElem = document.querySelector("#dllList");
+			var coreTitleElem = document.querySelector("#coreTitle");
+			var coreSubtitleElem = document.querySelector("#coreSubtitle");
+			var entryFormElem = document.querySelector("#entryForm");
+			var enabledBoxElem = document.querySelector("#enabledBox");
+			var enabledToggleElem = document.querySelector("#enabledToggle");
+			var cartToggleElem = document.querySelector("#cartToggle");
+			var stateToggleElem = document.querySelector("#stateToggle");
+			var priorityBoxElem = document.querySelector("#priorityBox");
+			var coreFoldersHeader = document.querySelector("#coreFoldersHeader");
+			var noCoreFoldersElem = document.querySelector("#noCoreFolders");
+
+			var option;
+			for( var i = 0; i < cores.length; i++ )
+			{
+				core = cores[i];
+				option = document.createElement("option");
+				option.value = core.file;
+				option.text = core.file;
+				if( core.enabled )
+				{
+					option.classList.add("aaThemeColorOneBackgroundColor");
+					//option.classList.add("aaTextColorOneColor");
+				}
+
+				option.core = core;
+				dllListElem.appendChild(option);
+			}
+
+			function addNewContentFolder()
+			{
+				var option = dllListElem.options[dllListElem.selectedIndex];
+				var core = option.core;
+				if( !!!core.paths )
+					core.paths = [];
+
+				core.paths.push({"path": "", "extensions": ""});
+
+				if( core.paths.length === 1 )
+					noCoreFoldersElem.style.display = "none";
+
+				appendFolderEntryElem(core, core.paths[core.paths.length - 1]);
+				updateDLL();
+			}
+
+			function updateDLL()
+			{
+				payloadCoreFile = entryFormElem.getAttribute("corefile");
+				payloadEnabled = parseInt(enabledToggleElem.curvalue);
+				payloadCart = parseInt(cartToggleElem.curvalue);
+				payloadState = parseInt(stateToggleElem.curvalue);
+				payloadPriority = parseInt(priorityBoxElem.value);
+				payloadPaths = [];
+
+				var option = dllListElem.options[dllListElem.selectedIndex];
+				var core = option.core;
+				enabledToggleElem.core = core;
+				cartToggleElem.core = core;
+				stateToggleElem.core = core;
+				core.file = payloadCoreFile;
+				core.enabled = payloadEnabled;
+				core.cartsaves = payloadCart;
+				core.statesaves = payloadState;
+				core.priority = payloadPriority;
+				core.paths = [];
+
+				// paths = [path0_path, path0_extensions, path1_path, path1_extensions, etc.]
+				var pathEntry;
+				var folderInputs;
+				var coreFolderEntries = document.querySelectorAll(".coreFolderEntry");
+				for( var i = 0; i < coreFolderEntries.length; i++ )
+				{
+					folderInputs = coreFolderEntries[i].querySelectorAll("input[type='text']");
+					for( var j = 0; j < folderInputs.length; j += 2 )
+					{
+						payloadPaths.push(folderInputs[j].value);
+						payloadPaths.push(folderInputs[j+1].value);
+
+						pathEntry = {
+							"path": folderInputs[j].value,
+							"extensions": folderInputs[j+1].value
+						};
+
+						core.paths.push(pathEntry);
+					}
+				}
+//console.log(typeof payloadCoreFile + " " + typeof payloadEnabled + " " + typeof payloadCart + " " + typeof payloadState + " " + typeof payloadPriority + " " + typeof payloadPaths );
+//console.log(payloadCoreFile + " " + payloadEnabled + " " + payloadCart + " " + payloadState + " " + payloadPriority + " " + payloadPaths );
+				var success = aaapi.cmdEx("libretroUpdateDLL", payloadCoreFile, payloadEnabled, payloadCart, payloadState, payloadPriority, payloadPaths);
+			}
+
+			function appendFolderEntryElem(core, corePath)
+			{
+				var tbody, tr, tdLabel, tdValue, input, td, folderActions, removeFolderButton;
+				tbody = document.createElement("tbody");
+				tbody.className = "coreFolderEntry";
+
+				var focusElem, helpText;
+				for( var j = 0; j < 2; j++ )
+				{
+					tr = document.createElement("tr");
+					tr.className = "helpNote";
+					helpText = (j === 0) ? "Any files with a correct extension inside of this folder will be considered runnable by this core." : "Any files with these extensions within a content folder will be considered runnable by this core.<br /><br />Separate extensions with a comma, for example: avi, mpg, mpeg";
+					tr.setAttribute("help", helpText);
+					arcadeHud.assignHelp(tr);
+
+					tdLabel = document.createElement("td");
+					tdLabel.style.cssText = "font-weight: 900; padding-left: 10px;";
+					tdLabel.innerHTML = (j === 0) ? "Content Folder:" : "File Extensions:";
+					tr.appendChild(tdLabel);
+
+					tdValue = document.createElement("td");
+					tdValue.style.cssText = "padding-right: 10px;";
+
+					input = document.createElement("input");
+					input.type = "text";
+					input.size = "40";
+					input.placeholder = (j === 0) ? "Any (all folders accepted)" : "Any (all extensions accepted)";
+					input.style.cssText = "width: 100%;";
+					input.value = (j === 0) ? corePath.path : corePath.extensions;
+					input.originalValue = input.value;
+					input.addEventListener("blur", function()
+					{
+						if( this.originalValue !== this.value )
+							this.value = this.originalValue;
+					}.bind(input), true);
+
+					tdValue.appendChild(input);
+					tr.appendChild(tdValue);
+
+					tbody.appendChild(tr);
+
+					if( j === 0 )
+						focusElem = input;
+				}
+
+				tr = document.createElement("tr");
+
+				td = document.createElement("td");
+				td.colSpan = 2;
+				td.align = "right";
+
+				folderActions = document.createElement("div");
+				folderActions.className = "coreFolderActions";
+
+				removeFolderButton = document.createElement("input");
+				removeFolderButton.type = "button";
+				removeFolderButton.className = "aaButton aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor";
+				removeFolderButton.value = "Remove Folder";
+				removeFolderButton.addEventListener("click", function(e)
+				{
+					var parent = this;
+					while( parent.tagName !== "TBODY" )
+						parent = parent.parentNode;
+
+					parent.parentNode.removeChild(parent);
+					updateDLL();
+
+					var option = dllListElem.options[dllListElem.selectedIndex];
+					var core = option.core;
+					if( core.paths.length === 0 )
+						noCoreFoldersElem.style.display = "table-row";
+
+				}.bind(tr), true);
+				folderActions.appendChild(removeFolderButton);
+				td.appendChild(folderActions);
+
+				tr.appendChild(td);
+				tbody.appendChild(tr);
+
+				var bottomFolder = document.querySelectorAll(".coreFolderEntry");
+				if( bottomFolder.length > 0 )
+					bottomFolder = bottomFolder[bottomFolder.length-1];
+				else
+					bottomFolder = coreFoldersHeader;
+
+				bottomFolder.parentNode.insertBefore(tbody, bottomFolder.nextSibling);
+				if( !!focusElem )
+					focusElem.focus();
+			}
+
+			dllListElem.addEventListener("change", function(e)
+			{
+				var option = this.options[this.selectedIndex];
+				var core = option.core;
+				coreTitleElem.innerHTML = core.file;
+				var info = extendedInfo[core.file];
+				if (info) {
+					coreSubtitleElem.innerHTML = "<b>Systems:</b> " + info.systems + "<br /><b>Notes:</b> " + info.notes;
+					coreSubtitleElem.style.display = "block";
+				} else {
+					coreSubtitleElem.style.display = "none";
+				}
+				entryFormElem.setAttribute("corefile", core.file);
+
+				enabledToggleElem.curvalue = core.enabled;
+				var nextval = (enabledToggleElem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+				if( (core.enabled && nextval !== 0) || (!core.enabled && nextval !== 1))
+					toggleSwitchCore(enabledToggleElem);
+
+				cartToggleElem.curvalue = core.cartsaves;
+				nextval = (cartToggleElem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+				if( (core.cartsaves && nextval !== 0) || (!core.cartsaves && nextval !== 1))
+					toggleSwitchCore(cartToggleElem);
+
+				stateToggleElem.curvalue = core.statesaves;
+				nextval = (stateToggleElem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+				if( (core.statesaves && nextval !== 0) || (!core.statesaves && nextval !== 1))
+					toggleSwitchCore(stateToggleElem);
+
+				priorityBoxElem.value = core.priority;
+
+				// clear out all core folder entries
+				var coreFolderEntries = document.querySelectorAll(".coreFolderEntry");
+				for( var i = 0; i < coreFolderEntries.length; i++ )
+					coreFolderEntries[i].parentNode.removeChild(coreFolderEntries[i]);
+
+				if( !!core.paths && core.paths.length === 0 )
+					noCoreFoldersElem.style.display = "table-row";
+				else
+				{
+					noCoreFoldersElem.style.display = "none";
+
+					// build the path entries
+					var corePath;
+					for( var i = core.paths.length-1; i >= 0; i-- )
+					{
+						corePath = core.paths[i];
+						appendFolderEntryElem(core, corePath);
+					}
+				}
+
+				var noCoreSelectedElem = document.querySelector("#noCoreSelected");
+				noCoreSelectedElem.style.display = "none";
+
+				var elem;
+				var elems = document.querySelectorAll(".onlyIfCoreSelected");
+				for( var i = 0; i < elems.length; i++ )
+					elem = elems[i].style.display = "block";
+			}.bind(dllListElem), true);
+
+			entryFormElem.addEventListener("submit", function(e)
+			{
+				e.preventDefault();
+				var focusedElem = document.activeElement;
+
+				if( !!focusedElem && focusedElem.tagName === "INPUT" && focusedElem.type === "text" )
+				{
+					//var option = focusedElem.inputOption;
+					focusedElem.style.webkitTransition = "initial";
+					focusedElem.classList.add("aaThemeColorOneBackgroundColor");
+					focusedElem.offsetTop;
+					focusedElem.style.webkitTransition = "background-color 0.5s ease-in-out";
+					focusedElem.classList.remove("aaThemeColorOneBackgroundColor");
+
+					//onInputOptionTextFormSubmit(option, focusedElem.value);
+					focusedElem.originalValue = focusedElem.value;
+					focusedElem.blur();
+
+					updateDLL();
+				}
+			}.bind(entryFormElem), true);
+
+			function onEnabledClicked()
+			{
+				var elem = enabledToggleElem;
+				var nextvalue = (elem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+
+				var opt = dllListElem.options[dllListElem.selectedIndex];
+				if( nextvalue === 1 )
+					opt.classList.add("aaThemeColorOneBackgroundColor");
+				else
+					opt.classList.remove("aaThemeColorOneBackgroundColor");
+
+				elem.curvalue = nextvalue;
+				toggleSwitchCore(elem);
+				updateDLL();
+			}
+
+			function onCartClicked()
+			{
+				var elem = cartToggleElem;
+				var nextvalue = (elem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+
+				elem.curvalue = nextvalue;
+				toggleSwitchCore(elem);
+				updateDLL();
+			}
+
+			function onStateClicked()
+			{
+				var elem = stateToggleElem;
+				var nextvalue = (elem.querySelector("div").classList.contains("toggleSwitchOn")) ? 0 : 1;
+
+				elem.curvalue = nextvalue;
+				toggleSwitchCore(elem);
+				updateDLL();
+			}
+
+			function resetCoreOptions()
+			{
+				var coreFile = entryFormElem.getAttribute("corefile");
+				if( !coreFile )
+					return;
+
+				aaapi.cmd('resetLibretroCoreOptions', coreFile);
+
+				var msgElem = document.querySelector("#resetCoreOptionsMsg");
+				msgElem.style.display = "block";
+				setTimeout(function() {
+					msgElem.style.display = "none";
+				}, 2000);
+			}
+///*
+			function toggleSwitchCore(toggleButton)
+			{
+				var row = toggleButton.parentNode.parentNode;
+
+				var labelDiv = row.querySelector(".aaKeyValueTableValueTitle");
+				var toggleButtonMarker = toggleButton.querySelector("div");
+
+				if( toggleButtonMarker.classList.contains("toggleSwitchOn") )
+				{
+					toggleButtonMarker.classList.remove("toggleSwitchOn");
+					toggleButtonMarker.classList.remove("aaThemeColorOneHighBackgroundColor");
+					toggleButtonMarker.classList.remove("aaThemeColorOneHighBorderColor");
+
+					toggleButtonMarker.classList.add("aaThemeColorTwoLowBackgroundColor");
+					toggleButtonMarker.classList.add("aaThemeColorTwoLowBorderColor");
+				}
+				else
+				{
+					toggleButtonMarker.classList.add("toggleSwitchOn");
+					toggleButtonMarker.classList.remove("aaThemeColorTwoLowBackgroundColor");
+					toggleButtonMarker.classList.remove("aaThemeColorTwoLowBorderColor");
+					toggleButtonMarker.classList.add("aaThemeColorOneHighBackgroundColor");
+					toggleButtonMarker.classList.add("aaThemeColorOneHighBorderColor");
+				}
+
+				var option = toggleButton.inputOption;
+				toggleButton.style.webkitTransition = "initial";
+				toggleButton.classList.add("aaThemeColorOneShadedBorderColor");
+				toggleButton.offsetTop;
+				toggleButton.style.webkitTransition = "border-color 0.5s ease-in-out";
+				toggleButton.classList.remove("aaThemeColorOneShadedBorderColor");
+			}
+//*/
+			var entryForm = document.querySelector("#entryForm");
+			entryForm.addEventListener("submit", function(e)
+			{
+				e.preventDefault();
+
+				var focusedElem = document.activeElement;
+				if( !!focusedElem && !!focusedElem.inputOption )
+				{
+					var option = focusedElem.inputOption;
+					focusedElem.style.webkitTransition = "initial";
+					focusedElem.classList.add("aaThemeColorOneBackgroundColor");
+					focusedElem.offsetTop;
+					focusedElem.style.webkitTransition = "background-color 0.5s ease-in-out";
+					focusedElem.classList.remove("aaThemeColorOneBackgroundColor");
+
+					onInputOptionTextFormSubmit(option, focusedElem.value);
+					focusedElem.blur();
+				}
+			}.bind(entryForm), true);
+
+			var categories = {
+				"general":
+				{
+					"autolibretro":
+					{
+						"title": "Auto Run w/ Libretro",
+						"type": "toggle",
+						"help": "Automatically run compatible shortcuts on the in-game screens w/ Libretro.",
+						"valueTitles": {"0": "Disabled", "1": "Enabled"},
+						"value": null,
+						"getValue": function()
+						{
+							var val = aaapi.cmdEx("getConVarValue", "auto_libretro");
+							this.value = val;
+						},
+						"setValue": function(val)
+						{
+							this.value = val;
+							aaapi.cmd("consoleCommand", "auto_libretro " + this.value);
+						}
+					},
+					"waitforlibretro":
+					{
+						"title": "Wait For Libretro To Close",
+						"type": "toggle",
+						"help": "This allows AArcade to hang while Libretro cores finish closing. Having this enabled allows you to directly switch between Libretro cabinets. (If it is disabled, you'll have to deselect one Libretro cabinet prior to selecting the next one.)",
+						"valueTitles": {"0": "Disabled", "1": "Enabled"},
+						"value": null,
+						"getValue": function()
+						{
+							var val = aaapi.cmdEx("getConVarValue", "wait_for_libretro");
+							this.value = val;
+						},
+						"setValue": function(val)
+						{
+							this.value = val;
+							aaapi.cmd("consoleCommand", "wait_for_libretro " + this.value);
+						}
+					}
+				}
+			};
+
+			function findOptionById(optionId)
+			{
+				var option;
+				var categoriesKeys = Object.keys(categories);
+				for( var i = 0; i < categoriesKeys.length; i++ )
+				{
+					category = categories[categoriesKeys[i]];
+					option = category[optionId];
+					if( !!option )
+						break;
+				}
+
+				return option;
+			}
+
+			function fileBrowse(optionId)
+			{
+				var option = findOptionById(optionId);
+				if( !!!option )
+					return;
+
+				var fieldElem;
+				var elems = document.querySelectorAll(".aaKeyValueTableValue > input[type='text']");
+				for( var i = 0; i < elems.length; i++ )
+				{
+					if( elems[i].inputOption === option )
+					{
+						fieldElem = elems[i];
+						break;
+					}
+				}
+
+				if( !!!fieldElem )
+					return;
+
+				arcadeHud.browseForFile(function(chosenFile)
+				{
+					fieldElem.value = chosenFile;
+					fieldElem.focus();
+					entryForm.querySelector("input[type='submit']").click();
+				}.bind(fieldElem));
+			}
+
+			function parseNumber(num)
+			{
+				return Number(parseFloat(num).toFixed(2));
+			}
+
+			function onSlide(e)
+			{
+				var option = this.inputOption;
+				var row = this.parentNode;
+				var labelDiv = row.querySelector(".aaKeyValueTableValueTitle");
+				var val = parseNumber(this.value);
+
+				var valTitle = option.valueTitles[val + ""];
+				if( !!valTitle )
+					labelDiv.innerHTML = valTitle;
+				else
+					labelDiv.innerHTML = val;
+
+				if( typeof option.onSlide === "function" )
+					option.onSlide.call(option, val);
+			}
+
+			var category;
+			var optionsTable;
+			var option;
+			var optionRow;
+			var optionTitleCell;
+			var optionValueCell;
+			var toggleButton;
+			var toggleButtonMarker;
+			var toggleButtonValueLabel;
+			var selectBox;
+			var selectBoxOption;
+			var sliderValueLabel;
+			var title;
+
+			// these might be obsolete!!
+			var optionContainerElem;
+			var inputOptionContainerElem;
+			var inputOptionTitleElem;
+			var inputOptionElem;
+			var inputOptionToggleMarkerElem;
+
+			for( var categoryId in categories )
+			{
+				category = categories[categoryId];
+				optionsTable = document.querySelector("div[tabid='" + categoryId + "'] .aaKeyValueTable");
+
+				if( !!!optionsTable )
+					continue;
+
+				for( var optionId in category )
+				{
+					option = category[optionId];
+					option.getValue();
+
+					// Now put stuff into it
+					optionRow = document.createElement("tr");
+					optionRow.className = "helpNote";
+					optionRow.setAttribute("help", option.help);
+
+					// OPTION TITLE
+					optionTitleCell = document.createElement("td");
+					optionTitleCell.className = "aaKeyValueTableKey aaTextColorTwoColor aaTextSizeFontSize";
+					optionTitleCell.innerHTML = option.title + ":";
+
+					// OPTION VALUE
+					optionValueCell = document.createElement("td");
+					optionValueCell.style.cssText = "text-align: right; padding: 4px; white-space: nowrap;";
+					optionValueCell.className = "aaKeyValueTableValue";
+
+					// AUX BUTTONS
+					optionAuxCell = document.createElement("td");
+					optionAuxCell.style.cssText = "";
+					optionAuxCell.className = "aaKeyValueTableAux";
+
+					if( option.type === "toggle" )
+					{
+						// TOGGLE BUTTON VALUE LABEL
+						toggleButtonValueLabel = document.createElement("div");
+						toggleButtonValueLabel.className = "aaKeyValueTableValueTitle aaTextColorTwoColor aaTextSizeFontSize";
+						toggleButtonValueLabel.style.cssText = "font-family: Arial; font-size: 14px; display: inline-block; vertical-align: middle; padding: 0; padding-left: 30px; padding-right: 8px;";
+
+						title = option.valueTitles[option.value.toString()];
+						toggleButtonValueLabel.innerHTML = title;
+
+						toggleButton = document.createElement("div");
+						toggleButton.className = "inputOptionToggle aaThemeColorTwoLowBorderColor aaThemeColorTwoHoverShadedBackground";
+						toggleButton.inputOption = option;
+						toggleButton.addEventListener("click", function(e)
+						{
+							toggleSwitch(this);
+						}.bind(toggleButton), true);
+
+						toggleButtonMarker = document.createElement("div");
+						toggleButtonMarker.className = "aaThemeColorOneHoverShadedBackground aaThemeColorOneShadedBorderColor";
+
+						if( option.value + "" !== "0" )
+						{
+							toggleButtonMarker.className = "aaThemeColorOneHighBackgroundColor aaThemeColorOneHighBorderColor";
+
+							toggleButtonMarker.className += " toggleSwitchOn";
+						}
+						else
+							toggleButtonMarker.className = "aaThemeColorTwoLowBackgroundColor aaThemeColorTwoLowBorderColor";
+
+						// composite
+						toggleButton.appendChild(toggleButtonMarker);
+						optionValueCell.appendChild(toggleButtonValueLabel);
+						optionValueCell.appendChild(toggleButton);
+					}
+					else if( option.type === "slider" )
+					{
+						// SLIDER VALUE LABEL
+						sliderValueLabel = document.createElement("div");
+						sliderValueLabel.className = "aaKeyValueTableValueTitle aaTextColorTwoColor aaTextSizeFontSize";
+						sliderValueLabel.style.cssText = "font-family: Arial; font-size: 14px; display: inline-block; vertical-align: middle; padding: 0; padding-left: 30px; padding-right: 8px;";
+
+						var val = parseNumber(option.value);
+						var valTitle = option.valueTitles[val + ""];
+						if( !!valTitle )
+							sliderValueLabel.innerHTML = valTitle;
+						else
+							sliderValueLabel.innerHTML = val;
+
+						var slider = document.createElement("input");
+						slider.inputOption = option;
+						slider.type = "range";
+						slider.min = option.sliderMin;
+						slider.max = option.sliderMax;
+						slider.step = option.sliderStep;
+						slider.value = val;
+						slider.style.backgroundColor = "#ddd";
+						slider.addEventListener("input", onSlide.bind(slider), true);
+
+						slider.addEventListener("mouseup", function(e)
+						{
+
+							var option = this.inputOption;
+
+							var val = parseNumber(this.value);
+							if( val == option.value )
+								return;
+
+							this.style.backgroundColor = "";
+							this.style.webkitTransition = "initial";
+							this.classList.add("aaThemeColorOneBackgroundColor");
+							this.offsetTop;
+							this.style.webkitTransition = "background-color 0.5s ease-in-out";
+							this.classList.remove("aaThemeColorOneBackgroundColor");
+							this.style.backgroundColor = "#ddd";
+
+							this.value = val;
+							option.setValue.call(option, val);
+						}.bind(slider), true);
+
+						optionValueCell.appendChild(sliderValueLabel);
+						optionValueCell.appendChild(slider);
+					}
+					else if( option.type === "select" )
+					{
+						selectBox = document.createElement("select");
+						selectBox.className = "aaTextSizeFontSize";
+						selectBox.inputOption = option;
+
+						selectBox.addEventListener("change", function(e)
+						{
+							var selectedIndex = this.selectedIndex;
+							var selectedOption = this.options[selectedIndex];
+
+							var option = this.inputOption;
+							option.setValue.call(option, selectedOption.value);
+
+							this.style.webkitTransition = "initial";
+							this.classList.add("aaThemeColorOneBackgroundColor");
+							this.offsetTop;
+							this.style.webkitTransition = "background-color 0.5s ease-in-out";
+							this.classList.remove("aaThemeColorOneBackgroundColor");
+						}.bind(selectBox), true);
+
+						if( !!option.valueTitles.placeholder )
+						{
+							selectBoxOption = document.createElement("option");
+							selectBoxOption.text = option.valueTitles.placeholder;
+							selectBoxOption.value = "";
+							selectBoxOption.selected = true;
+							selectBoxOption.disabled = true;
+							selectBox.appendChild(selectBoxOption);
+						}
+
+						for( var value in option.valueTitles )
+						{
+							if( value === "placeholder" )
+								continue;
+
+							selectBoxOption = document.createElement("option");
+							selectBoxOption.text = option.valueTitles[value];
+							selectBoxOption.value = value;
+
+							if( value == option.value )
+								selectBoxOption.selected = true;
+
+							selectBox.appendChild(selectBoxOption);
+						}
+
+						// compose
+						optionValueCell.appendChild(selectBox);
+					}
+					else if( option.type === "webfile" )
+					{
+						optionAuxCell.innerHTML = '\
+						<div class="aaButton aaKeyValuesRowButton aaTextSizeFontSize aaThemeColorTwoHoverShadedBackground aaTextColorTwoColor aaThemeColorTwoLowBorderColor" style="min-width: initial; padding: 6px; width: 18px; height: 18px; margin-left: 4px; display: inline-block;" onclick="fileBrowse(\'' + optionId + '\');">\
+								' + arcadeHud.generateIconHTML("browseicon.png", 18, 18, "aaTextColorTwoHighColor") + '\
+						</div>';
+
+						textBox = document.createElement("input");
+						textBox.type = "text";
+
+						textBox.className = "aaTextSizeFontSize";
+						textBox.inputOption = option;
+						textBox.value = option.value;
+						textBox.placeholder = option.valueTitles["placeholder"];
+						textBox.addEventListener("blur", function(e)
+						{
+							if( this.value != this.inputOption.value )
+								this.value = this.inputOption.value;
+						}.bind(textBox), true);
+
+						optionValueCell.appendChild(textBox);
+					}
+					else if( option.type === "text" || option.type === "password" )
+					{
+						textBox = document.createElement("input");
+
+						if( option.title.toLowerCase().indexOf("password") === -1 )
+							textBox.type = "text";
+						else
+							textBox.type = "password";
+
+						textBox.className = "aaTextSizeFontSize";
+						textBox.inputOption = option;
+						textBox.value = option.value;
+						textBox.placeholder = option.valueTitles["placeholder"];
+						textBox.addEventListener("blur", function(e)
+						{
+							this.value = this.inputOption.value;
+						}.bind(textBox), true);
+
+						optionValueCell.appendChild(textBox);
+					}
+
+					optionRow.appendChild(optionTitleCell);
+					//optionRow.appendChild(optionValueTitleCell);
+					optionRow.appendChild(optionValueCell);
+					optionRow.appendChild(optionAuxCell);
+					optionsTable.appendChild(optionRow);
+				}
+			}
+
+			function onInputOptionTextFormSubmit(option, value)
+			{
+				option.setValue.call(option, value);
+			}
+
+			function toggleSwitch(toggleButton)
+			{
+				var row = toggleButton.parentNode.parentNode;
+
+				var labelDiv = row.querySelector(".aaKeyValueTableValueTitle");
+				var toggleButtonMarker = toggleButton.querySelector("div");
+
+				if( toggleButtonMarker.classList.contains("toggleSwitchOn") )
+				{
+					toggleButtonMarker.classList.remove("toggleSwitchOn");
+					toggleButtonMarker.classList.remove("aaThemeColorOneHighBackgroundColor");
+					toggleButtonMarker.classList.remove("aaThemeColorOneHighBorderColor");
+
+					toggleButtonMarker.classList.add("aaThemeColorTwoLowBackgroundColor");
+					toggleButtonMarker.classList.add("aaThemeColorTwoLowBorderColor");
+
+					var valueTitleKeys = Object.keys(toggleButton.inputOption.valueTitles);
+					var valueTitle;
+					for( var i = 0; i < valueTitleKeys.length; i++ )
+					{
+						if( valueTitleKeys[i] !== toggleButton.inputOption.value.toString() )
+						{
+							labelDiv.innerHTML = toggleButton.inputOption.valueTitles[valueTitleKeys[i]];
+							toggleButton.inputOption.setValue(valueTitleKeys[i]);
+							break;
+						}
+					}
+				}
+				else
+				{
+					toggleButtonMarker.classList.add("toggleSwitchOn");
+					toggleButtonMarker.classList.remove("aaThemeColorTwoLowBackgroundColor");
+					toggleButtonMarker.classList.remove("aaThemeColorTwoLowBorderColor");
+					toggleButtonMarker.classList.add("aaThemeColorOneHighBackgroundColor");
+					toggleButtonMarker.classList.add("aaThemeColorOneHighBorderColor");
+
+					var valueTitleKeys = Object.keys(toggleButton.inputOption.valueTitles);
+					var valueTitle;
+					for( var i = 0; i < valueTitleKeys.length; i++ )
+					{
+						if( valueTitleKeys[i] !== toggleButton.inputOption.value.toString() )
+						{
+							labelDiv.innerHTML = toggleButton.inputOption.valueTitles[valueTitleKeys[i]];
+							toggleButton.inputOption.setValue(valueTitleKeys[i]);
+							break;
+						}
+					}
+				}
+
+				var option = toggleButton.inputOption;
+				toggleButton.style.webkitTransition = "initial";
+				toggleButton.classList.add("aaThemeColorOneShadedBorderColor");
+				toggleButton.offsetTop;
+				toggleButton.style.webkitTransition = "border-color 0.5s ease-in-out";
+				toggleButton.classList.remove("aaThemeColorOneShadedBorderColor");
+			}
+		</script>
+
+	</body>
+</html>

@@ -56,65 +56,102 @@
             background: rgba(15, 157, 88, 0.3);
             color: #fff;
         }
-        /* Transform panel */
+        /* Transform panel — tabbed 2-column layout, centered bottom */
         .transform-panel {
             position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(20, 20, 20, 0.85);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 10px 14px;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
             display: none;
-            min-width: 200px;
+            flex-direction: row;
+            overflow: hidden;
         }
-        .transform-panel.visible { display: block; }
-        .transform-panel h3 {
-            color: #ccc;
-            font-size: 13px;
-            margin: 0 0 8px;
+        .transform-panel.visible { display: flex; }
+        /* Left: tab buttons */
+        .transform-tabs {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255,255,255,0.1);
+            min-width: 80px;
+        }
+        .transform-tab {
+            padding: 10px 14px;
+            color: #888;
+            font-size: 12px;
             font-weight: 600;
+            cursor: pointer;
+            border: none;
+            background: none;
+            text-align: left;
+            white-space: nowrap;
         }
+        .transform-tab:hover { color: #ccc; background: rgba(255,255,255,0.04); }
+        .transform-tab.active { color: #fff; background: rgba(15,157,88,0.25); border-left: 3px solid #0f9d58; }
+        /* Right: tab content */
+        .transform-content {
+            padding: 12px 16px;
+            min-width: 640px;
+        }
+        .transform-content > div { display: none; }
+        .transform-content > div.active { display: block; }
         .transform-row {
             display: flex;
             align-items: center;
             gap: 6px;
-            margin-bottom: 4px;
-        }
-        .transform-row label {
-            color: #999;
-            font-size: 11px;
-            width: 35px;
-            flex-shrink: 0;
+            margin-bottom: 6px;
         }
         .transform-row input[type="range"] {
             flex: 1;
             -webkit-appearance: none;
             height: 4px;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.12);
             border-radius: 2px;
             outline: none;
+            min-width: 400px;
         }
         .transform-row input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
             background: #0f9d58;
             border-radius: 50%;
             cursor: pointer;
         }
         .transform-row .val {
             color: #aaa;
-            font-size: 10px;
-            width: 30px;
+            font-size: 11px;
+            width: 50px;
             text-align: right;
+            flex-shrink: 0;
         }
+        .axis-label {
+            color: #ccc;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 16px;
+            text-align: center;
+        }
+        .axis-label:hover { color: #0f9d58; }
+        .axis-preset {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 3px;
+            color: #999;
+            font-size: 9px;
+            padding: 2px 4px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .axis-preset:hover { color: #fff; background: rgba(255,255,255,0.15); }
         .transform-toggle {
             display: flex;
             align-items: center;
             gap: 6px;
-            margin-top: 6px;
+            margin-top: 8px;
             color: #999;
             font-size: 11px;
         }
@@ -140,55 +177,73 @@
         <div id="modelList"></div>
     </div>
     <div class="transform-panel" id="transformPanel">
-        <h3>Transform</h3>
-        <div class="transform-row">
-            <label class="axis-label" data-slider="pitchSlider">Pitch:</label>
-            <input type="range" id="pitchSlider" min="-180" max="180" value="0" step="1">
-            <span class="val" id="pitchVal">0</span>
+        <div class="transform-tabs">
+            <button class="transform-tab" data-tab="resetTab">RESET</button>
+            <button class="transform-tab active" data-tab="rotateTab">ROTATE</button>
+            <button class="transform-tab" data-tab="offsetTab">OFFSET</button>
+            <button class="transform-tab" data-tab="scaleTab">SCALE</button>
         </div>
-        <div class="transform-row">
-            <label class="axis-label" data-slider="yawSlider">Yaw:</label>
-            <input type="range" id="yawSlider" min="-180" max="180" value="0" step="1">
-            <span class="val" id="yawVal">0</span>
-        </div>
-        <div class="transform-row">
-            <label class="axis-label" data-slider="rollSlider">Roll:</label>
-            <input type="range" id="rollSlider" min="-180" max="180" value="0" step="1">
-            <span class="val" id="rollVal">0</span>
-        </div>
-        <div class="transform-toggle">
-            <input type="checkbox" id="worldRotation">
-            <label for="worldRotation">Use World Rotation</label>
-        </div>
-        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:6px 0">
-        <div class="transform-row">
-            <label class="axis-label" data-slider="offXSlider">X:</label>
-            <input type="range" id="offXSlider" min="-2" max="2" value="0" step="0.01">
-            <span class="val" id="offXVal">0</span>
-        </div>
-        <div class="transform-row">
-            <label class="axis-label" data-slider="offYSlider">Y:</label>
-            <input type="range" id="offYSlider" min="-2" max="2" value="0" step="0.01">
-            <span class="val" id="offYVal">0</span>
-        </div>
-        <div class="transform-row">
-            <label class="axis-label" data-slider="offZSlider">Z:</label>
-            <input type="range" id="offZSlider" min="-2" max="2" value="0" step="0.01">
-            <span class="val" id="offZVal">0</span>
-        </div>
-        <div class="transform-toggle">
-            <input type="checkbox" id="worldOffset">
-            <label for="worldOffset">Use World Offset</label>
-        </div>
-        <div class="transform-toggle">
-            <input type="checkbox" id="raycastOffset">
-            <label for="raycastOffset">Use Raycast Offset</label>
-        </div>
-        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.1);margin:6px 0">
-        <div class="transform-row">
-            <label class="axis-label" data-slider="scaleSlider">Scale:</label>
-            <input type="range" id="scaleSlider" min="0.1" max="10" value="1" step="0.1">
-            <span class="val" id="scaleVal">1.0</span>
+        <div class="transform-content">
+            <!-- Reset tab -->
+            <div id="resetTab"></div>
+            <!-- Rotate tab -->
+            <div id="rotateTab" class="active">
+                <div class="transform-row">
+                    <span class="axis-preset" data-slider="pitchSlider" data-val="-90">&#8630;</span>
+                    <span class="axis-label" data-slider="pitchSlider">P</span>
+                    <span class="axis-preset" data-slider="pitchSlider" data-val="90">&#8631;</span>
+                    <input type="range" id="pitchSlider" min="-180" max="180" value="0" step="1">
+                    <span class="val" id="pitchVal">0&deg;</span>
+                </div>
+                <div class="transform-row">
+                    <span class="axis-preset" data-slider="yawSlider" data-val="-90">&#8630;</span>
+                    <span class="axis-label" data-slider="yawSlider">Y</span>
+                    <span class="axis-preset" data-slider="yawSlider" data-val="90">&#8631;</span>
+                    <input type="range" id="yawSlider" min="-180" max="180" value="0" step="1">
+                    <span class="val" id="yawVal">0&deg;</span>
+                </div>
+                <div class="transform-row">
+                    <span class="axis-preset" data-slider="rollSlider" data-val="-90">&#8630;</span>
+                    <span class="axis-label" data-slider="rollSlider">R</span>
+                    <span class="axis-preset" data-slider="rollSlider" data-val="90">&#8631;</span>
+                    <input type="range" id="rollSlider" min="-180" max="180" value="0" step="1">
+                    <span class="val" id="rollVal">0&deg;</span>
+                </div>
+                <div class="transform-toggle">
+                    <input type="checkbox" id="worldRotation">
+                    <label for="worldRotation">Auto Rotation</label>
+                </div>
+            </div>
+            <!-- Offset tab -->
+            <div id="offsetTab">
+                <div class="transform-row">
+                    <span class="axis-label" data-slider="offXSlider">X</span>
+                    <input type="range" id="offXSlider" min="-2" max="2" value="0" step="0.005">
+                    <span class="val" id="offXVal">0 in</span>
+                </div>
+                <div class="transform-row">
+                    <span class="axis-label" data-slider="offYSlider">Y</span>
+                    <input type="range" id="offYSlider" min="-2" max="2" value="0" step="0.005">
+                    <span class="val" id="offYVal">0 in</span>
+                </div>
+                <div class="transform-row">
+                    <span class="axis-label" data-slider="offZSlider">Z</span>
+                    <input type="range" id="offZSlider" min="-2" max="2" value="0" step="0.005">
+                    <span class="val" id="offZVal">0 in</span>
+                </div>
+                <div class="transform-toggle" style="display:flex; gap:16px;">
+                    <span style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="worldOffset"><label for="worldOffset">World Offset</label></span>
+                    <span style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="raycastOffset"><label for="raycastOffset">Raycast Offset</label></span>
+                </div>
+            </div>
+            <!-- Scale tab -->
+            <div id="scaleTab">
+                <div class="transform-row">
+                    <span class="axis-label" data-slider="scaleSlider">&#x25FA;</span>
+                    <input type="range" id="scaleSlider" min="0.1" max="10" value="1" step="0.05">
+                    <span class="val" id="scaleVal">1.0</span>
+                </div>
+            </div>
         </div>
     </div>
     <div class="spawn-hint">Click to place &middot; Escape to cancel &middot; Scroll to change model &middot; RMB for transform</div>
@@ -327,12 +382,12 @@
         var oy = parseFloat(offYSlider.value);
         var oz = parseFloat(offZSlider.value);
         var sc = parseFloat(scaleSlider.value);
-        pitchVal.textContent = p;
-        yawVal.textContent = y;
-        rollVal.textContent = r;
-        offXVal.textContent = ox.toFixed(2);
-        offYVal.textContent = oy.toFixed(2);
-        offZVal.textContent = oz.toFixed(2);
+        pitchVal.innerHTML = p + '&deg;';
+        yawVal.innerHTML = y + '&deg;';
+        rollVal.innerHTML = r + '&deg;';
+        offXVal.textContent = ox.toFixed(2) + ' in';
+        offYVal.textContent = oy.toFixed(2) + ' in';
+        offZVal.textContent = oz.toFixed(2) + ' in';
         scaleVal.textContent = sc.toFixed(1);
         try {
             if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.setSpawnTransform)
@@ -378,16 +433,55 @@
     worldOffset.addEventListener('change', sendTransform);
     raycastOffset.addEventListener('change', sendTransform);
 
-    /* Click label to zero the slider */
+    /* Click label to zero the slider (scale resets to 1.0) */
     var axisLabels = document.querySelectorAll('.axis-label');
     for (var al = 0; al < axisLabels.length; al++) {
         (function(label) {
-            label.style.cursor = 'pointer';
             label.addEventListener('click', function() {
-                var slider = document.getElementById(label.getAttribute('data-slider'));
-                if (slider) { slider.value = 0; sendTransform(); }
+                var sliderId = label.getAttribute('data-slider');
+                var slider = document.getElementById(sliderId);
+                if (slider) {
+                    slider.value = (sliderId === 'scaleSlider') ? 1 : 0;
+                    sendTransform();
+                }
             });
         })(axisLabels[al]);
+    }
+
+    /* Preset buttons (-90, 90) */
+    var presetBtns = document.querySelectorAll('.axis-preset');
+    for (var pb = 0; pb < presetBtns.length; pb++) {
+        (function(btn) {
+            btn.addEventListener('click', function() {
+                var slider = document.getElementById(btn.getAttribute('data-slider'));
+                if (slider) { slider.value = btn.getAttribute('data-val'); sendTransform(); }
+            });
+        })(presetBtns[pb]);
+    }
+
+    /* Tab switching */
+    var tabs = document.querySelectorAll('.transform-tab');
+    var tabContents = document.querySelectorAll('.transform-content > div');
+    for (var ti = 0; ti < tabs.length; ti++) {
+        (function(tab) {
+            tab.addEventListener('click', function() {
+                var targetId = tab.getAttribute('data-tab');
+                /* Reset tab: zero everything and stay on rotate */
+                if (targetId === 'resetTab') {
+                    pitchSlider.value = 0; yawSlider.value = 0; rollSlider.value = 0;
+                    offXSlider.value = 0; offYSlider.value = 0; offZSlider.value = 0;
+                    scaleSlider.value = 1.0;
+                    worldRotation.checked = false; worldOffset.checked = false; raycastOffset.checked = false;
+                    sendTransform();
+                    return;
+                }
+                for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active');
+                for (var j = 0; j < tabContents.length; j++) tabContents[j].classList.remove('active');
+                tab.classList.add('active');
+                var target = document.getElementById(targetId);
+                if (target) target.classList.add('active');
+            });
+        })(tabs[ti]);
     }
 
     /* Load saved transform for current model, with initial scale override for clones */

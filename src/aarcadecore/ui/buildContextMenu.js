@@ -13,7 +13,16 @@ function initBuildContextMenu() {
     }
 
     if (!info) {
-        content.innerHTML = '<div class="aa-empty-message">No object aimed at.</div>';
+        content.innerHTML =
+            '<input type="text" class="aa-edit-row-input" id="pasteUrlInput" placeholder="Paste file or URL to spawn here..." style="width:100%; margin-top:12px;">' +
+            '<button class="aa-btn" style="margin-top:8px;" onclick="onPasteUrlSubmit()">Create Item</button>';
+        var input = content.querySelector('#pasteUrlInput');
+        if (input) {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); onPasteUrlSubmit(); }
+            });
+            input.focus();
+        }
         return;
     }
 
@@ -33,26 +42,38 @@ function initBuildContextMenu() {
         if (platformFile) infoLine = platformFile;
     }
 
+    var iconStyle = 'width:24px; height:24px; vertical-align:middle;';
+    var btnStyle = 'display:inline-block; width:auto; padding:6px 8px; margin:2px;';
+    function iconBtn(icon, helpText, onclick, extraClass) {
+        return '<button class="aa-btn' + (extraClass ? ' ' + extraClass : '') + '" style="' + btnStyle + '" onclick="' + onclick + '" helpText="' + helpText + '"><img src="icons/' + icon + '" style="' + iconStyle + '"></button>';
+    }
+
     var html =
         '<div class="aa-object-title">' + arcadeHud.ui.escapeHtml(title) + '</div>' +
         '<div class="aa-object-info">' + arcadeHud.ui.escapeHtml(infoLine) + '</div>' +
-        '<button class="aa-btn" onclick="onMoveObject()">Move Object</button>';
+        '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:8px;">' +
+        iconBtn('moveicon.png', 'Move Object', 'onMoveObject()');
 
     if (info.itemId) {
-        html += '<button class="aa-btn" onclick="onEditItem()">Edit Item</button>';
+        html += iconBtn('itemicon.png', 'Edit Item', 'onEditItem()');
+        html += iconBtn('itemicon.png', 'Launch', 'onLaunchItem()');
+        html += iconBtn('photoicon.png', 'Refresh Texture', 'onRefreshTexture()');
     }
 
     if (isModel) {
-        html += '<button class="aa-btn" onclick="onCaptureThumbnail()">Capture Thumbnail</button>';
+        html += iconBtn('photoicon.png', 'Capture Thumbnail', 'onCaptureThumbnail()');
     }
 
-    html += '<button class="aa-btn" onclick="onCloneObject()">Clone Object</button>';
+    html += iconBtn('cloneicon.png', 'Clone Object', 'onCloneObject()');
 
     if (!isModel) {
-        html += '<button class="aa-btn" id="mirrorBtn" onclick="onToggleMirror()">' + (isSlave ? 'Disable Mirror' : 'Enable Mirror') + '</button>';
+        var mirrorIcon = isSlave ? 'unscreenmirror.png' : 'screenmirror.png';
+        var mirrorHelp = isSlave ? 'Disable Mirror' : 'Enable Mirror';
+        html += '<button class="aa-btn" id="mirrorBtn" style="' + btnStyle + '" onclick="onToggleMirror()" helpText="' + mirrorHelp + '"><img src="icons/' + mirrorIcon + '" style="' + iconStyle + '"></button>';
     }
 
-    html += '<button class="aa-btn aa-btn-danger" onclick="onDestroyObject()">Destroy Object</button>';
+    html += iconBtn('trashicon.png', 'Destroy Object', 'onDestroyObject()', 'aa-btn-danger');
+    html += '</div>';
     content.innerHTML = html;
 
     /* Store info for button handlers */
@@ -63,6 +84,22 @@ function initBuildContextMenu() {
 function onMoveObject() {
     if (window.aapi && aapi.manager) {
         aapi.manager.moveAimedObject();
+        aapi.manager.closeMenu();
+    }
+}
+
+function onPasteUrlSubmit() {
+    var input = document.getElementById('pasteUrlInput');
+    var file = input ? input.value.trim() : '';
+    if (file) {
+        window.location.href = 'file:///aarcadecore/ui/createItem.html?file=' + encodeURIComponent(file);
+    }
+}
+
+function onRefreshTexture() {
+    var info = window._buildContextInfo;
+    if (info && info.itemId && window.aapi && aapi.manager && aapi.manager.refreshItemTextures) {
+        aapi.manager.refreshItemTextures(info.itemId);
         aapi.manager.closeMenu();
     }
 }
@@ -78,7 +115,21 @@ function onToggleMirror() {
     if (window.aapi && aapi.manager && aapi.manager.toggleSlaveAimedObject) {
         var newState = aapi.manager.toggleSlaveAimedObject();
         var btn = document.getElementById('mirrorBtn');
-        if (btn) btn.textContent = newState ? 'Disable Mirror' : 'Enable Mirror';
+        if (btn) {
+            btn.innerHTML = '<img src="icons/' + (newState ? 'unscreenmirror.png' : 'screenmirror.png') + '" style="width:24px; height:24px; vertical-align:middle;">';
+            btn.setAttribute('helpText', newState ? 'Disable Mirror' : 'Enable Mirror');
+        }
+    }
+}
+
+function onLaunchItem() {
+    var info = window._buildContextInfo;
+    if (info && info.itemId && window.aapi && aapi.manager && aapi.manager.launchItem) {
+        var ok = aapi.manager.launchItem(info.itemId);
+        if (ok)
+            window.location.href = 'file:///aarcadecore/ui/pause.html';
+        else
+            window.location.href = 'file:///aarcadecore/ui/launchFailed.html';
     }
 }
 

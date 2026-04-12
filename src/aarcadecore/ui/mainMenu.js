@@ -8,33 +8,14 @@ function initMainMenu() {
     });
 
     content.innerHTML =
-        '<button class="aa-btn" helpText="Central control hub with tabbed interface." onclick="onTabMenu()">Tab Menu</button>' +
-        '<button class="aa-btn" helpText="Browse and spawn items from the media library." onclick="onLibraryBrowser()">Library Browser</button>' +
-        '<button class="aa-btn" helpText="View and manage active embedded instances." onclick="onTaskMenu()">Task Menu</button>' +
-        '<button class="aa-btn" helpText="Start a test Libretro emulator instance." onclick="onTestLibretro()">Test Libretro</button>' +
+        '<button class="aa-btn" helpText="Close this menu and return to the game." onclick="onResume()">Resume</button>' +
         '<button class="aa-btn" helpText="Configure settings and import library data." onclick="onOptions()">Options</button>' +
-        '<button class="aa-btn" helpText="Convert and merge media library databases." onclick="onDatabaseTools()">Database Tools</button>' +
-        '<button class="aa-btn" helpText="Open the engine\'s built-in main menu." onclick="onEngineMenu()">Engine Main Menu</button>';
+        '<button class="aa-btn" helpText="Open the engine\'s built-in main menu." onclick="onEngineMenu()">Engine Main Menu</button>' +
+        '<button class="aa-btn" helpText="Pause the engine and idle at minimal CPU usage." onclick="onPause()">Pause</button>';
 }
 
-function onTabMenu() {
-    if (window.aapi && aapi.manager) aapi.manager.openTabMenu();
-}
-
-function onLibraryBrowser() {
-    if (window.aapi && aapi.manager) aapi.manager.openLibraryBrowser();
-}
-
-function onTaskMenu() {
-    if (window.aapi && aapi.manager) aapi.manager.openTaskMenu();
-}
-
-function onTestLibretro() {
-    if (window.aapi && aapi.manager) aapi.manager.startLibretro();
-}
-
-function onDatabaseTools() {
-    window.location.href = 'file:///aarcadecore/ui/databaseTools.html';
+function onResume() {
+    if (window.aapi && aapi.manager) aapi.manager.closeMenu();
 }
 
 function onOptions() {
@@ -43,4 +24,8 @@ function onOptions() {
 
 function onEngineMenu() {
     if (window.aapi && aapi.manager) aapi.manager.openEngineMenu();
+}
+
+function onPause() {
+    window.location.href = 'file:///aarcadecore/ui/pause.html';
 }

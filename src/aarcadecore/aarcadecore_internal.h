@@ -15,7 +15,8 @@ typedef enum {
     EMBEDDED_NONE = 0,
     EMBEDDED_LIBRETRO,
     EMBEDDED_STEAMWORKS_BROWSER,
-    EMBEDDED_ULTRALIGHT
+    EMBEDDED_ULTRALIGHT,
+    EMBEDDED_VIDEO_PLAYER
 } EmbeddedInstanceType;
 
 typedef struct EmbeddedInstance EmbeddedInstance;

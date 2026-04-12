@@ -137,6 +137,9 @@ public:
     /* Re-request images for an existing SpawnedObject */
     void reloadImagesForThing(int thingIdx);
 
+    /* Force re-download and re-apply textures for all instances of an item */
+    void refreshItemTextures(const std::string& itemId);
+
     /* Get the template name for a spawned object by thingIdx */
     std::string getTemplateForThing(int thingIdx) const;
 
@@ -155,6 +158,9 @@ public:
     /* Count how many spawned objects use a given item or model */
     int countItemUsage(const std::string& itemId) const;
     int countModelUsage(const std::string& modelId) const;
+
+    /* Register a single adopted template into the library */
+    bool registerAdoptedTemplate(const char* templateName);
 
     /* Import adopted templates from addon-static.jkl into the library */
     struct ImportResult { int created; int total; };

@@ -600,6 +600,18 @@ bool ImageLoader::getPixels(const std::string& cachePath, uint8_t** pixelsOut, i
     return true;
 }
 
+void ImageLoader::clearPixelCache(const std::string& cachePath)
+{
+    std::lock_guard<std::mutex> lock(pixelCacheMutex_);
+    auto it = pixelCache_.find(cachePath);
+    if (it != pixelCache_.end()) {
+        delete[] it->second.pixels;
+        pixelCache_.erase(it);
+    }
+    /* Also delete the on-disk cache file so it gets re-downloaded */
+    std::remove(cachePath.c_str());
+}
+
 // --- LoadListener ---
 
 void ImageLoader::setupJSBridge()

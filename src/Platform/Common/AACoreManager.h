@@ -81,6 +81,13 @@ void AACoreManager_ToggleBuildContextMenu(void);
 bool AACoreManager_IsFullscreenActive(void);
 void AACoreManager_ExitFullscreen(void);
 
+/* Check if player has fists equipped (AArcade keybinds only active with fists) */
+bool AACoreManager_AreFistsOut(void);
+
+/* Suppress FIRE1/FIRE2 when AArcade is handling mouse input */
+void AACoreManager_SetSuppressFire(int suppress);
+bool AACoreManager_IsSuppressingFire(void);
+
 /* Weapon slot key notification — returns true if the keypress should be swallowed */
 bool AACoreManager_OnWeaponSlotPressed(int slot);
 
@@ -90,6 +97,10 @@ bool AACoreManager_AdoptAimedModel(void);
 /* Per-thing render hooks — swap cloned texture before/after rdThing_Draw */
 void AACoreManager_PreRenderThing(void* pSithThing);
 void AACoreManager_PostRenderThing(void* pSithThing);
+
+/* Deep sleep — engine idles at minimal CPU until woken by Escape key */
+int AACoreManager_IsDeepSleeping(void);
+void AACoreManager_ExitDeepSleep(void);
 
 #ifdef __cplusplus
 }

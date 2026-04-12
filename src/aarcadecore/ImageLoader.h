@@ -35,6 +35,7 @@ public:
     bool isInitialized() const { return isInitialized_; }
 
     bool getPixels(const std::string& cachePath, uint8_t** pixelsOut, int* widthOut, int* heightOut);
+    void clearPixelCache(const std::string& cachePath);
 
     /* Save a snapshot of raw BGRA pixels to cache/snapshots/{hash}.png keyed by itemId */
     bool saveSnapshot(const std::string& key, const uint8_t* bgraPixels, int width, int height);
