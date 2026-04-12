@@ -16,6 +16,7 @@
 #include "../../Primitives/rdModel3.h"
 #include "../../Engine/sithCollision.h"
 #include "../../Gameplay/sithPlayer.h"
+#include "../../Gameplay/sithInventory.h"
 #include "../../Gameplay/sithTime.h"
 #include "../../Primitives/rdMatrix.h"
 #include "../../Primitives/rdVector.h"
@@ -24,6 +25,7 @@
 #include "../../Main/jkRes.h"
 #include "../../General/stdFnames.h"
 #include "../../Devices/sithConsole.h"
+#include "../../Devices/sithSoundMixer.h"
 #include "globals.h"
 
 #include "SDL2_helper.h"
@@ -108,12 +110,17 @@ static aarcadecore_is_fullscreen_active_t g_fn_is_fullscreen_active = NULL;
 static aarcadecore_exit_fullscreen_t g_fn_exit_fullscreen = NULL;
 static aarcadecore_mark_thing_seen_t g_fn_mark_thing_seen = NULL;
 static aarcadecore_is_task_visible_t g_fn_is_task_visible = NULL;
+static aarcadecore_register_adopted_template_t g_fn_register_adopted_template = NULL;
 static aarcadecore_action_command_t g_fn_action_command = NULL;
+static aarcadecore_deep_sleep_requested_t g_fn_deep_sleep_requested = NULL;
+static aarcadecore_deep_sleep_changed_t   g_fn_deep_sleep_changed = NULL;
+static int g_deepSleep = 0;
 
 /* Forward declarations */
 static void host_get_current_map(char* mapKeyOut, int mapKeySize);
 static int  host_is_template_cabinet(const char* templateName);
 static int  host_capture_rect_pixels(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
+static void host_reset_thing_texture(int thingIdx);
 
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
@@ -385,7 +392,10 @@ void AACoreManager_Init(void)
     LOAD_FN(exit_fullscreen)
     LOAD_FN(mark_thing_seen)
     LOAD_FN(is_task_visible)
+    LOAD_FN(register_adopted_template)
     LOAD_FN(action_command)
+    LOAD_FN(deep_sleep_requested)
+    LOAD_FN(deep_sleep_changed)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -405,6 +415,7 @@ void AACoreManager_Init(void)
     callbacks.get_current_map = host_get_current_map;
     callbacks.is_template_cabinet = host_is_template_cabinet;
     callbacks.capture_rect_pixels = host_capture_rect_pixels;
+    callbacks.reset_thing_texture = host_reset_thing_texture;
 
     if (!g_fn_init(&callbacks)) {
         stdPlatform_Printf("AACoreManager: DLL init failed\n");
@@ -530,7 +541,11 @@ void AACoreManager_Shutdown(void)
     g_fn_exit_fullscreen = NULL;
     g_fn_mark_thing_seen = NULL;
     g_fn_is_task_visible = NULL;
+    g_fn_register_adopted_template = NULL;
     g_fn_action_command = NULL;
+    g_fn_deep_sleep_requested = NULL;
+    g_fn_deep_sleep_changed = NULL;
+    g_deepSleep = 0;
 
     for (int i = 0; i < MAX_TASKS; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
@@ -733,10 +748,47 @@ static sithThing* aacore_spawn_at_position(float px, float py, float pz, int sec
 
 static int g_wasFullscreen = 0;
 
+static void AACoreManager_EnterDeepSleep(void)
+{
+    if (g_deepSleep) return;
+    if (g_fn_deep_sleep_changed)
+        g_fn_deep_sleep_changed(1);
+    g_deepSleep = 1;
+    sithTime_Pause();
+    sithSoundMixer_StopAll();
+    if (g_audio_dev > 0)
+        SDL_PauseAudioDevice(g_audio_dev, 1);
+    stdPlatform_Printf("AACoreManager: Entering deep sleep\n");
+}
+
+void AACoreManager_ExitDeepSleep(void)
+{
+    if (!g_deepSleep) return;
+    g_deepSleep = 0;
+    sithTime_Resume();
+    sithSoundMixer_ResumeAll();
+    if (g_audio_dev > 0)
+        SDL_PauseAudioDevice(g_audio_dev, 0);
+    if (g_fn_deep_sleep_changed)
+        g_fn_deep_sleep_changed(0);
+    stdPlatform_Printf("AACoreManager: Waking from deep sleep\n");
+}
+
+int AACoreManager_IsDeepSleeping(void)
+{
+    return g_deepSleep;
+}
+
 void AACoreManager_Update(void)
 {
     if (g_fn_update)
         g_fn_update();
+
+    /* Poll deep sleep request (fire & forget — DLL auto-clears after returning true) */
+    if (!g_deepSleep && g_fn_deep_sleep_requested && g_fn_deep_sleep_requested()) {
+        AACoreManager_EnterDeepSleep();
+    }
+    if (g_deepSleep) return;
 
     /* Pause/resume engine when entering/exiting fullscreen */
     {
@@ -1296,6 +1348,18 @@ void AACoreManager_Update(void)
     }
 }
 
+static int g_suppressFire = 0;
+
+void AACoreManager_SetSuppressFire(int suppress) { g_suppressFire = suppress; }
+bool AACoreManager_IsSuppressingFire(void) { return g_suppressFire != 0; }
+
+bool AACoreManager_AreFistsOut(void)
+{
+    if (sithPlayer_pLocalPlayerThing && sithPlayer_pLocalPlayerThing->actorParams.playerinfo)
+        return sithInventory_GetCurWeapon(sithPlayer_pLocalPlayerThing) == SITHBIN_FISTS;
+    return false;
+}
+
 bool AACoreManager_IsActive(void)
 {
     if (g_fn_is_active)
@@ -1725,6 +1789,18 @@ static int host_capture_rect_pixels(int x, int y, int w, int h, void** pixelsOut
     *outW = fbRectW;
     *outH = fbRectH;
     return 1;
+}
+
+static void host_reset_thing_texture(int thingIdx)
+{
+    for (int i = 0; i < g_thingTaskCount; i++) {
+        if (g_thingTaskMap[i].thingIdx == thingIdx) {
+            g_thingTaskMap[i].imageLoaded = 0;
+            g_thingTaskMap[i].marqueeImageLoaded = 0;
+            stdPlatform_Printf("AACoreManager: Reset texture polling for thingIdx=%d\n", thingIdx);
+            return;
+        }
+    }
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)
@@ -2231,6 +2307,10 @@ bool AACoreManager_AdoptAimedModel(void)
     /* Write updated addon-static.jkl */
     AACoreManager_WriteAddonJkl(addonJklPath, existingModels, existingModelCount,
                                  existingTemplates, existingTemplateCount);
+
+    /* Register the adopted template into the library */
+    if (g_fn_register_adopted_template)
+        g_fn_register_adopted_template(fullTemplateName);
 
     char msg[128];
     snprintf(msg, sizeof(msg), "Adopted: %s (template: %s)", modelFilename, fullTemplateName);

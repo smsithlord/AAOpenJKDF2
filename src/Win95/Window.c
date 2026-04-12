@@ -397,6 +397,146 @@ int Window_menu_mouseY = 0;
 
 extern int jkGuiBuildMulti_bRendering;
 
+/* ========================================================================
+ * Win32 OLE IDropTarget — accepts file paths and URLs from drag-and-drop
+ * (Chrome bookmarks, Explorer files, browser URL bar drags, etc.)
+ * ======================================================================== */
+#ifdef _WIN32
+#include <ole2.h>
+#include <shellapi.h>
+#include <SDL_syswm.h>
+
+typedef struct AADropTarget {
+    IDropTargetVtbl *lpVtbl;
+    LONG refCount;
+    CLIPFORMAT cfUrlW;
+    CLIPFORMAT cfUrlA;
+    HWND hwnd;
+} AADropTarget;
+
+static HRESULT STDMETHODCALLTYPE AADrop_QueryInterface(IDropTarget *This, REFIID riid, void **ppv) {
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IDropTarget)) {
+        *ppv = This;
+        This->lpVtbl->AddRef(This);
+        return S_OK;
+    }
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+static ULONG STDMETHODCALLTYPE AADrop_AddRef(IDropTarget *This) {
+    return InterlockedIncrement(&((AADropTarget*)This)->refCount);
+}
+static ULONG STDMETHODCALLTYPE AADrop_Release(IDropTarget *This) {
+    LONG r = InterlockedDecrement(&((AADropTarget*)This)->refCount);
+    if (r == 0) free(This);
+    return r;
+}
+static HRESULT STDMETHODCALLTYPE AADrop_DragEnter(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) {
+    *pdwEffect = DROPEFFECT_COPY;
+    return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE AADrop_DragOver(IDropTarget *This, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) {
+    *pdwEffect = DROPEFFECT_COPY;
+    return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE AADrop_DragLeave(IDropTarget *This) { return S_OK; }
+
+static HRESULT STDMETHODCALLTYPE AADrop_Drop(IDropTarget *This, IDataObject *pDataObj, DWORD grfKeyState, POINTL pt, DWORD *pdwEffect) {
+    AADropTarget *self = (AADropTarget*)This;
+    *pdwEffect = DROPEFFECT_COPY;
+
+    /* Only accept drops when in a level with fists out */
+    if (!jkGame_isDDraw || !AACoreManager_AreFistsOut())
+        return S_OK;
+
+    SetForegroundWindow(self->hwnd);
+
+    /* Try CF_HDROP first (file paths from Explorer) */
+    FORMATETC fmtHdrop = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM stg = {0};
+    if (SUCCEEDED(pDataObj->lpVtbl->GetData(pDataObj, &fmtHdrop, &stg))) {
+        HDROP hDrop = (HDROP)stg.hGlobal;
+        char path[2048];
+        if (DragQueryFileA(hDrop, 0, path, sizeof(path)))
+            AACoreManager_OpenCreateItemWithFile(path);
+        ReleaseStgMedium(&stg);
+        return S_OK;
+    }
+
+    /* Try UniformResourceLocatorW (Chrome/browser URL drag, Unicode) */
+    FORMATETC fmtUrlW = { self->cfUrlW, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    if (self->cfUrlW && SUCCEEDED(pDataObj->lpVtbl->GetData(pDataObj, &fmtUrlW, &stg))) {
+        const WCHAR *wurl = (const WCHAR*)GlobalLock(stg.hGlobal);
+        if (wurl) {
+            char url[2048];
+            WideCharToMultiByte(CP_UTF8, 0, wurl, -1, url, sizeof(url), NULL, NULL);
+            GlobalUnlock(stg.hGlobal);
+            AACoreManager_OpenCreateItemWithFile(url);
+        }
+        ReleaseStgMedium(&stg);
+        return S_OK;
+    }
+
+    /* Try UniformResourceLocator (ANSI) */
+    FORMATETC fmtUrlA = { self->cfUrlA, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    if (self->cfUrlA && SUCCEEDED(pDataObj->lpVtbl->GetData(pDataObj, &fmtUrlA, &stg))) {
+        const char *url = (const char*)GlobalLock(stg.hGlobal);
+        if (url) {
+            char buf[2048] = {0};
+            strncpy(buf, url, sizeof(buf) - 1);
+            GlobalUnlock(stg.hGlobal);
+            AACoreManager_OpenCreateItemWithFile(buf);
+        }
+        ReleaseStgMedium(&stg);
+        return S_OK;
+    }
+
+    /* Fallback: CF_UNICODETEXT */
+    FORMATETC fmtText = { CF_UNICODETEXT, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    if (SUCCEEDED(pDataObj->lpVtbl->GetData(pDataObj, &fmtText, &stg))) {
+        const WCHAR *wtext = (const WCHAR*)GlobalLock(stg.hGlobal);
+        if (wtext) {
+            char text[2048];
+            WideCharToMultiByte(CP_UTF8, 0, wtext, -1, text, sizeof(text), NULL, NULL);
+            GlobalUnlock(stg.hGlobal);
+            AACoreManager_OpenCreateItemWithFile(text);
+        }
+        ReleaseStgMedium(&stg);
+        return S_OK;
+    }
+
+    return S_OK;
+}
+
+static IDropTargetVtbl g_AADropTargetVtbl = {
+    AADrop_QueryInterface, AADrop_AddRef, AADrop_Release,
+    AADrop_DragEnter, AADrop_DragOver, AADrop_DragLeave, AADrop_Drop
+};
+
+static void Window_RegisterDropTarget(SDL_Window *window)
+{
+    SDL_SysWMinfo wminfo;
+    SDL_VERSION(&wminfo.version);
+    if (!SDL_GetWindowWMInfo(window, &wminfo))
+        return;
+    HWND hwnd = wminfo.info.win.window;
+
+    OleInitialize(NULL);
+
+    /* Remove SDL's built-in drop target so ours takes priority */
+    RevokeDragDrop(hwnd);
+
+    AADropTarget *dt = (AADropTarget*)calloc(1, sizeof(AADropTarget));
+    dt->lpVtbl = &g_AADropTargetVtbl;
+    dt->refCount = 1;
+    dt->cfUrlW = RegisterClipboardFormatA("UniformResourceLocatorW");
+    dt->cfUrlA = RegisterClipboardFormatA("UniformResourceLocator");
+    dt->hwnd = hwnd;
+
+    RegisterDragDrop(hwnd, (IDropTarget*)dt);
+}
+#endif /* _WIN32 */
+
 void Window_HandleMouseMove(SDL_MouseMotionEvent *event)
 {
     int x = event->x;
@@ -920,7 +1060,8 @@ void Window_SdlUpdate()
                     }
                     break; /* AArcade consumed the key — don't forward to game */
                 }
-                if (event.key.keysym.sym == SDLK_v && (SDL_GetModState() & KMOD_CTRL))
+                if (event.key.keysym.sym == SDLK_v && (SDL_GetModState() & KMOD_CTRL)
+                    && jkGame_isDDraw && AACoreManager_AreFistsOut())
                 {
                     /* Read clipboard and open Create Item page if text is available */
                     char clipText[2048] = {0};
@@ -940,11 +1081,16 @@ void Window_SdlUpdate()
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
-                    /* AArcade intercepts escape — aaMainMenu_Update handles it via SDL.
-                     * Don't let engine open its own escape menu. */
+                    /* AArcade intercepts escape when fists are out or already in an AA mode */
+                    if (AACoreManager_AreFistsOut() || AACoreManager_IsInputModeActive()
+                        || AACoreManager_IsMainMenuOpen() || AACoreManager_IsSpawnModeActive()
+                        || AACoreManager_IsFullscreenActive())
+                        break;
+                    /* Forward to engine for normal pause menu */
+                    Window_msg_main_handler(g_hWnd, WM_KEYFIRST, VK_ESCAPE, event.key.repeat & 0xFFFF);
                     break;
                 }
-                else if (event.key.keysym.sym == SDLK_PAGEUP)
+                if (event.key.keysym.sym == SDLK_PAGEUP)
                 {
                     Window_msg_main_handler(g_hWnd, WM_KEYFIRST, VK_PRIOR, event.key.repeat & 0xFFFF);
                 }
@@ -1261,6 +1407,15 @@ void Window_SdlUpdate()
                 //       event.caxis.which, event.caxis.axis, event.caxis.value);
                 break;
 
+            case SDL_DROPFILE:
+            case SDL_DROPTEXT:
+                if (event.drop.file) {
+                    if (jkGame_isDDraw && AACoreManager_AreFistsOut())
+                        AACoreManager_OpenCreateItemWithFile(event.drop.file);
+                    SDL_free(event.drop.file);
+                }
+                break;
+
             case SDL_QUIT:
                 stdPlatform_Printf("Quit!\n");
 
@@ -1571,15 +1726,40 @@ void Window_RecreateSDL2Window()
     SDL_GL_GetDrawableSize(displayWindow, &Window_xSize, &Window_ySize);
     SDL_GetWindowSize(displayWindow, &Window_screenXSize, &Window_screenYSize);
 
+#ifdef _WIN32
+    Window_RegisterDropTarget(displayWindow);
+#endif
+
     Window_resized = 1;
 }
 
 void Window_Main_Loop()
 {
-    jkMain_GuiAdvance(); // TODO needed?
+    if (AACoreManager_IsDeepSleeping()) {
+        /* Minimal loop: pump SDL events so OS doesn't mark window as hung */
+        SDL_Event evt;
+        while (SDL_PollEvent(&evt)) {
+            if (evt.type == SDL_QUIT) {
+                g_should_exit = 1;
+                return;
+            }
+            if (evt.type == SDL_WINDOWEVENT) {
+                Window_HandleWindowEvent(&evt);
+            }
+            if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_ESCAPE) {
+                AACoreManager_ExitDeepSleep();
+                return;
+            }
+        }
+        /* Call DLL update so it can process sleep-enter polling */
+        AACoreManager_Update();
+        /* Sleep to minimize CPU — 10 iterations/sec is plenty for Escape detection */
+        SDL_Delay(100);
+        return;
+    }
+
+    jkMain_GuiAdvance();
     Window_msg_main_handler(g_hWnd, WM_PAINT, 0, 0);
-    
-    //Window_SdlUpdate();
 }
 
 int Window_Main_Linux(int argc, char** argv)

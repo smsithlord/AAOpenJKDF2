@@ -237,6 +237,8 @@
 #define STDGOB_MAX_GOBS (64)
 #endif
 
+#define JKEPISODE_MAX_EPISODES (256)
+
 #define RDPUPPET_MAX_TRACKS (4)
 #define RDPUPPET_MAX_NODES (64)
 

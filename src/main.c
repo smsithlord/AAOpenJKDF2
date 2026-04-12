@@ -332,6 +332,14 @@ extern "C"
 #endif
 #endif // TARGET_TWL
 
+#if defined(_WIN32) && defined(OPENJKDF2_NO_CONSOLE)
+#include <windows.h>
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+{
+    return main(__argc, __argv);
+}
+#endif
+
 int main(int argc, char** argv)
 {
 #ifdef ARCH_WASM
@@ -561,6 +569,9 @@ int main(int argc, char** argv)
 #endif
 #ifdef WIN64_STANDALONE
     int skipConsoleWindow = 0;
+#ifdef OPENJKDF2_NO_CONSOLE
+    skipConsoleWindow = 1;
+#endif
     if ((SDL_GetHintBoolean("SteamClientLaunch", 0) || SDL_GetHintBoolean("SteamOS", 0) || SDL_GetHintBoolean("SteamDeck", 0)) && SDL_GetHintBoolean("SteamGamepadUI", 0)) {
         skipConsoleWindow = 1;
     }

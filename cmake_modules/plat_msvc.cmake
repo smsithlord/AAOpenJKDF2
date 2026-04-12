@@ -43,8 +43,8 @@ macro(plat_link_and_package)
     if(CMAKE_BUILD_TYPE STREQUAL Release OR
        CMAKE_BUILD_TYPE STREQUAL MinSizeRel OR
        CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo)
-        # TODO: Implement WinMain() for this to work nicely
-        set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+        set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
+        target_compile_definitions(${BIN_NAME} PRIVATE OPENJKDF2_NO_CONSOLE)
     elseif(CMAKE_BUILD_TYPE STREQUAL Debug)
         set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
     endif()
