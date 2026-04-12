@@ -753,9 +753,10 @@ void jkHudInv_InputInit()
     sithControl_MapFunc(INPUT_FUNC_CAMERAMODE, DIK_F1, 0);
     sithControl_MapFunc(INPUT_FUNC_ACTIVATE16, DIK_F2, 0);
     sithControl_MapFunc(INPUT_FUNC_ACTIVATE15, DIK_F3, 0);
-    sithControl_MapFunc(INPUT_FUNC_ACTIVATE14, DIK_F4, 0);
+    /* F4 and F6 are claimed by AArcade (Tasks Tab, Library Tab) */
+    // sithControl_MapFunc(INPUT_FUNC_ACTIVATE14, DIK_F4, 0);
     sithControl_MapFunc(INPUT_FUNC_ACTIVATE0, DIK_F5, 0);
-    sithControl_MapFunc(INPUT_FUNC_ACTIVATE1, DIK_F6, 0);
+    // sithControl_MapFunc(INPUT_FUNC_ACTIVATE1, DIK_F6, 0);
     sithControl_MapFunc(INPUT_FUNC_ACTIVATE2, DIK_F7, 0);
     sithControl_MapFunc(INPUT_FUNC_ACTIVATE3, DIK_F8, 0);
 }

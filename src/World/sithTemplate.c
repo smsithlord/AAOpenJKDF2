@@ -10,6 +10,7 @@
 #include "jk.h"
 
 int sithTemplate_addonReserve = 0;
+static int sithTemplate_addonStartIndex = -1; /* index where addon templates begin in static world */
 
 int sithTemplate_Startup()
 {
@@ -95,6 +96,7 @@ int sithTemplate_Load(sithWorld *world, int a2)
 
     // If static world, also load addon template entries (conffile nesting)
     if (world->level_type_maybe & 1) {
+        sithTemplate_addonStartIndex = world->numTemplatesLoaded;
         char addonPath[128];
         char addonSection[64];
         stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
@@ -117,6 +119,88 @@ int sithTemplate_Load(sithWorld *world, int a2)
     }
 
     return 1;
+}
+
+void sithTemplate_ReloadAddon(void)
+{
+    sithWorld* world = sithWorld_pStatic;
+    if (!world || sithTemplate_addonStartIndex < 0) return;
+
+    /* Count how many addon templates are in the current file */
+    int newAddonCount = 0;
+    {
+        char scanPath[128];
+        char scanSection[64];
+        stdFnames_MakePath(scanPath, 128, "jkl", "addon-static.jkl");
+        if (stdConffile_OpenRead(scanPath)) {
+            while (stdConffile_ReadLine()) {
+                if (_sscanf(stdConffile_aLine, " section: %s", scanSection) == 1
+                    && !__strcmpi(scanSection, "templates")) {
+                    if (stdConffile_ReadArgs()) {
+                        newAddonCount = _atoi(stdConffile_entry.args[2].value);
+                    }
+                    break;
+                }
+            }
+            stdConffile_Close();
+        }
+    }
+
+    /* Grow array if current capacity is insufficient */
+    int needed = sithTemplate_addonStartIndex + newAddonCount;
+    if (needed > world->numTemplates) {
+        sithThing* newArr = (sithThing*)pSithHS->alloc(sizeof(sithThing) * needed);
+        if (!newArr) return;
+        _memcpy(newArr, world->templates, sizeof(sithThing) * world->numTemplatesLoaded);
+        /* Init new slots */
+        for (int i = world->numTemplates; i < needed; i++) {
+            _memset(&newArr[i], 0, sizeof(sithThing));
+            sithThing_DoesRdThingInit(&newArr[i]);
+            newArr[i].thingIdx = 0x8000 | i;
+        }
+        /* Update hashtable pointers — templates are looked up by name, not by pointer from things */
+        for (int i = 0; i < world->numTemplatesLoaded; i++) {
+#ifdef STDHASHTABLE_CRC32_KEYS
+            stdHashTable_FreeKeyCrc32(sithTemplate_hashmap, world->templates[i].templateNameCrc);
+            stdHashTable_SetKeyVal(sithTemplate_hashmap, newArr[i].template_name, &newArr[i]);
+#else
+            stdHashTable_FreeKey(sithTemplate_hashmap, world->templates[i].template_name);
+            stdHashTable_SetKeyVal(sithTemplate_hashmap, newArr[i].template_name, &newArr[i]);
+#endif
+        }
+        pSithHS->free(world->templates);
+        world->templates = newArr;
+        world->numTemplates = needed;
+    }
+
+    /* Don't free/replace existing templates — spawned things reference them.
+     * sithTemplate_CreateEntry checks the hashtable and skips duplicates.
+     * We only add genuinely new templates that weren't in the previous load. */
+    char addonPath[128];
+    char addonSection[64];
+    sithWorld* oldLoading = sithWorld_pLoading;
+    sithWorld_pLoading = world;
+    stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
+    if (stdConffile_OpenRead(addonPath)) {
+        while (stdConffile_ReadLine()) {
+            if (_sscanf(stdConffile_aLine, " section: %s", addonSection) == 1
+                && !__strcmpi(addonSection, "templates")) {
+                if (stdConffile_ReadArgs()) { /* skip "world templates N" header */
+                    while (stdConffile_ReadArgs()) {
+                        if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                            break;
+                        sithTemplate_CreateEntry(world);
+                    }
+                }
+                break;
+            }
+        }
+        stdConffile_Close();
+    }
+    sithWorld_pLoading = oldLoading;
+
+    jk_printf("sithTemplate: Addon templates now at %d (addon start: %d)\n",
+              world->numTemplatesLoaded, sithTemplate_addonStartIndex);
 }
 
 int sithTemplate_OldNew(char *fpath)

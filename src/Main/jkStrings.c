@@ -30,14 +30,11 @@ int jkStrings_Startup()
     stdStrTable_Load(&jkStrings_tableExt, "ui\\openjkdf2.uni");
 
     /* AArcade: Inject keybind labels into the string table so they always exist,
-     * even if a mod overrides the .uni file without our entries. */
+     * even if a mod overrides the .uni file without our entries.
+     * Currently disabled — we don't inject string table entries for now. */
+#if 0
     {
         static stdStrMsg aaStrMsgs[] = {
-            { "AATASKSTAB",   L"Tasks Tab",   0 },
-            { "AALIBRARYTAB", L"Library Tab",  0 },
-            { "AATABMENU",    L"Tab Menu",     0 },
-            { "AASELECT",     L"Select",       0 },
-            { "AABUILD",      L"Build",        0 },
             { "AAREMEMBER",      L"Remember",      0 },
             { "AAVIRTUALINPUT",  L"Virtual Input",  0 },
             { "AAINPUTLOCK",     L"Input Lock",     0 },
@@ -45,13 +42,13 @@ int jkStrings_Startup()
         if (!jkStrings_tableExt.hashtable) {
             jkStrings_tableExt.hashtable = stdHashTable_New(16);
         }
-        for (int i = 0; i < 5; i++) {
-            /* Only add if not already present (don't override mod customizations) */
+        for (int i = 0; i < 3; i++) {
             if (!stdStrTable_GetUniString(&jkStrings_tableExt, aaStrMsgs[i].key)) {
                 stdHashTable_SetKeyVal(jkStrings_tableExt.hashtable, aaStrMsgs[i].key, &aaStrMsgs[i]);
             }
         }
     }
+#endif
 #endif // QOL_IMPROVEMENTS
 
     jkStrings_bInitialized = 1;

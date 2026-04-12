@@ -10,6 +10,7 @@
 
 static stdHashTable* sithModel_hashtable;
 int sithModel_addonReserve = 0;
+static int sithModel_addonStartIndex = -1; /* index where addon models begin in static world */
 
 int sithModel_Startup()
 {
@@ -64,6 +65,7 @@ int sithModel_Load(sithWorld *world, int a2)
 
     // If static world, also load addon model entries (conffile nesting)
     if (world->level_type_maybe & 1) {
+        sithModel_addonStartIndex = world->numModelsLoaded;
         char addonPath[128];
         char addonSection[64];
         stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
@@ -104,6 +106,87 @@ void sithModel_Free(sithWorld *world)
     world->models = 0;
     world->numModelsLoaded = 0;
     world->numModels = 0;
+}
+
+void sithModel_ReloadAddon(void)
+{
+    sithWorld* world = sithWorld_pStatic;
+    if (!world || sithModel_addonStartIndex < 0) return;
+
+    /* Count how many addon models are in the current file */
+    int newAddonCount = 0;
+    {
+        char scanPath[128];
+        char scanSection[64];
+        stdFnames_MakePath(scanPath, 128, "jkl", "addon-static.jkl");
+        if (stdConffile_OpenRead(scanPath)) {
+            while (stdConffile_ReadLine()) {
+                if (_sscanf(stdConffile_aLine, " section: %s", scanSection) == 1
+                    && !__strcmpi(scanSection, "models")) {
+                    if (stdConffile_ReadArgs()) {
+                        newAddonCount = _atoi(stdConffile_entry.args[2].value);
+                    }
+                    break;
+                }
+            }
+            stdConffile_Close();
+        }
+    }
+
+    /* Grow array if current capacity is insufficient */
+    int needed = sithModel_addonStartIndex + newAddonCount;
+    if (needed > (int)world->numModels) {
+        rdModel3* oldArr = world->models;
+        rdModel3* newArr = (rdModel3*)pSithHS->alloc(sizeof(rdModel3) * needed);
+        if (!newArr) return;
+        _memcpy(newArr, oldArr, sizeof(rdModel3) * world->numModelsLoaded);
+        _memset(&newArr[world->numModelsLoaded], 0, sizeof(rdModel3) * (needed - world->numModelsLoaded));
+        /* Update hashtable pointers */
+        for (int i = 0; i < (int)world->numModelsLoaded; i++) {
+            stdHashTable_FreeKey(sithModel_hashtable, oldArr[i].filename);
+            stdHashTable_SetKeyVal(sithModel_hashtable, newArr[i].filename, &newArr[i]);
+        }
+        /* Patch rdthing.model3 pointers in templates that reference moved models */
+        for (int t = 0; t < world->numTemplatesLoaded; t++) {
+            rdModel3* m3 = world->templates[t].rdthing.model3;
+            if (m3 >= oldArr && m3 < oldArr + world->numModelsLoaded) {
+                int idx = (int)(m3 - oldArr);
+                world->templates[t].rdthing.model3 = &newArr[idx];
+            }
+        }
+        pSithHS->free(oldArr);
+        world->models = newArr;
+        world->numModels = needed;
+    }
+
+    /* Don't free/replace existing models — spawned things hold rdModel3* pointers.
+     * sithModel_LoadEntry checks the hashtable and skips duplicates.
+     * We only add genuinely new models that weren't in the previous load. */
+    char addonPath[128];
+    char addonSection[64];
+    sithWorld* oldLoading = sithWorld_pLoading;
+    sithWorld_pLoading = world;
+    stdFnames_MakePath(addonPath, 128, "jkl", "addon-static.jkl");
+    if (stdConffile_OpenRead(addonPath)) {
+        while (stdConffile_ReadLine()) {
+            if (_sscanf(stdConffile_aLine, " section: %s", addonSection) == 1
+                && !__strcmpi(addonSection, "models")) {
+                if (stdConffile_ReadArgs()) { /* skip "world models N" header */
+                    while (stdConffile_ReadArgs()) {
+                        if (!_memcmp(stdConffile_entry.args[0].value, "end", 4u))
+                            break;
+                        sithModel_LoadEntry(stdConffile_entry.args[1].value, 0);
+                    }
+                }
+                break;
+            }
+        }
+        stdConffile_Close();
+    }
+    sithWorld_pLoading = oldLoading;
+
+    jk_printf("sithModel: Addon models now at %d (addon start: %d)\n",
+              world->numModelsLoaded, sithModel_addonStartIndex);
 }
 
 rdModel3* sithModel_LoadEntry(const char *model_3do_fname, int unk)

@@ -169,6 +169,10 @@ int sithMain_Mode1Init(char *a1)
     if ( !sithWorld_Load(sithWorld_pCurrentWorld, a1) )
         return 0;
 
+    /* Reload addon-static.jkl models+templates so new adoptions are available */
+    sithModel_ReloadAddon();
+    sithTemplate_ReloadAddon();
+
     sithTime_Startup();
     sithWorld_Initialize();
     sithMain_Open();
@@ -184,6 +188,10 @@ int sithMain_OpenNormal(char *path)
     if ( !sithWorld_Load(sithWorld_pCurrentWorld, path) )
         return 0;
 
+    /* Reload addon-static.jkl models+templates so new adoptions are available */
+    sithModel_ReloadAddon();
+    sithTemplate_ReloadAddon();
+
     sithWorld_Initialize();
     sithMain_Open();
     g_sithMode = 1;
@@ -195,6 +203,11 @@ int sithMain_Mode1Init_3(char *fpath)
     sithWorld_pCurrentWorld = sithWorld_New();
     if ( !sithWorld_Load(sithWorld_pCurrentWorld, fpath) )
         return 0;
+
+    /* Reload addon-static.jkl models+templates so new adoptions are available */
+    sithModel_ReloadAddon();
+    sithTemplate_ReloadAddon();
+
     sithMain_Open();
     sithTime_Startup();
     sithMulti_Startup();

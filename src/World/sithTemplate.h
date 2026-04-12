@@ -27,5 +27,6 @@ void sithTemplate_OldFree();
 void sithTemplate_FreeWorld(sithWorld *world);
 sithThing* sithTemplate_GetEntryByName(const char *name);
 sithThing* sithTemplate_CreateEntry(sithWorld *world);
+void sithTemplate_ReloadAddon(void);
 
 #endif // _SITHTEMPLATE_H

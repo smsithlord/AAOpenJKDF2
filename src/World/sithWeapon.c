@@ -1147,7 +1147,9 @@ int sithWeapon_HandleWeaponKeys(sithThing *player, flex_t a2)
             if ( readInput && sithThing_MotsTick(7,0,inputFunc))
             {
                 int slot = (inputFunc == INPUT_FUNC_SELECT0) ? 0 : (inputFunc - INPUT_FUNC_SELECT1 + 1);
-                if (AACoreManager_OnWeaponSlotPressed(slot))
+                /* Only forward to AArcade when fists are equipped */
+                if (sithInventory_GetCurWeapon(player) == SITHBIN_FISTS
+                    && AACoreManager_OnWeaponSlotPressed(slot))
                     goto next_slot;
                 if (!Main_bMotsCompat) {
                     if ( sithWeapon_SelectWeapon(player, sithInventory_SelectWeaponFollowing(inputFunc - INPUT_FUNC_ACTIVATE), 0) )

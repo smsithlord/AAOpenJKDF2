@@ -5,6 +5,8 @@
 #include "stdPlatform.h"
 #include "Platform/Common/AACoreManager.h"
 #include "Devices/sithControl.h"
+#include "Gameplay/sithInventory.h"
+#include "Gameplay/sithPlayer.h"
 #include "Main/jkMain.h"
 
 #include <SDL.h>
@@ -26,6 +28,31 @@ void aaMainMenu_Update(void)
     sithControl_EnsureAADefaults();
 
     const Uint8* keys = SDL_GetKeyboardState(NULL);
+
+    /* AArcade keybinds only active when fists are equipped, unless already in an AA mode */
+    int fistsOut = 0;
+    if (sithPlayer_pLocalPlayerThing && sithPlayer_pLocalPlayerThing->actorParams.playerinfo)
+        fistsOut = (sithInventory_GetCurWeapon(sithPlayer_pLocalPlayerThing) == SITHBIN_FISTS);
+
+    int alreadyInAAMode = AACoreManager_IsSpawnModeActive() || AACoreManager_IsInputModeActive()
+                        || AACoreManager_IsMainMenuOpen() || AACoreManager_IsFullscreenActive();
+
+    /* Suppress FIRE1/FIRE2 when fists are out so LMB select doesn't punch */
+    AACoreManager_SetSuppressFire(fistsOut);
+
+    if (!fistsOut && !alreadyInAAMode) {
+        /* Update edge-trigger state trackers to prevent false triggers on weapon switch */
+        g_escKeyWasDown = keys[SDL_SCANCODE_ESCAPE];
+        g_selectWasDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT);
+        g_virtualInputWasDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_RIGHT);
+        g_inputLockWasDown = keys[SDL_SCANCODE_G];
+        g_tabMenuWasDown = keys[SDL_SCANCODE_TAB];
+        g_buildWasDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_MIDDLE);
+        g_rememberWasDown = keys[SDL_SCANCODE_R];
+        g_tasksTabWasDown = keys[SDL_SCANCODE_F4];
+        g_libraryTabWasDown = keys[SDL_SCANCODE_F6];
+        return;
+    }
 
     /* Spawn mode takes priority over all other input */
     if (AACoreManager_IsSpawnModeActive()) {
@@ -109,41 +136,45 @@ void aaMainMenu_Update(void)
         g_inputLockWasDown = lockDown;
     }
 
-    /* Build (middle mouse default): toggle build context menu */
-    int buildDown = 0;
-    sithControl_ReadFunctionMap(INPUT_FUNC_AABUILD, &buildDown);
-    if (buildDown && !g_buildWasDown) {
-        if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
-            AACoreManager_ToggleBuildContextMenu();
+    /* Build (middle mouse): toggle build context menu */
+    {
+        int buildDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_MIDDLE);
+        if (buildDown && !g_buildWasDown) {
+            if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+                AACoreManager_ToggleBuildContextMenu();
+        }
+        g_buildWasDown = buildDown;
     }
-    g_buildWasDown = buildDown;
 
-    /* Remember (R default): deselect-only or activate without selecting */
-    int rememberDown = 0;
-    sithControl_ReadFunctionMap(INPUT_FUNC_AAREMEMBER, &rememberDown);
-    if (rememberDown && !g_rememberWasDown) {
-        if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
-            AACoreManager_RememberObject();
+    /* Remember (R): deselect-only or activate without selecting */
+    {
+        int rememberDown = keys[SDL_SCANCODE_R];
+        if (rememberDown && !g_rememberWasDown) {
+            if (!AACoreManager_IsFullscreenActive() && !AACoreManager_IsMainMenuOpen())
+                AACoreManager_RememberObject();
+        }
+        g_rememberWasDown = rememberDown;
     }
-    g_rememberWasDown = rememberDown;
 
-    /* Tasks Tab (F4 default): open tab menu to Tasks tab */
-    int tasksTabDown = 0;
-    sithControl_ReadFunctionMap(INPUT_FUNC_AATASKSTAB, &tasksTabDown);
-    if (tasksTabDown && !g_tasksTabWasDown) {
-        if (!AACoreManager_IsFullscreenActive())
-            AACoreManager_OpenTabMenuToTab(0);
+    /* Tasks Tab (F4): open tab menu to Tasks tab */
+    {
+        int tasksTabDown = keys[SDL_SCANCODE_F4];
+        if (tasksTabDown && !g_tasksTabWasDown) {
+            if (!AACoreManager_IsFullscreenActive())
+                AACoreManager_OpenTabMenuToTab(0);
+        }
+        g_tasksTabWasDown = tasksTabDown;
     }
-    g_tasksTabWasDown = tasksTabDown;
 
-    /* Library Tab (F6 default): open tab menu to Library tab */
-    int libraryTabDown = 0;
-    sithControl_ReadFunctionMap(INPUT_FUNC_AALIBRARYTAB, &libraryTabDown);
-    if (libraryTabDown && !g_libraryTabWasDown) {
-        if (!AACoreManager_IsFullscreenActive())
-            AACoreManager_OpenTabMenuToTab(1);
+    /* Library Tab (F6): open tab menu to Library tab */
+    {
+        int libraryTabDown = keys[SDL_SCANCODE_F6];
+        if (libraryTabDown && !g_libraryTabWasDown) {
+            if (!AACoreManager_IsFullscreenActive())
+                AACoreManager_OpenTabMenuToTab(1);
+        }
+        g_libraryTabWasDown = libraryTabDown;
     }
-    g_libraryTabWasDown = libraryTabDown;
 
     /* Tab Menu (TAB default): hold to show, release to close.
      * Uses raw SDL key state because sithControl is suppressed when menu is open. */

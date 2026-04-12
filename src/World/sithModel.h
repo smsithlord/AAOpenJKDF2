@@ -25,6 +25,7 @@ rdModel3* sithModel_LoadEntry(const char *model_3do_fname, int unk);
 uint32_t sithModel_GetMemorySize(rdModel3 *model);
 int sithModel_New(sithWorld *world, int num);
 rdModel3* sithModel_GetByIdx(int idx);
+void sithModel_ReloadAddon(void);
 
 //static rdModel3* (*sithModel_LoadEntry_)(const char *model_3do_fname, int unk) = (void*)sithModel_LoadEntry_ADDR;
 

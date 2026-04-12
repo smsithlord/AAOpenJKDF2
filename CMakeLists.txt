@@ -231,6 +231,7 @@ target_include_directories(aarcadecore PRIVATE
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/public/steam
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/include
+    ${PROJECT_SOURCE_DIR}/mpv-sdk/include
 )
 target_link_libraries(aarcadecore PRIVATE
     SDL::SDL
@@ -239,6 +240,7 @@ target_link_libraries(aarcadecore PRIVATE
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/UltralightCore.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/AppCore.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/WebCore.lib
+    ${PROJECT_SOURCE_DIR}/mpv-sdk/lib/mpv.lib
     version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32
 )
 target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
@@ -249,7 +251,10 @@ add_custom_command(TARGET aarcadecore POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${PROJECT_SOURCE_DIR}/src/aarcadecore/ui"
         "$<TARGET_FILE_DIR:aarcadecore>/aarcadecore/ui"
-    COMMENT "Copying aarcadecore UI files to output directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/mpv-sdk/libmpv-2.dll"
+        "$<TARGET_FILE_DIR:aarcadecore>"
+    COMMENT "Copying aarcadecore UI files and mpv DLL to output directory"
 )
 
 # Remove multiplayer menus from compilation

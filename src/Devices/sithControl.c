@@ -1,5 +1,6 @@
 #include "sithControl.h"
 
+#include "Platform/Common/AACoreManager.h"
 #include "General/sithStrTable.h"
 #include "Platform/stdControl.h"
 #include "Devices/sithConsole.h"
@@ -7,6 +8,7 @@
 #include "World/sithWorld.h"
 #include "World/jkPlayer.h"
 #include "Gameplay/sithPlayer.h"
+#include "Gameplay/sithInventory.h"
 #include "Gameplay/sithPlayerActions.h"
 #include "World/sithSector.h"
 #include "World/sithThing.h"
@@ -255,12 +257,8 @@ void sithControl_InitFuncToControlType()
     sithControl_inputFuncToControlType[INPUT_FUNC_USELASTSELECTED] = 4 | 1;
 #endif
 
-    /* AArcade keybinds */
-    sithControl_inputFuncToControlType[INPUT_FUNC_AATASKSTAB] = 4 | 1;
-    sithControl_inputFuncToControlType[INPUT_FUNC_AALIBRARYTAB] = 4 | 1;
-    sithControl_inputFuncToControlType[INPUT_FUNC_AATABMENU] = 4 | 1;
-    sithControl_inputFuncToControlType[INPUT_FUNC_AASELECT] = 4 | 1;
-    sithControl_inputFuncToControlType[INPUT_FUNC_AABUILD] = 4 | 1;
+    /* AArcade keybinds — only bindable ones get control types.
+     * Tasks Tab/Library Tab/Tab Menu/Select/Build are hard-bound via SDL. */
     sithControl_inputFuncToControlType[INPUT_FUNC_AAREMEMBER] = 4 | 1;
     sithControl_inputFuncToControlType[INPUT_FUNC_AAVIRTUALINPUT] = 4 | 1;
     sithControl_inputFuncToControlType[INPUT_FUNC_AAINPUTLOCK] = 4 | 1;
@@ -285,7 +283,8 @@ void sithControl_Tick(flex_t deltaSecs, int deltaMs)
     }
     else
     {
-        if ( stdControl_bControlsIdle )
+        if ( stdControl_bControlsIdle
+            && !(sithPlayer_pLocalPlayerThing && sithInventory_GetCurWeapon(sithPlayer_pLocalPlayerThing) == SITHBIN_FISTS) )
         {
             sithControl_msIdle += deltaMs;
             if ( sithControl_msIdle > 30000 && sithCamera_currentCamera != &sithCamera_cameras[4] )
@@ -712,6 +711,19 @@ int sithControl_ReadFunctionMap(int funcIdx, int *pOut)
     int v6; // [esp+10h] [ebp-4h]
 
     //sithWeapon_controlOptions |= 0x20;
+
+    /* AArcade: suppress engine actions for keys AArcade uses when fists are out.
+     * LMB=Select (suppress FIRE1), RMB=VirtualInput (suppress JUMP),
+     * R=Remember (suppress NEXTINV), G=InputLock (suppress NEXTWEAPON),
+     * MMB=Build (suppress FIRE2) */
+    if (AACoreManager_IsSuppressingFire()) {
+        if (funcIdx == INPUT_FUNC_FIRE1 || funcIdx == INPUT_FUNC_FIRE2
+            || funcIdx == INPUT_FUNC_JUMP || funcIdx == INPUT_FUNC_ACTIVATE
+            || funcIdx == INPUT_FUNC_NEXTINV || funcIdx == INPUT_FUNC_NEXTWEAPON) {
+            if (pOut) *pOut = 0;
+            return 0;
+        }
+    }
 
     v6 = 0;
     if ( pOut )
@@ -1869,20 +1881,25 @@ void sithControl_MapDefaults()
 /* AArcade: ensure keybinds exist (called after config load/restore too) */
 void sithControl_EnsureAADefaults(void)
 {
+    /* These 5 are hard-bound via SDL in aaMainMenu.c, not through sithControl:
+     * Tasks Tab (F4), Library Tab (F5), Tab Menu (Tab), Select (LMB), Build (MMB) */
+    /* Hard-bound keys: registered in sithControl to claim the keys and prevent
+     * the engine from binding them to other functions. Not shown in controls
+     * menu (control type is 0, skipped by EnumBindings). Read via SDL in aaMainMenu.c.
+     * MapFunc requires control type bit 1 to be set, so we set it temporarily. */
+    sithControl_inputFuncToControlType[INPUT_FUNC_AATASKSTAB] = 4 | 1;
     if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AATASKSTAB].numEntries == 0)
         sithControl_MapFunc(INPUT_FUNC_AATASKSTAB, DIK_F4, 2);
+    sithControl_inputFuncToControlType[INPUT_FUNC_AATASKSTAB] = 0;
+
+    sithControl_inputFuncToControlType[INPUT_FUNC_AALIBRARYTAB] = 4 | 1;
     if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AALIBRARYTAB].numEntries == 0)
         sithControl_MapFunc(INPUT_FUNC_AALIBRARYTAB, DIK_F6, 2);
-    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AATABMENU].numEntries == 0)
-        sithControl_MapFunc(INPUT_FUNC_AATABMENU, DIK_TAB, 2);
-    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AABUILD].numEntries == 0)
-        sithControl_MapFunc(INPUT_FUNC_AABUILD, KEY_MOUSE_B3, 2);
-    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAREMEMBER].numEntries == 0)
-        sithControl_MapFunc(INPUT_FUNC_AAREMEMBER, DIK_R, 2);
-    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAVIRTUALINPUT].numEntries == 0)
-        sithControl_MapFunc(INPUT_FUNC_AAVIRTUALINPUT, KEY_MOUSE_B2, 2);
-    if (sithControl_aInputFuncToKeyinfo[INPUT_FUNC_AAINPUTLOCK].numEntries == 0)
-        sithControl_MapFunc(INPUT_FUNC_AAINPUTLOCK, DIK_G, 2);
+    sithControl_inputFuncToControlType[INPUT_FUNC_AALIBRARYTAB] = 0;
+
+    /* Remember (R), Virtual Input (RMB), Input Lock (G) are all hard-bound
+     * via SDL in aaMainMenu.c — NOT registered in sithControl to avoid
+     * stealing keys from engine defaults (RMB=Jump, R=NextInv, G=NextWeapon). */
 }
 
 void sithControl_InputInit()
@@ -1949,6 +1966,9 @@ stdControlKeyInfo* sithControl_EnumBindings(sithControlEnumFunc_t pfEnumFunction
     for (int j = 0; j < INPUT_FUNC_MAX; j++)
     {
         int typeflags = sithControl_inputFuncToControlType[v7];
+
+        /* Skip functions with no control type — they're not bindable */
+        if (typeflags == 0) { v7++; v20++; result = v20; continue; }
 
         v18 = 0;
         v19 = 0;
