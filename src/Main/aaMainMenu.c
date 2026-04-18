@@ -29,18 +29,24 @@ void aaMainMenu_Update(void)
 
     const Uint8* keys = SDL_GetKeyboardState(NULL);
 
-    /* AArcade keybinds only active when fists are equipped, unless already in an AA mode */
+    /* AArcade keybinds only active when fists are equipped AND alive, unless already in an AA mode.
+     * When dead (health <= 0) with fists, allow fire-to-respawn by disabling AA hotkeys. */
     int fistsOut = 0;
-    if (sithPlayer_pLocalPlayerThing && sithPlayer_pLocalPlayerThing->actorParams.playerinfo)
+    int alive = 0;
+    if (sithPlayer_pLocalPlayerThing && sithPlayer_pLocalPlayerThing->actorParams.playerinfo) {
         fistsOut = (sithInventory_GetCurWeapon(sithPlayer_pLocalPlayerThing) == SITHBIN_FISTS);
+        alive = (sithPlayer_pLocalPlayerThing->actorParams.health > 0.0);
+    }
+
+    int aaActive = fistsOut && alive;
 
     int alreadyInAAMode = AACoreManager_IsSpawnModeActive() || AACoreManager_IsInputModeActive()
                         || AACoreManager_IsMainMenuOpen() || AACoreManager_IsFullscreenActive();
 
-    /* Suppress FIRE1/FIRE2 when fists are out so LMB select doesn't punch */
-    AACoreManager_SetSuppressFire(fistsOut);
+    /* Suppress FIRE1/FIRE2 when fists are out and alive so LMB select doesn't punch */
+    AACoreManager_SetSuppressFire(aaActive);
 
-    if (!fistsOut && !alreadyInAAMode) {
+    if (!aaActive && !alreadyInAAMode) {
         /* Update edge-trigger state trackers to prevent false triggers on weapon switch */
         g_escKeyWasDown = keys[SDL_SCANCODE_ESCAPE];
         g_selectWasDown = SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT);

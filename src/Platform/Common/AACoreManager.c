@@ -127,16 +127,28 @@ static int g_cursorX = 0;
 static int g_cursorY = 0;
 static GLuint g_cursorTexture = 0;
 
-/* Per-task GL textures (host-managed) */
-#define MAX_TASKS 16
+/* Per-task GL textures (host-managed) — dynamically grown, no hard cap. */
 #define TASK_TEX_WIDTH 1024
 #define TASK_TEX_HEIGHT 1024
-static GLuint g_taskTextures[MAX_TASKS] = {0};
+static GLuint* g_taskTextures = NULL;
+static int g_taskTexturesCapacity = 0;
 static uint16_t* g_taskPixels = NULL; /* shared pixel buffer for task rendering */
 static int g_taskTexturesReady = 0;
 
-/* Thing-to-task mapping — each tracked thing gets a unique GL texture */
-#define MAX_THING_MAPPINGS 64
+static void aacore_ensure_task_textures_capacity(int needed)
+{
+    if (needed <= g_taskTexturesCapacity) return;
+    int newCap = g_taskTexturesCapacity ? g_taskTexturesCapacity : 16;
+    while (newCap < needed) newCap *= 2;
+    GLuint* newArr = (GLuint*)realloc(g_taskTextures, newCap * sizeof(GLuint));
+    if (!newArr) return;
+    for (int i = g_taskTexturesCapacity; i < newCap; i++) newArr[i] = 0;
+    g_taskTextures = newArr;
+    g_taskTexturesCapacity = newCap;
+}
+
+/* Thing-to-task mapping — each tracked thing gets a unique GL texture.
+ * Dynamically grown: no cap on cabinet count. */
 #define THING_TEX_SIZE 256
 typedef struct {
     void* thing;           /* sithThing* */
@@ -147,8 +159,24 @@ typedef struct {
     int imageLoaded;           /* screen: 0=pending, 1=loaded, -1=failed */
     int marqueeImageLoaded;    /* marquee: 0=pending, 1=loaded, -1=failed */
 } ThingTaskMapping;
-static ThingTaskMapping g_thingTaskMap[MAX_THING_MAPPINGS] = {0};
+static ThingTaskMapping* g_thingTaskMap = NULL;
+static int g_thingTaskCapacity = 0;
 static int g_thingTaskCount = 0;
+
+static void aacore_ensure_thing_task_capacity(int needed)
+{
+    if (needed <= g_thingTaskCapacity) return;
+    int newCap = g_thingTaskCapacity ? g_thingTaskCapacity : 16;
+    while (newCap < needed) newCap *= 2;
+    ThingTaskMapping* newArr = (ThingTaskMapping*)realloc(g_thingTaskMap, newCap * sizeof(ThingTaskMapping));
+    if (!newArr) return;
+    for (int i = g_thingTaskCapacity; i < newCap; i++) {
+        ThingTaskMapping empty = {0};
+        newArr[i] = empty;
+    }
+    g_thingTaskMap = newArr;
+    g_thingTaskCapacity = newCap;
+}
 
 /* Selector ray — which AArcade thing the player is aiming at */
 static int g_aimedAtThingIdx = -1;
@@ -274,6 +302,31 @@ static rdMaterial* aacore_find_dynscreen_material(sithThing* thing)
         }
     }
     return g_dynscreenMaterial;
+}
+
+/* Patch all faces on a thing's model that use the dynscreen material to
+ * fullbright (NOTLIT) so active cabinet screens aren't darkened by lighting. */
+static void aacore_patch_dynscreen_faces(sithThing* thing)
+{
+    if (!thing || thing->rdthing.type != RD_THINGTYPE_MODEL || !thing->rdthing.model3)
+        return;
+
+    rdModel3* model = thing->rdthing.model3;
+    for (unsigned int g = 0; g < model->numGeosets; g++) {
+        rdGeoset* geoset = &model->geosets[g];
+        for (unsigned int mi = 0; mi < geoset->numMeshes; mi++) {
+            rdMesh* mesh = &geoset->meshes[mi];
+            for (int fi = 0; fi < mesh->numFaces; fi++) {
+                rdMaterial* faceMat = mesh->faces[fi].material;
+                if (faceMat && strstr(faceMat->mat_fpath, "dynscreen")
+                    && mesh->faces[fi].lightingMode != RD_LIGHTMODE_FULLYLIT) {
+                    mesh->faces[fi].lightingMode = RD_LIGHTMODE_FULLYLIT;
+                    stdPlatform_Printf("AACoreManager: Patched face %d on mesh %d to NOTLIT (model=%s)\n",
+                                      fi, mi, model->filename);
+                }
+            }
+        }
+    }
 }
 
 /* ========================================================================
@@ -547,9 +600,12 @@ void AACoreManager_Shutdown(void)
     g_fn_deep_sleep_changed = NULL;
     g_deepSleep = 0;
 
-    for (int i = 0; i < MAX_TASKS; i++) {
+    for (int i = 0; i < g_taskTexturesCapacity; i++) {
         if (g_taskTextures[i]) { glDeleteTextures(1, &g_taskTextures[i]); g_taskTextures[i] = 0; }
     }
+    free(g_taskTextures);
+    g_taskTextures = NULL;
+    g_taskTexturesCapacity = 0;
     if (g_taskPixels) { free(g_taskPixels); g_taskPixels = NULL; }
     g_taskTexturesReady = 0;
 
@@ -564,6 +620,9 @@ void AACoreManager_Shutdown(void)
             g_thingTaskMap[i].glTexture = 0;
         }
     }
+    free(g_thingTaskMap);
+    g_thingTaskMap = NULL;
+    g_thingTaskCapacity = 0;
     g_thingTaskCount = 0;
     g_dynscreenMaterial = NULL;
     g_dynmarqueeMaterial = NULL;
@@ -911,7 +970,7 @@ void AACoreManager_Update(void)
     /* Pre-render all task textures — each task gets its own GL texture */
     if (g_fn_get_task_count && g_fn_render_task_texture) {
         int count = g_fn_get_task_count();
-        if (count > MAX_TASKS) count = MAX_TASKS;
+        aacore_ensure_task_textures_capacity(count);
 
         if (!g_taskPixels)
             g_taskPixels = (uint16_t*)malloc(TASK_TEX_WIDTH * TASK_TEX_HEIGHT * 2);
@@ -1348,10 +1407,18 @@ void AACoreManager_Update(void)
     }
 }
 
-static int g_suppressFire = 0;
+void AACoreManager_SetSuppressFire(int suppress) { (void)suppress; }
 
-void AACoreManager_SetSuppressFire(int suppress) { g_suppressFire = suppress; }
-bool AACoreManager_IsSuppressingFire(void) { return g_suppressFire != 0; }
+bool AACoreManager_IsSuppressingFire(void)
+{
+    /* Compute live to avoid frame-timing bug: sithControl reads this flag
+     * before aaMainMenu_Update gets a chance to update it. */
+    if (!sithPlayer_pLocalPlayerThing || !sithPlayer_pLocalPlayerThing->actorParams.playerinfo)
+        return false;
+    bool fistsOut = (sithInventory_GetCurWeapon(sithPlayer_pLocalPlayerThing) == SITHBIN_FISTS);
+    bool alive = (sithPlayer_pLocalPlayerThing->actorParams.health > 0.0);
+    return fistsOut && alive;
+}
 
 bool AACoreManager_AreFistsOut(void)
 {
@@ -1417,7 +1484,8 @@ void AACoreManager_MouseWheel(int delta)
 
 void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskIndex)
 {
-    if (g_thingTaskCount >= MAX_THING_MAPPINGS) return;
+    aacore_ensure_thing_task_capacity(g_thingTaskCount + 1);
+    if (g_thingTaskCount >= g_thingTaskCapacity) return; /* realloc failed */
 
     sithThing* thing = (sithThing*)pSithThing;
 
@@ -1427,6 +1495,9 @@ void AACoreManager_RegisterThingTask(void* pSithThing, int thingIdx, int taskInd
         stdPlatform_Printf("AACoreManager: WARNING: No dynscreen material found on thing %d\n", thingIdx);
         return;
     }
+
+    /* Ensure dynscreen faces on this thing's model are fullbright */
+    aacore_patch_dynscreen_faces(thing);
 
     /* Create per-thing GL textures with unique color */
     uint16_t color = aacore_color_for_thingIdx(thingIdx);
@@ -1461,7 +1532,8 @@ void AACoreManager_OnMapUnloaded(void)
         if (g_thingTaskMap[i].marqueeGlTexture)
             glDeleteTextures(1, &g_thingTaskMap[i].marqueeGlTexture);
     }
-    memset(g_thingTaskMap, 0, sizeof(g_thingTaskMap));
+    if (g_thingTaskMap && g_thingTaskCapacity > 0)
+        memset(g_thingTaskMap, 0, g_thingTaskCapacity * sizeof(ThingTaskMapping));
     g_thingTaskCount = 0;
 
     /* Reset selector ray */
@@ -1820,7 +1892,7 @@ void AACoreManager_PreRenderThing(void* pSithThing)
             GLuint texToUse = g_thingTaskMap[i].glTexture; /* fallback: solid color */
             if (g_fn_get_thing_task_index) {
                 int taskIdx = g_fn_get_thing_task_index(g_thingTaskMap[i].thingIdx);
-                if (taskIdx >= 0 && taskIdx < MAX_TASKS && g_taskTextures[taskIdx]) {
+                if (taskIdx >= 0 && taskIdx < g_taskTexturesCapacity && g_taskTextures[taskIdx]) {
                     texToUse = g_taskTextures[taskIdx];
                 }
             }

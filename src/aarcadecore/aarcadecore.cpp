@@ -13,6 +13,7 @@
 #include "InstanceManager.h"
 #include "LibretroCoreConfig.h"
 #include <string.h>
+#include <vector>
 #include <steam_api.h>
 
 /* Global host callbacks */
@@ -47,24 +48,30 @@ static int g_lastMouseX = 0;
 static int g_lastMouseY = 0;
 
 /* Task list — all running embedded instances (excluding HUD overlay).
- * The host uses task indices to manage per-thing GL textures. */
-#define MAX_TASKS 16
-static EmbeddedInstance* g_tasks[MAX_TASKS] = {0};
-static int g_taskCount = 0;
+ * The host uses task indices to manage per-thing GL textures.
+ * No fixed cap: the player decides how many cabinets to spawn. */
+static std::vector<EmbeddedInstance*> g_tasks;
 
 static int addTask(EmbeddedInstance* inst)
 {
-    if (!inst || g_taskCount >= MAX_TASKS) return -1;
-    g_tasks[g_taskCount] = inst;
-    return g_taskCount++;
+    if (!inst) return -1;
+    /* Reuse a freed slot if available. */
+    for (size_t i = 0; i < g_tasks.size(); i++) {
+        if (g_tasks[i] == nullptr) {
+            g_tasks[i] = inst;
+            return (int)i;
+        }
+    }
+    g_tasks.push_back(inst);
+    return (int)(g_tasks.size() - 1);
 }
 
 /* Non-static wrapper for InstanceManager to call */
 int aarcadecore_addTask(EmbeddedInstance* inst) { return addTask(inst); }
 
 void aarcadecore_removeTask(int taskIndex) {
-    if (taskIndex >= 0 && taskIndex < g_taskCount)
-        g_tasks[taskIndex] = NULL;
+    if (taskIndex >= 0 && taskIndex < (int)g_tasks.size())
+        g_tasks[taskIndex] = nullptr;
 }
 
 static bool g_overlayDirty = true; /* Set when overlay content changes */
@@ -103,8 +110,8 @@ EmbeddedInstance* aarcadecore_getInputModeInstance(void) { return g_inputModeIns
 
 static int getActiveTaskIndex(void)
 {
-    for (int i = 0; i < g_taskCount; i++) {
-        if (g_tasks[i] == g_activeInstance) return i;
+    for (size_t i = 0; i < g_tasks.size(); i++) {
+        if (g_tasks[i] == g_activeInstance) return (int)i;
     }
     return -1;
 }
@@ -254,7 +261,7 @@ static LibretroHost* get_active_libretro_host(void)
     typedef struct { LibretroHost* host; } LRData;
 
     /* Search all tasks for a running Libretro instance */
-    for (int i = 0; i < g_taskCount; i++) {
+    for (size_t i = 0; i < g_tasks.size(); i++) {
         if (g_tasks[i] && g_tasks[i]->type == EMBEDDED_LIBRETRO &&
             g_tasks[i]->vtable->is_active(g_tasks[i]))
             return ((LRData*)g_tasks[i]->user_data)->host;
@@ -308,7 +315,7 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     g_imageLoader.init();
 
     /* Tasks are created on demand, not at startup */
-    g_taskCount = 0;
+    g_tasks.clear();
     g_activeInstance = NULL;
 
     if (g_host.host_printf)
@@ -355,7 +362,7 @@ AARCADECORE_EXPORT void aarcadecore_update(void)
     g_imageLoader.update();
 
     /* Update all tasks in the task list (includes dynamically spawned browsers) */
-    for (int i = 0; i < g_taskCount; i++) {
+    for (size_t i = 0; i < g_tasks.size(); i++) {
         if (g_tasks[i] && g_tasks[i]->vtable->update)
             g_tasks[i]->vtable->update(g_tasks[i]);
     }
@@ -566,13 +573,13 @@ AARCADECORE_EXPORT void aarcadecore_start_libretro(void)
 
 AARCADECORE_EXPORT int aarcadecore_get_task_count(void)
 {
-    return g_taskCount;
+    return (int)g_tasks.size();
 }
 
 AARCADECORE_EXPORT bool aarcadecore_render_task_texture(
     int taskIndex, void* pixelData, int width, int height, int is16bit, int bpp)
 {
-    if (taskIndex < 0 || taskIndex >= g_taskCount) return false;
+    if (taskIndex < 0 || taskIndex >= (int)g_tasks.size()) return false;
     EmbeddedInstance* inst = g_tasks[taskIndex];
     if (!inst || !inst->vtable->is_active(inst) || !inst->vtable->render) return false;
     inst->vtable->render(inst, pixelData, width, height, is16bit, bpp);
@@ -981,13 +988,13 @@ AARCADECORE_EXPORT void aarcadecore_exit_fullscreen(void)
 AARCADECORE_EXPORT void aarcadecore_mark_thing_seen(int thingIdx)
 {
     int taskIdx = g_instanceManager.getTaskIndexForThing(thingIdx);
-    if (taskIdx >= 0 && taskIdx < g_taskCount && g_tasks[taskIdx])
+    if (taskIdx >= 0 && taskIdx < (int)g_tasks.size() && g_tasks[taskIdx])
         g_tasks[taskIdx]->lastSeenFrame = g_engineFrame;
 }
 
 AARCADECORE_EXPORT bool aarcadecore_is_task_visible(int taskIndex)
 {
-    if (taskIndex < 0 || taskIndex >= g_taskCount || !g_tasks[taskIndex])
+    if (taskIndex < 0 || taskIndex >= (int)g_tasks.size() || !g_tasks[taskIndex])
         return false;
 
     EmbeddedInstance* task = g_tasks[taskIndex];

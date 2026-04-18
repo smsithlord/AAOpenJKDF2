@@ -931,12 +931,15 @@ const arcadeHud = (function() {
             state.isSearchMode = true;
             state.hasLoadedOnce = true;
             doSearch(state.searchTerm);
+            searchInput.focus();
+            searchInput.select();
         } else {
             /* Default: show favorites, switch to items mode */
             state.type = 'items';
             var btns2 = typesDiv.querySelectorAll('.aa-library-type-btn');
             for (var tb2 = 0; tb2 < btns2.length; tb2++) btns2[tb2].classList.toggle('aa-active', btns2[tb2].getAttribute('data-type') === 'items');
             showFavorites();
+            searchInput.focus();
         }
 
         // Search debounce
@@ -1064,9 +1067,6 @@ const arcadeHud = (function() {
 
         function switchType(type) {
             state.type = type;
-            state.searchTerm = '';
-            state.isSearchMode = false;
-            searchInput.value = '';
             if (type !== 'items') {
                 state.itemType = '';
                 itemTypeSelect.value = '';
@@ -1074,7 +1074,11 @@ const arcadeHud = (function() {
             saveOpts();
             addSearchOption();
             state.hasLoadedOnce = true;
-            loadEntries(true);
+            if (state.searchTerm) {
+                doSearch(state.searchTerm);
+            } else {
+                loadEntries(true);
+            }
         }
 
         function renderCards(entries, append) {

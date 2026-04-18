@@ -718,7 +718,7 @@ int sithControl_ReadFunctionMap(int funcIdx, int *pOut)
      * MMB=Build (suppress FIRE2) */
     if (AACoreManager_IsSuppressingFire()) {
         if (funcIdx == INPUT_FUNC_FIRE1 || funcIdx == INPUT_FUNC_FIRE2
-            || funcIdx == INPUT_FUNC_JUMP || funcIdx == INPUT_FUNC_ACTIVATE
+            || funcIdx == INPUT_FUNC_JUMP
             || funcIdx == INPUT_FUNC_NEXTINV || funcIdx == INPUT_FUNC_NEXTWEAPON) {
             if (pOut) *pOut = 0;
             return 0;
@@ -729,12 +729,19 @@ int sithControl_ReadFunctionMap(int funcIdx, int *pOut)
     if ( pOut )
         *pOut = 0;
     v2 = 0;
+    int aaSuppress = AACoreManager_IsSuppressingFire();
     if ( sithControl_aInputFuncToKeyinfo[funcIdx].numEntries )
     {
         v3 = sithControl_aInputFuncToKeyinfo[funcIdx].aEntries;
         do
         {
             v4 = v3->dxKeyNum;
+            /* AArcade: skip TAB (used to open tab menu) when suppressing */
+            if ( aaSuppress && v4 == DIK_TAB ) {
+                ++v2;
+                ++v3;
+                continue;
+            }
             if ( !(sithWeapon_controlOptions & 0x20) || v4 < JK_EXTENDED_KEY_START || KEY_IS_MOUSE(v4) )
                 v6 |= stdControl_ReadKey(v4, pOut);
             ++v2;
