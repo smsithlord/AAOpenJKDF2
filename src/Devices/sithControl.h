@@ -9,7 +9,7 @@
 #define sithControl_Open_ADDR (0x004D68B0)
 #define sithControl_Close_ADDR (0x004D68D0)
 #define sithControl_IsOpen_ADDR (0x004D6900)
-#define sithControl_sub_4D6910_ADDR (0x004D6910)
+#define sithControl_SetFuncType_ADDR (0x004D6910)
 #define sithControl_sub_4D6930_ADDR (0x004D6930)
 #define sithControl_MapFunc_ADDR (0x004D6940)
 #define sithControl_MapAxisFunc_ADDR (0x004D6A30)
@@ -43,6 +43,8 @@ int sithControl_Shutdown();
 int sithControl_IsOpen();
 int sithControl_Open();
 void sithControl_Close();
+void sithControl_SetFuncType(int funcIdx, uint32_t flags);
+void sithControl_ClearAllBindings();
 void sithControl_InitFuncToControlType();
 void sithControl_Tick(flex_t deltaSecs, int deltaMs);
 void sithControl_AddInputHandler(sithControl_handler_t a1);

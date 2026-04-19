@@ -180,6 +180,26 @@ static const char* Linux_stdFileGets(stdFile_t fhand, char* dst, size_t len)
 #endif
 }
 
+static const wchar_t* Linux_stdFileGetws(stdFile_t fhand, wchar_t* dst, size_t len)
+{
+    // Can't use fgetws because -fshort-wchar makes wchar_t 2 bytes
+    // but libc fgetws expects native wchar_t (4 bytes on POSIX).
+    // Read UTF-16LE characters one at a time instead.
+    if (!len) return NULL;
+    size_t i = 0;
+    while (i < len - 1) {
+        wchar_t ch = 0;
+        if (fread(&ch, sizeof(wchar_t), 1, (FILE*)fhand) != 1) {
+            if (i == 0) return NULL;
+            break;
+        }
+        dst[i++] = ch;
+        if (ch == L'\n') break;
+    }
+    dst[i] = L'\0';
+    return dst;
+}
+
 static int Linux_stdFseek(stdFile_t fhand, int a, int b)
 {
     //printf("fseek? %x %x\n", a, b);
@@ -620,6 +640,56 @@ uint32_t stdPlatform_GetTimeMsec()
 static int Dummy_suggestHeap(int which) { return HEAP_ANY; }
 #endif
 
+#ifndef PLATFORM_POSIX
+void stdPlatform_Assert(const char *msg, const char *file, int line)
+{
+    char buf[512];
+    int lastSlash = 0;
+    for (int i = 0; file[i]; i++)
+    {
+        if ( file[i] == '\\' )
+            lastSlash = i;
+    }
+    _sprintf(buf, "%s\n(%s, %d)\n", msg, &file[lastSlash ? lastSlash + 1 : 0], line);
+    jk_printf("ASSERT: %s", buf);
+}
+
+void* stdPlatform_AllocHandle(uint32_t size)
+{
+    return _malloc(size);
+}
+
+void stdPlatform_FreeHandle(void *ptr)
+{
+    _free(ptr);
+}
+
+void* stdPlatform_ReallocHandle(void *ptr, uint32_t size)
+{
+    return _realloc(ptr, size);
+}
+
+void* stdPlatform_LockHandle(void *ptr)
+{
+    return ptr;
+}
+
+void stdPlatform_UnlockHandle(void *ptr)
+{
+}
+
+void stdPlatform_GetDateTime(char *out, uint32_t outLen)
+{
+    SYSTEMTIME st;
+    char tmp[80];
+    GetLocalTime(&st);
+    const char *ampm = (st.wHour >= 13) ? "pm" : "am";
+    uint16_t hour12 = (st.wHour >= 13) ? st.wHour - 12 : st.wHour;
+    _sprintf(tmp, "%d/%d/%02d %d:%02d %s", st.wMonth, st.wDay, st.wYear, hour12, st.wMinute, ampm);
+    _strncpy(out, tmp, outLen);
+}
+#endif // !PLATFORM_POSIX
+
 void stdPlatform_InitServices(HostServices *handlers)
 {
     handlers->statusPrint = stdPlatform_Printf;
@@ -664,6 +734,7 @@ void stdPlatform_InitServices(HostServices *handlers)
     handlers->fileRead = Linux_stdFileRead;
     handlers->fileGets = Linux_stdFileGets;
     handlers->fileWrite = Linux_stdFileWrite;
+    handlers->fileGetws = Linux_stdFileGetws;
     handlers->fseek = Linux_stdFseek;
     handlers->ftell = Linux_stdFtell;
     handlers->getTimerTick = Linux_TimeMs;

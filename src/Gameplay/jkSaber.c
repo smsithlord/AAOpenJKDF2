@@ -21,6 +21,14 @@
 
 #define JKSABER_EXTENDTIME (0.3000000)
 
+void jkSaber_Startup()
+{
+}
+
+void jkSaber_Shutdown()
+{
+}
+
 void jkSaber_InitializeSaberInfo(sithThing *thing, char *material_side_fname, char *material_tip_fname, flex_t base_rad, flex_t tip_rad, flex_t len, sithThing *wall_sparks, sithThing *blood_sparks, sithThing *saber_sparks)
 {
     if (!thing) return; // Added: Fix nullptr deref in Mots cutscenes

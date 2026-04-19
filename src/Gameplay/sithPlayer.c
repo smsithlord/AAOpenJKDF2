@@ -45,6 +45,10 @@ void sithPlayer_Startup(int idx)
     }
 }
 
+void sithPlayer_Open()
+{
+}
+
 void sithPlayer_Close()
 {
     if ( sithPlayer_pLocalPlayer )
@@ -96,6 +100,24 @@ void sithPlayer_NewEntry(sithWorld *world)
         jkPlayer_playerInfos[i].playerThing = 0;
         jkPlayer_playerInfos[i].pSpawnSector = 0;
     }
+}
+
+int sithPlayer_GetBinItemActive(int binIdx)
+{
+    return (jkPlayer_playerInfos[playerThingIdx].iteminfo[binIdx].state & 4) >> 2;
+}
+
+int sithPlayer_GetBinItemAvailable(int binIdx)
+{
+    return (jkPlayer_playerInfos[playerThingIdx].iteminfo[binIdx].state & 8) >> 3;
+}
+
+void sithPlayer_SetBinItemActive(int binIdx, int active)
+{
+    if ( active )
+        jkPlayer_playerInfos[playerThingIdx].iteminfo[binIdx].state |= 4;
+    else
+        jkPlayer_playerInfos[playerThingIdx].iteminfo[binIdx].state &= ~4;
 }
 
 flex_t sithPlayer_GetBinAmt(int idx)

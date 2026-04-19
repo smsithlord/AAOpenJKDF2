@@ -584,6 +584,39 @@ rdSurface* sithSurface_SurfaceAnim(sithSurface *parent, flex_t a2, uint16_t flag
     return result;
 }
 
+int sithSurface_New(sithWorld *world, int num)
+{
+    sithSurface *surfaces = (sithSurface *)pSithHS->alloc(num * sizeof(sithSurface));
+    world->surfaces = surfaces;
+    if ( !surfaces )
+        return 0;
+    _memset(surfaces, 0, num * sizeof(sithSurface));
+    world->numSurfaces = num;
+    for (uint32_t i = 0; i < (uint32_t)num; i++)
+    {
+        rdFace_NewEntry(&surfaces[i].surfaceInfo.face);
+        surfaces[i].index = i;
+    }
+    return 1;
+}
+
+int sithSurface_AllocateAdjoins(sithWorld *world, int num)
+{
+    if ( num == 0 )
+    {
+        world->adjoins = NULL;
+        return 1;
+    }
+    sithAdjoin *adjoins = (sithAdjoin *)pSithHS->alloc(num * sizeof(sithAdjoin));
+    world->adjoins = adjoins;
+    if ( !adjoins )
+        return 0;
+    _memset(adjoins, 0, num * sizeof(sithAdjoin));
+    world->numAdjoins = num;
+    world->numAdjoinsLoaded = 0;
+    return 1;
+}
+
 void sithSurface_Free(sithWorld *world)
 {
     for (int32_t i = 0; i < world->numSurfaces; i++)

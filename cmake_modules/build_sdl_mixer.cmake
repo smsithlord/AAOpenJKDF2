@@ -63,7 +63,7 @@ ExternalProject_Add(
     UPDATE_DISCONNECTED TRUE
     PATCH_COMMAND       ${SDL_MIXER_PATCH_COMMAND}
     CMAKE_ARGS          --toolchain ${CMAKE_TOOLCHAIN_FILE}
-                        --install-prefix ${SDL_MIXER_ROOT}
+                        --install-prefix ${SDL_MIXER_ROOT} -DCMAKE_INSTALL_LIBDIR=lib
                         -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
                         -DCMAKE_C_FLAGS:STRING=${SDL_MIXER_C_FLAGS}
                         -DCMAKE_CXX_FLAGS:STRING=${SDL_MIXER_CXX_FLAGS}
@@ -83,7 +83,7 @@ ExternalProject_Add(
                         -DSDL2MIXER_OPUS_SHARED:BOOL=FALSE
                         -DSDL2MIXER_WAVPACK:BOOL=FALSE
                         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-                        
+                        -DCMAKE_INSTALL_LIBDIR=lib
     CMAKE_CACHE_ARGS
                         -DSDL2_DIR:STRING=${SDL_ROOT}/../
                         -DSDL_DIR:STRING=${SDL_ROOT}/../

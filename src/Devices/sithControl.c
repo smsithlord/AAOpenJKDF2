@@ -208,6 +208,17 @@ void sithControl_Close()
     }
 }
 
+void sithControl_SetFuncType(int funcIdx, uint32_t flags)
+{
+    sithControl_inputFuncToControlType[funcIdx] = flags | 3;
+}
+
+void sithControl_ClearAllBindings()
+{
+    _memset(sithControl_aInputFuncToKeyinfo, 0, sizeof(sithControl_aInputFuncToKeyinfo));
+    stdControl_Reset();
+}
+
 void sithControl_InitFuncToControlType()
 {
     sithControl_inputFuncToControlType[INPUT_FUNC_TURN] = 8 | 2 | 1;

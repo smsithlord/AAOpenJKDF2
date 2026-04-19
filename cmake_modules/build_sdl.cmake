@@ -38,6 +38,7 @@ ExternalProject_Add(
     UPDATE_DISCONNECTED TRUE
     CMAKE_ARGS          --toolchain ${CMAKE_TOOLCHAIN_FILE}
                         --install-prefix ${SDL_ROOT}
+                        -DCMAKE_INSTALL_LIBDIR=lib
                         -DCMAKE_BUILD_TYPE:STRING=Release
                         -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
                         -DSDL_SHARED:BOOL=${SDL_SHARED}
@@ -45,6 +46,7 @@ ExternalProject_Add(
                         -DSDL_TEST:BOOL=FALSE
                         -DSDL_HIDAPI:BOOL=${SDL_HIDAPI}
                         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+                        -DCMAKE_INSTALL_LIBDIR=lib
     BUILD_BYPRODUCTS    ${SDL_LIBRARIES}
 )
 

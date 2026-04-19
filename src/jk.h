@@ -276,7 +276,7 @@ static wchar_t* (*_wcsncpy)(wchar_t *, const wchar_t *, size_t) = (wchar_t* (*)(
 void jk_fatal();
 #else // WIN32_BLOBS
 char* _strcpy(char *dst, const char *src);
-int _memcmp(const void* str1, const void* str2, size_t count) __attribute__ ((pure));
+int _memcmp(const void* str1, const void* str2, size_t count) PURE_FUNC;
 #if !defined(TARGET_TWL)
 void* _memset(void* ptr, int val, size_t num);
 #define _memset_inline _memset

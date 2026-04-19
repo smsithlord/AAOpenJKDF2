@@ -363,3 +363,148 @@ int stdBitmap_UnloadData(stdBitmap* pBitmap) {
 #endif
     return 1;
 }
+
+int stdBitmap_AppendToFile(stdFile_t fhand, stdBitmap *pBitmap)
+{
+    bitmapHeader header;
+    int written;
+
+    _memset(&header, 0, sizeof(header));
+    _strncpy((char*)&header.magic, "BM  ", 4);
+    header.field_4 = 0x46;
+    header.field_8 = pBitmap->field_20;
+    header.palFmt = pBitmap->palFmt;
+    header.numMips = pBitmap->numMips;
+    header.xPos = pBitmap->xPos;
+    header.yPos = pBitmap->yPos;
+    header.colorkey = pBitmap->colorkey;
+    _memcpy(&header.format, &pBitmap->format, sizeof(rdTexFormat));
+
+    written = std_pHS->fileWrite(fhand, &header, sizeof(bitmapHeader));
+    if ( written != sizeof(bitmapHeader) )
+    {
+        stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x1AC,
+                  "Error: Unable to write %d bytes to file.", sizeof(bitmapHeader));
+        return 0;
+    }
+
+    for (uint32_t i = 0; i < (uint32_t)pBitmap->numMips; i++)
+    {
+        stdVBuffer *vbuf = pBitmap->mipSurfaces[i];
+        int dims[2];
+        dims[0] = vbuf->format.width;
+        dims[1] = vbuf->format.height;
+        written = std_pHS->fileWrite(fhand, dims, 8);
+        if ( written != 8 )
+        {
+            stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x1C3,
+                      "Error: Unable to write %d bytes to file.", 8);
+            return 0;
+        }
+
+        stdDisplay_VBufferLock(vbuf);
+        uint32_t rowBytes = (vbuf->format.format.bpp >> 3) * dims[0];
+        uint8_t *pixels = (uint8_t *)vbuf->surface_lock_alloc;
+        for (uint32_t row = 0; row < (uint32_t)dims[1]; row++)
+        {
+            written = std_pHS->fileWrite(fhand, pixels, rowBytes);
+            if ( written != (int)rowBytes )
+            {
+                stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x1D4,
+                          "Error: Unable to write %d bytes to file.", rowBytes);
+                return 0;
+            }
+            pixels += vbuf->format.width_in_bytes;
+        }
+        stdDisplay_VBufferUnlock(vbuf);
+    }
+
+    if ( (pBitmap->palFmt & 2) && pBitmap->palette )
+    {
+        written = std_pHS->fileWrite(fhand, pBitmap->palette, 0x300);
+        if ( written != 0x300 )
+        {
+            stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x1E5,
+                      "Error: Unable to write %d bytes to file.", 0x300);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int stdBitmap_Write(const char *fpath, stdBitmap *pBitmap)
+{
+    stdFile_t fhand = std_pHS->fileOpen(fpath, "wb");
+    if ( !fhand )
+    {
+        stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x206,
+                  "Error: Invalid write filename: '%s'.", fpath);
+        return 0;
+    }
+    if ( !stdBitmap_AppendToFile(fhand, pBitmap) )
+    {
+        stdPrintf(std_pHS->errorPrint, ".\\General\\stdBitmap.c", 0x20D,
+                  "Error writing to file '%s'.", fpath);
+        std_pHS->fileClose(fhand);
+        return 0;
+    }
+    std_pHS->fileClose(fhand);
+    return 1;
+}
+
+void stdBitmap_MemUsage(stdBitmap *pBitmap, int mipIdx, stdVBuffer *vbuf)
+{
+    pBitmap->mipSurfaces[mipIdx] = vbuf;
+}
+
+stdBitmap* stdBitmap_New(uint32_t numMips, int palFmt, int field_20, int field_68, rdTexFormat *pFormat)
+{
+    stdBitmap *bitmap = (stdBitmap *)std_pHS->alloc(sizeof(stdBitmap));
+    if ( !bitmap )
+    {
+        stdPrintf(std_pHS->statusPrint, ".\\General\\stdBitmap.c", 0x316,
+                  "Ran out of memory trying allocating bitmap.");
+        return NULL;
+    }
+    _memset(bitmap, 0, sizeof(stdBitmap));
+
+    stdVBuffer **surfaces = (stdVBuffer **)std_pHS->alloc(numMips * sizeof(stdVBuffer *));
+    bitmap->mipSurfaces = surfaces;
+    if ( !surfaces )
+    {
+        stdPrintf(std_pHS->statusPrint, ".\\General\\stdBitmap.c", 0x34B,
+                  "Ran out of memory trying allocating bitmap.");
+        std_pHS->free(bitmap);
+        return NULL;
+    }
+    _memset(surfaces, 0, numMips * sizeof(stdVBuffer *));
+
+    bitmap->field_68 = field_68;
+    bitmap->field_20 = field_20;
+    _memcpy(&bitmap->format, pFormat, sizeof(rdTexFormat));
+    bitmap->numMips = numMips;
+    bitmap->palFmt = palFmt;
+    return bitmap;
+}
+
+int stdBitmap_NewEntry(stdBitmap *bitmap, uint32_t numMips, int palFmt, int field_20, int field_68, rdTexFormat *pFormat)
+{
+    _memset(bitmap, 0, sizeof(stdBitmap));
+
+    stdVBuffer **surfaces = (stdVBuffer **)std_pHS->alloc(numMips * sizeof(stdVBuffer *));
+    bitmap->mipSurfaces = surfaces;
+    if ( !surfaces )
+    {
+        stdPrintf(std_pHS->statusPrint, ".\\General\\stdBitmap.c", 0x34B,
+                  "Ran out of memory trying allocating bitmap.");
+        return 0;
+    }
+    _memset(surfaces, 0, numMips * sizeof(stdVBuffer *));
+
+    bitmap->field_68 = field_68;
+    bitmap->numMips = numMips;
+    _memcpy(&bitmap->format, pFormat, sizeof(rdTexFormat));
+    bitmap->field_20 = field_20;
+    bitmap->palFmt = palFmt;
+    return 1;
+}

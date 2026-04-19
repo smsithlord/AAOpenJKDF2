@@ -219,6 +219,20 @@ LABEL_39:
     return 1;
 }
 
+int sithAnimClass_New(sithWorld *world, int num)
+{
+    sithAnimclass *animclasses;
+
+    animclasses = (sithAnimclass *)pSithHS->alloc(sizeof(sithAnimclass) * num);
+    world->animclasses = animclasses;
+    if ( !animclasses )
+        return 0;
+    world->numAnimClasses = num;
+    world->numAnimClassesLoaded = 0;
+    _memset(animclasses, 0, sizeof(sithAnimclass) * num);
+    return 1;
+}
+
 void sithAnimClass_Free(sithWorld *world)
 {
     unsigned int v1; // edi

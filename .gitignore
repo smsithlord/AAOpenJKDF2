@@ -127,3 +127,6 @@ __pycache__/
 .vscode/
 steamworks_sdk_164/
 ultralight-free-sdk-1.4.0-win-x64/
+.beads/
+graphify-out/
+AGENTS.md

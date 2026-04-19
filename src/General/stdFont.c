@@ -1,5 +1,6 @@
 #include "stdFont.h"
 
+#include <wctype.h>
 #include "stdPlatform.h"
 #include "General/stdBitmap.h"
 #include "General/stdString.h"
@@ -10,6 +11,29 @@
 #include "General/stdString.h"
 
 #define INT_FLOAT_SCALED(x, s) ((int)((flex_t)(x) * (flex_t)(s))) // FLEXTODO
+
+// Un-inlined: Find the charset containing a character, falling back to the font's default character.
+// Returns the charset, or NULL if not found. *pChar may be changed to the default character on fallback.
+static stdFontCharset* stdFont_FindCharset(stdFont *font, uint16_t *pChar)
+{
+    stdFontCharset *charset = &font->charsetHead;
+    while ( charset )
+    {
+        if ( *pChar >= charset->charFirst && *pChar <= charset->charLast )
+            return charset;
+        charset = charset->previous;
+    }
+    // Fallback to default character
+    *pChar = font->field_28;
+    charset = &font->charsetHead;
+    while ( charset )
+    {
+        if ( *pChar >= charset->charFirst && *pChar <= charset->charLast )
+            return charset;
+        charset = charset->previous;
+    }
+    return NULL;
+}
 
 stdFont* stdFont_Load(char *fpath, int a2, int a3)
 {
@@ -1174,6 +1198,235 @@ int stdFont_sub_4355B0(stdFont *font, uint16_t a2)
         while ( v3 );
     }
     return v3 != 0;
+}
+
+stdFont* stdFont_New(int marginY, int marginX, int16_t field_28, uint16_t charFirst, uint16_t charLast)
+{
+    uint32_t allocSize = ((uint32_t)(charLast - charFirst)) * sizeof(stdFontEntry) + sizeof(stdFont);
+    stdFont *font = (stdFont *)std_pHS->alloc(allocSize);
+    if ( !font )
+        return NULL;
+    _memset(font, 0, allocSize);
+    font->charsetHead.pEntries = &font->charsetHead.entries;
+    font->marginY = marginY;
+    font->charsetHead.charLast = charLast;
+    font->marginX = marginX;
+    font->charsetHead.charFirst = charFirst;
+    font->field_28 = field_28;
+    return font;
+}
+
+int stdFont_sub_435570(uint16_t ch)
+{
+    if ( iswspace(ch) )
+        return 1;
+    if ( ch == 0x2028 ) // Unicode line separator
+        return 1;
+    return ch == 0x2029; // Unicode paragraph separator
+}
+
+int stdFont_sub_4355F0(stdFont *font, const wchar_t *text)
+{
+    int totalWidth = 0;
+    int maxLen = 0x7FFFFFFF;
+
+    while ( *text && maxLen > 0 )
+    {
+        int glyphWidth;
+        if ( iswspace(*text) )
+        {
+            glyphWidth = font->marginX;
+        }
+        else
+        {
+            uint16_t lookupChar = *text;
+            stdFontCharset *charset = stdFont_FindCharset(font, &lookupChar);
+            if ( charset )
+                glyphWidth = charset->pEntries[lookupChar - charset->charFirst].glyphWidth;
+            else
+                glyphWidth = 0;
+            glyphWidth += font->marginY;
+        }
+        totalWidth += glyphWidth;
+        text++;
+        maxLen--;
+    }
+    return totalWidth;
+}
+
+stdFontCharset* stdFont_sub_4358D0(stdFont *font, uint16_t charFirst, uint16_t charLast)
+{
+    // Walk to end of charset linked list
+    stdFontCharset *prev = &font->charsetHead;
+    stdFontCharset *iter = font->charsetHead.previous;
+    while ( iter )
+    {
+        prev = iter;
+        iter = iter->previous;
+    }
+
+    uint32_t allocSize = ((uint32_t)(charLast - charFirst) + 1) * sizeof(stdFontEntry) + sizeof(stdFontCharset);
+    stdFontCharset *newCharset = (stdFontCharset *)std_pHS->alloc(allocSize);
+    if ( !newCharset )
+        return NULL;
+    _memset(newCharset, 0, allocSize);
+    prev->previous = newCharset;
+    newCharset->charFirst = charFirst;
+    newCharset->charLast = charLast;
+    newCharset->pEntries = &newCharset->entries;
+    return newCharset;
+}
+
+int stdFont_sub_4356B0(const wchar_t *text, stdFont *font, int *pMaxWidth)
+{
+    int maxWidth = 0;
+    const wchar_t *p = text;
+    int charsRemaining = 0;
+
+    if ( !text )
+        return maxWidth;
+
+    do
+    {
+        p = stdFont_sub_4352C0(p, font, *pMaxWidth, (rdRect*)pMaxWidth, &charsRemaining);
+
+        int lineWidth = 0;
+        uint16_t ch = *p;
+        const wchar_t *iter = p;
+        int remaining = charsRemaining;
+
+        while ( ch && remaining > 0 )
+        {
+            int glyphWidth;
+            if ( iswspace(*iter) )
+            {
+                glyphWidth = font->marginX;
+            }
+            else
+            {
+                uint16_t lookupChar = ch;
+                stdFontCharset *charset = stdFont_FindCharset(font, &lookupChar);
+                if ( charset )
+                    glyphWidth = charset->pEntries[lookupChar - charset->charFirst].glyphWidth;
+                else
+                    glyphWidth = 0;
+                glyphWidth += font->marginY;
+            }
+            lineWidth += glyphWidth;
+            iter++;
+            remaining--;
+            ch = *iter;
+        }
+
+        if ( maxWidth < lineWidth )
+            maxWidth = lineWidth;
+    }
+    while ( p );
+
+    return maxWidth;
+}
+
+void stdFont_sub_435190(stdVBuffer *vbuf, stdFont *font, int destX, int destY, uint16_t ch, int alpha)
+{
+    rdRect srcRect;
+    int glyphTexX, glyphWidth;
+
+    stdVBuffer *fontSurf = *font->pBitmap->mipSurfaces;
+
+    if ( iswspace(ch) )
+        return;
+
+    uint16_t lookupChar = ch;
+    stdFontCharset *charset = stdFont_FindCharset(font, &lookupChar);
+    if ( !charset ) return;
+    glyphTexX = charset->pEntries[lookupChar - charset->charFirst].glyphTexX;
+    glyphWidth = charset->pEntries[lookupChar - charset->charFirst].glyphWidth;
+
+    srcRect.x = glyphTexX;
+    srcRect.y = 0;
+    srcRect.width = glyphWidth;
+    srcRect.height = fontSurf->format.height;
+    stdDisplay_VBufferCopy(vbuf, fontSurf, destX, destY, &srcRect, alpha);
+}
+
+int stdFont_Write(const char *fpath, stdFont *font)
+{
+    stdFontHeader header;
+    stdFontExtHeader extHeader;
+
+    _memset(&header, 0, sizeof(header));
+    _strncpy((char*)&header, "GCF ", 4);
+    header.version = 10;
+    header.field_10 = font->field_28;
+    header.marginY = font->marginY;
+    header.marginX = font->marginX;
+
+    // Count charsets
+    stdFontCharset *charset = &font->charsetHead;
+    int numCharsets = 0;
+    while ( charset )
+    {
+        numCharsets++;
+        charset = charset->previous;
+    }
+    header.numCharsets = numCharsets;
+
+    int fhand = std_pHS->fileOpen(fpath, "wb");
+    if ( !fhand )
+        return 0;
+
+    int written = std_pHS->fileWrite(fhand, &header, sizeof(stdFontHeader));
+    if ( written != sizeof(stdFontHeader) )
+    {
+        std_pHS->fileClose(fhand);
+        return 0;
+    }
+
+    charset = &font->charsetHead;
+    int idx = 0;
+    while ( idx < numCharsets )
+    {
+        extHeader.characterFirst = charset->charFirst;
+        extHeader.characterLast = charset->charLast;
+        written = std_pHS->fileWrite(fhand, &extHeader, sizeof(stdFontExtHeader));
+        if ( written != sizeof(stdFontExtHeader) )
+        {
+            std_pHS->fileClose(fhand);
+            return 0;
+        }
+        uint32_t entryBytes = ((uint32_t)(charset->charLast - charset->charFirst)) * sizeof(stdFontEntry) + sizeof(stdFontEntry);
+        written = std_pHS->fileWrite(fhand, charset->pEntries, entryBytes);
+        if ( (uint32_t)written != entryBytes )
+        {
+            std_pHS->fileClose(fhand);
+            return 0;
+        }
+        charset = charset->previous;
+        idx++;
+    }
+
+    stdBitmap_AppendToFile(fhand, font->pBitmap);
+    std_pHS->fileClose(fhand);
+    return 1;
+}
+
+int stdFont_sub_435950(stdFont *font, uint16_t ch, int *pTexX, int *pWidth)
+{
+    stdFontCharset *charset = &font->charsetHead;
+    while ( charset && !(ch >= charset->charFirst && ch <= charset->charLast) )
+    {
+        charset = charset->previous;
+    }
+    if ( charset )
+    {
+        stdFontEntry *entry = &charset->pEntries[ch - charset->charFirst];
+        *pTexX = entry->glyphTexX;
+        *pWidth = entry->glyphWidth;
+        return 1;
+    }
+    *pTexX = 0;
+    *pWidth = 0;
+    return 0;
 }
 
 uint32_t stdFont_DrawAsciiGPU(stdFont *a2, unsigned int blit_x, int blit_y, int x_max, const char *str, int alpha_maybe, flex_t scale)

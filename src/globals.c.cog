@@ -178,12 +178,15 @@ void OpenJKDF2_Globals_Reset()
     from pathlib import Path
     
     cog.outl("// %s" % embedded_resources)
+    cog.outl("// %s" % project_root)
+    project_root_conv = (str(Path(project_root)) + os.sep).replace("\\", "/") 
     embed_files = embedded_resources.split("+")
     cog.outl("const size_t embeddedResource_aFiles_num = %d;" % (len(embed_files),))
     cog.outl("const embeddedResource_t embeddedResource_aFiles[%d] = {" % (len(embed_files),))
 
     for fpath in embed_files:
-        fpath_ = fpath.replace(str(Path(project_root)) + os.sep, "").replace("\\", "/").replace("resource/", "")
+        cog.outl("// %s" % fpath)
+        fpath_ = fpath.replace(project_root_conv, "").replace("\\", "/").replace("resource/", "")
         fname = os.path.basename(fpath)
         contents = open(fpath, "r").read()
 

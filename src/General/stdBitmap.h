@@ -78,6 +78,12 @@ void stdBitmap_ConvertColorFormat(rdTexFormat *formatTo, stdBitmap *bitmap);
 void stdBitmap_FreeEntry(stdBitmap *pBitmap);
 void stdBitmap_Free(stdBitmap *bitmap);
 
+int stdBitmap_AppendToFile(stdFile_t fhand, stdBitmap *pBitmap);
+int stdBitmap_Write(const char *fpath, stdBitmap *pBitmap);
+void stdBitmap_MemUsage(stdBitmap *pBitmap, int mipIdx, stdVBuffer *vbuf);
+stdBitmap* stdBitmap_New(uint32_t numMips, int palFmt, int field_20, int field_68, rdTexFormat *pFormat);
+int stdBitmap_NewEntry(stdBitmap *bitmap, uint32_t numMips, int palFmt, int field_20, int field_68, rdTexFormat *pFormat);
+
 stdBitmap* stdBitmap_LoadPartial(char *fpath, int bCreateDDrawSurface, int gpuMem); // Added
 int stdBitmap_EnsureData(stdBitmap *pBitmap);
 int stdBitmap_UnloadData(stdBitmap* pBitmap);

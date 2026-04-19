@@ -38,6 +38,14 @@ int stdFont_sub_434EC0(stdVBuffer *a1, stdFont *a2, int a3, int a4, int a5, int3
 void stdFont_Free(stdFont *font);
 MATH_FUNC uint32_t stdFont_DrawAscii(stdVBuffer *a1, stdFont *a2, unsigned int blit_x, int blit_y, int x_max, char *str, int alpha_maybe);
 int stdFont_sub_4355B0(stdFont *font, uint16_t a2);
+stdFont* stdFont_New(int marginY, int marginX, int16_t field_28, uint16_t charFirst, uint16_t charLast);
+int stdFont_Write(const char *fpath, stdFont *font);
+int stdFont_sub_435570(uint16_t ch);
+int stdFont_sub_4355F0(stdFont *font, const wchar_t *text);
+int stdFont_sub_4356B0(const wchar_t *text, stdFont *font, int *pMaxWidth);
+void stdFont_sub_435190(stdVBuffer *vbuf, stdFont *font, int destX, int destY, uint16_t ch, int alpha);
+stdFontCharset* stdFont_sub_4358D0(stdFont *font, uint16_t charFirst, uint16_t charLast);
+int stdFont_sub_435950(stdFont *font, uint16_t ch, int *pTexX, int *pWidth);
 
 MATH_FUNC uint32_t stdFont_DrawAsciiGPU(stdFont *a2, unsigned int blit_x, int blit_y, int x_max, const char *str, int alpha_maybe, flex_t scale);
 MATH_FUNC uint32_t stdFont_DrawAsciiWidth(stdFont *a2, unsigned int blit_x, int blit_y, int x_max, const char *str, int alpha_maybe, flex_t scale);

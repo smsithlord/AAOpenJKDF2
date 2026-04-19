@@ -240,6 +240,32 @@ int sithSector_GetThingsCount(sithSector *sector)
     return result;
 }
 
+int sithSector_New(sithWorld *world, int num)
+{
+    sithSector *sectors = (sithSector *)pSithHS->alloc(num * sizeof(sithSector));
+    world->sectors = sectors;
+    if ( !sectors )
+        return 0;
+    _memset(sectors, 0, num * sizeof(sithSector));
+    world->numSectors = num;
+    return 1;
+}
+
+void sithSector_NewEntry(sithSector *sector, int idx)
+{
+    sector->id = idx;
+    sector->ambientLight = 0.0f;
+    sector->extraLight = 0.0f;
+    sector->colormap = NULL;
+    sector->tint.x = 0.0f;
+    sector->tint.y = 0.0f;
+    sector->tint.z = 0.0f;
+    sector->numVertices = 0;
+    sector->numSurfaces = 0;
+    sector->adjoins = NULL;
+    sector->thingsList = NULL;
+}
+
 void sithSector_Free(sithWorld *world)
 {
     for (uint32_t i = 0; i < world->numSectors; i++)

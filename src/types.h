@@ -139,6 +139,26 @@ typedef uint32_t size_t;
 #endif
 #endif
 
+#if defined(_MSC_VER)
+#define PURE_FUNC //TODO
+#else
+#if defined(__GNUC__)
+#define PURE_FUNC __attribute__ ((pure))
+#else
+#define PURE_FUNC __attribute__ ((pure))
+#endif
+#endif
+
+#if defined(_MSC_VER)
+#define ALWAYS_INLINE //TODO
+#else
+#if defined(__GNUC__)
+#define ALWAYS_INLINE __attribute__ ((always_inline))
+#else
+#define ALWAYS_INLINE __attribute__ ((always_inline))
+#endif
+#endif
+
 typedef struct GUID_idk
 {
     uint32_t a,b,c,d;

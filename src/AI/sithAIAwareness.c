@@ -51,6 +51,18 @@ int sithAIAwareness_AddEntry(sithSector *sector, rdVector3 *pos, int32_t a3, fle
     return 1;
 }
 
+void sithAIAwareness_FlushEntries()
+{
+    if ( sithAIAwareness_numEntries )
+    {
+        for (uint32_t i = 0; i < sithAIAwareness_numEntries; i++)
+        {
+            sithSectorEntry* entry = &sithAIAwareness_aEntries[i];
+            sithAIAwareness_sub_4F2C30(entry, entry->sector, &entry->pos, &entry->pos, entry->field_18, entry->field_18, entry->thing);
+        }
+    }
+}
+
 int sithAIAwareness_Tick(int32_t a, sithEventInfo* b)
 {
     // Added: co-op

@@ -11,8 +11,12 @@ if(NOT PLAT_MSVC)
     set(PYTHON_EXE "${CMAKE_CURRENT_BINARY_DIR}/cogapp_venv/bin/python3")
     set(COGAPP_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/cogapp_venv/bin/cog")
 else()
-    set(PYTHON_EXE "python")
-    set(COGAPP_DEPENDS "python")
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+    # Print the Python executable path
+    message(STATUS "Python executable: ${Python3_EXECUTABLE}")
+    set(PYTHON_EXE "${Python3_EXECUTABLE}")
+    set(COGAPP_DEPENDS "${Python3_EXECUTABLE}")
 endif()
 
 list(JOIN EMBEDDED_RESOURCES "+" EMBEDDED_RESOURCES_SEPARATED)
