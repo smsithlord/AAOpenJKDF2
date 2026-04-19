@@ -160,7 +160,22 @@ bool SteamworksWebBrowser_InitSteamAPI(void)
 
     if (g_host.host_printf) g_host.host_printf("SWB: Initializing Steam API...\n");
 
-    if (!SteamAPI_Init()) {
+    /* SteamAPI_Init reads steam_appid.txt from the process CWD. We keep that
+     * file inside aarcadecore/ alongside the other aarcade runtime assets, so
+     * chdir there for the init call and restore CWD afterwards. */
+#ifdef _WIN32
+    char prevCwd[MAX_PATH] = {0};
+    DWORD gotCwd = GetCurrentDirectoryA(sizeof(prevCwd), prevCwd);
+    BOOL chdirOk = SetCurrentDirectoryA("aarcadecore");
+#endif
+
+    bool steamOk = SteamAPI_Init();
+
+#ifdef _WIN32
+    if (chdirOk && gotCwd) SetCurrentDirectoryA(prevCwd);
+#endif
+
+    if (!steamOk) {
         if (g_host.host_printf) g_host.host_printf("SWB: SteamAPI_Init() failed. Is Steam running?\n");
         return false;
     }

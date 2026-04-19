@@ -56,11 +56,11 @@ public:
      * cache file alone — use deleteCacheFile for that. */
     void clearPixelCache(const std::string& cachePath);
 
-    /* Delete an on-disk cache file, rejecting any path outside ./cache/. */
+    /* Delete an on-disk cache file, rejecting any path outside ./aarcadecore/cache/. */
     bool deleteCacheFile(const std::string& cachePath);
 
     /* Delete the cache file for a URL, if present.
-     * cacheType: "url" (default) for ./cache/urls, "snapshot" for ./cache/snapshots. */
+     * cacheType: "url" (default) for ./aarcadecore/cache/urls, "snapshot" for ./aarcadecore/cache/snapshots. */
     bool deleteCacheForUrl(const std::string& url, const std::string& cacheType = "url");
 
     /* Save a snapshot of raw BGRA pixels to cache/snapshots/{hash}.png keyed by itemId */

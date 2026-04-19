@@ -14,13 +14,13 @@ bool UltralightInstance_IsCloseRequested(EmbeddedInstance* inst);
 void UltralightInstance_LoadURL(EmbeddedInstance* inst, const char* url);
 void UltralightInstance_EvaluateScript(EmbeddedInstance* inst, const char* script);
 
-#define UL_BLANK_HTML        "file:///aarcadecore/ui/blank.html"
-#define UL_OVERLAY_HTML      "file:///aarcadecore/ui/overlay.html"
-#define UL_MAINMENU_HTML     "file:///aarcadecore/ui/mainMenu.html"
-#define UL_LIBRARY_HTML      "file:///aarcadecore/ui/library.html"
-#define UL_TASKMENU_HTML     "file:///aarcadecore/ui/taskMenu.html"
-#define UL_BUILDMENU_HTML    "file:///aarcadecore/ui/buildContextMenu.html"
-#define UL_TABMENU_HTML      "file:///aarcadecore/ui/tabMenu.html"
+#define UL_BLANK_HTML        "file:///ui/blank.html"
+#define UL_OVERLAY_HTML      "file:///ui/overlay.html"
+#define UL_MAINMENU_HTML     "file:///ui/mainMenu.html"
+#define UL_LIBRARY_HTML      "file:///ui/library.html"
+#define UL_TASKMENU_HTML     "file:///ui/taskMenu.html"
+#define UL_BUILDMENU_HTML    "file:///ui/buildContextMenu.html"
+#define UL_TABMENU_HTML      "file:///ui/tabMenu.html"
 #define UL_HUD_MATERIAL      "DynScreen.mat"
 
 /* The HUD instance is always alive */
@@ -39,7 +39,7 @@ static bool g_hudInputActive = false;
 static uint8_t* g_hudPixelBuffer = NULL;
 static bool g_hudPixelBufferValid = false;
 
-#define UL_SPAWNMODE_HTML    "file:///aarcadecore/ui/spawnMode.html"
+#define UL_SPAWNMODE_HTML    "file:///ui/spawnMode.html"
 
 /* Forward declarations */
 void UltralightManager_CloseMainMenu(void);
@@ -203,7 +203,7 @@ void UltralightManager_OpenCreateItem(const char* file)
     urlEncodeInto(encoded, sizeof(encoded), file);
 
     char url[8192];
-    snprintf(url, sizeof(url), "file:///aarcadecore/ui/createItem.html?file=%s", encoded);
+    snprintf(url, sizeof(url), "file:///ui/createItem.html?file=%s", encoded);
 
     if (g_host.host_printf) g_host.host_printf("UltralightManager: Opening create item with file=%s\n", file);
     UltralightInstance_LoadURL(g_hudInstance, url);

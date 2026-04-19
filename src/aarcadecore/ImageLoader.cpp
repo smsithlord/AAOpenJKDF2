@@ -115,7 +115,7 @@ ImageLoader::ImageLoader()
     : isInitialized_(false), captureReady_(false),
       captureRectX_(0), captureRectY_(0), captureRectW_(0), captureRectH_(0)
 {
-    cacheBasePath_ = ".\\cache\\urls";
+    cacheBasePath_ = ".\\aarcadecore\\cache\\urls";
 }
 
 ImageLoader::~ImageLoader() { shutdown(); }
@@ -123,7 +123,7 @@ ImageLoader::~ImageLoader() { shutdown(); }
 bool ImageLoader::init()
 {
     if (g_host.host_printf) g_host.host_printf("ImageLoader: Initializing...\n");
-    MKDIR(".\\cache");
+    MKDIR(".\\aarcadecore\\cache");
     MKDIR(cacheBasePath_.c_str());
 
     renderer_ = Renderer::Create();
@@ -138,7 +138,7 @@ bool ImageLoader::init()
     view_ = renderer_->CreateView(512, 512, vc, nullptr);
     view_->set_load_listener(this);
     g_activeImageLoader = this;
-    view_->LoadURL("file:///aarcadecore/ui/image-loader.html");
+    view_->LoadURL("file:///ui/image-loader.html");
     if (g_host.host_printf) g_host.host_printf("ImageLoader: View created, loading image-loader.html\n");
     return true;
 }
@@ -204,7 +204,7 @@ std::string ImageLoader::getCacheFilePath(const std::string& url) {
 std::string ImageLoader::getCachedFilePath(const std::string& url, const std::string& cacheType) {
     std::string hash = calculateKodiHash(normalizeUrl(url));
     std::string subfolder = hash.substr(0, 1);
-    std::string base = (cacheType == "snapshot") ? ".\\cache\\snapshots" : cacheBasePath_;
+    std::string base = (cacheType == "snapshot") ? ".\\aarcadecore\\cache\\snapshots" : cacheBasePath_;
     std::string path = base + "\\" + subfolder + "\\" + hash + ".png";
 #ifdef _WIN32
     DWORD attrs = GetFileAttributesA(path.c_str());
@@ -220,9 +220,9 @@ bool ImageLoader::saveSnapshot(const std::string& key, const uint8_t* bgraPixels
     if (key.empty() || !bgraPixels || width <= 0 || height <= 0) return false;
 
     std::string hash = calculateKodiHash(normalizeUrl(key));
-    MKDIR(".\\cache");
-    MKDIR(".\\cache\\snapshots");
-    std::string dir = ".\\cache\\snapshots\\" + hash.substr(0, 1);
+    MKDIR(".\\aarcadecore\\cache");
+    MKDIR(".\\aarcadecore\\cache\\snapshots");
+    std::string dir = ".\\aarcadecore\\cache\\snapshots\\" + hash.substr(0, 1);
     MKDIR(dir.c_str());
     std::string path = dir + "\\" + hash + ".png";
 
@@ -276,9 +276,9 @@ bool ImageLoader::saveThumbnail(const std::string& key, const uint8_t* rgbaPixel
 
     /* Build output path: cache/thumbnails/{hash[0]}/{hash}.png */
     std::string hash = calculateKodiHash(normalizeUrl(key));
-    MKDIR(".\\cache");
-    MKDIR(".\\cache\\thumbnails");
-    std::string dir = ".\\cache\\thumbnails\\" + hash.substr(0, 1);
+    MKDIR(".\\aarcadecore\\cache");
+    MKDIR(".\\aarcadecore\\cache\\thumbnails");
+    std::string dir = ".\\aarcadecore\\cache\\thumbnails\\" + hash.substr(0, 1);
     MKDIR(dir.c_str());
     std::string path = dir + "\\" + hash + ".png";
 
@@ -732,10 +732,11 @@ void ImageLoader::clearPixelCache(const std::string& cachePath)
     }
 }
 
-/* Security: only accept paths rooted at ./cache/ (the app-managed cache
- * directory) and reject anything containing `..` traversal. Paths come from
- * internal state today, but keeping the check tight means JS-driven deletion
- * requests can never escape the cache folder regardless of what they pass. */
+/* Security: only accept paths rooted at ./aarcadecore/cache/ (the app-managed
+ * cache directory) and reject anything containing `..` traversal. Paths come
+ * from internal state today, but keeping the check tight means JS-driven
+ * deletion requests can never escape the cache folder regardless of what they
+ * pass. */
 static bool isInsideCacheFolder(const std::string& path)
 {
     if (path.empty()) return false;
@@ -743,7 +744,7 @@ static bool isInsideCacheFolder(const std::string& path)
     for (char& c : p) { if (c == '\\') c = '/'; }
     std::string lower = p;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (lower.compare(0, 8, "./cache/") != 0) return false;
+    if (lower.compare(0, 20, "./aarcadecore/cache/") != 0) return false;
     if (p.find("/../") != std::string::npos) return false;
     if (p.size() >= 3 && p.compare(p.size() - 3, 3, "/..") == 0) return false;
     return true;
@@ -772,8 +773,8 @@ bool ImageLoader::deleteCacheForUrl(const std::string& url, const std::string& c
     /* Compute the path deterministically so we can delete even when the in-memory
      * existence check (getCachedFilePath) would miss due to race or prior deletion. */
     std::string hash = calculateKodiHash(normalizeUrl(url));
-    std::string base = (cacheType == "snapshot") ? ".\\cache\\snapshots"
-                     : (cacheType == "thumbnail") ? ".\\cache\\thumbnails"
+    std::string base = (cacheType == "snapshot") ? ".\\aarcadecore\\cache\\snapshots"
+                     : (cacheType == "thumbnail") ? ".\\aarcadecore\\cache\\thumbnails"
                                                   : cacheBasePath_;
     std::string path = base + "\\" + hash.substr(0, 1) + "\\" + hash + ".png";
     return deleteCacheFile(path);

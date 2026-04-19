@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <direct.h>
+#include <windows.h>
 #endif
 
 /* DLL handle and function pointers */
@@ -364,7 +365,15 @@ void AACoreManager_Init(void)
 
     stdPlatform_Printf("AACoreManager: Loading aarcadecore.dll...\n");
 
-    g_dll = SDL_LoadObject("aarcadecore.dll");
+#ifdef _WIN32
+    /* Add aarcadecore/ to the DLL search path so Windows can resolve
+     * aarcadecore.dll's implicit imports (Ultralight, mpv) which live as
+     * siblings in that folder. Without this, the load fails because the
+     * standard search order doesn't include a DLL's own directory. */
+    SetDllDirectoryA("aarcadecore");
+#endif
+
+    g_dll = SDL_LoadObject("aarcadecore/aarcadecore.dll");
     if (!g_dll) {
         stdPlatform_Printf("AACoreManager: Failed to load DLL: %s\n", SDL_GetError());
         return;

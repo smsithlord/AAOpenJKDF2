@@ -1005,9 +1005,15 @@ AAPI_CALLBACK(js_images_getCacheImage) {
                 JSObjectRef p = it->promiseObj;
 
                 if (result.success) {
-                    /* Convert file path to file:// URL */
-                    std::string fileUrl = "file:///./" + result.filePath;
-                    for (char& ch : fileUrl) { if (ch == '\\') ch = '/'; }
+                    /* result.filePath is on-disk (".\\aarcadecore\\cache\\..."); convert to
+                     * a file:// URL relative to the aarcadecore file-system root by
+                     * normalizing separators and stripping the leading "./aarcadecore/". */
+                    std::string path = result.filePath;
+                    for (char& ch : path) { if (ch == '\\') ch = '/'; }
+                    static const std::string kAaPrefix = "./aarcadecore/";
+                    if (path.compare(0, kAaPrefix.size(), kAaPrefix) == 0)
+                        path = path.substr(kAaPrefix.size());
+                    std::string fileUrl = "file:///" + path;
 
                     JSStringRef resolveKey = JSStringCreateWithUTF8CString("_resolve");
                     JSValueRef resolveVal = JSObjectGetProperty(c, p, resolveKey, nullptr);
@@ -1232,11 +1238,14 @@ static bool ul_init(EmbeddedInstance* inst)
 
     /* Setup Platform handlers */
     Config config;
-    config.resource_path_prefix = "./resources/";
-    config.cache_path = "./cache/ultralight/";
+    /* resource_path_prefix is resolved via the custom FileSystem (base
+     * "./aarcadecore/"), so "resources/" here maps to ./aarcadecore/resources/
+     * on disk. cache_path is a raw OS path (not FS-routed) and stays CWD-relative. */
+    config.resource_path_prefix = "resources/";
+    config.cache_path = "./aarcadecore/cache/ultralight/";
     Platform::instance().set_config(config);
     Platform::instance().set_font_loader(GetPlatformFontLoader());
-    Platform::instance().set_file_system(GetPlatformFileSystem("./"));
+    Platform::instance().set_file_system(GetPlatformFileSystem("./aarcadecore/"));
     Platform::instance().set_clipboard(&g_clipboard);
 
     /* Create renderer */

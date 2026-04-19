@@ -102,7 +102,7 @@ static HostServices hs;
 int32_t Main_bDedicatedServer = 0;
 int32_t Main_bAutostart = 0;
 int32_t Main_bAutostartSp = 0;
-int32_t Main_bResumeLast = 0;
+int32_t Main_bResumeLast = 1;
 int32_t Main_bHeadless = 0;
 int32_t Main_bVerboseNetworking = 0;
 int32_t Main_bMotsCompat = 0;
@@ -717,9 +717,9 @@ void Main_ParseCmdLine(char *cmdline)
         {
             Main_bAutostartSp = 0;
         }
-        else if (!__strcmpi(pArgTok, "-resumeLast") || !__strcmpi(pArgTok, "/resumeLast") )
+        else if (!__strcmpi(pArgTok, "-doNotResumeLast") || !__strcmpi(pArgTok, "/doNotResumeLast") )
         {
-            Main_bResumeLast = 1;
+            Main_bResumeLast = 0;
         }
         else if (!__strcmpi(pArgTok, "-episode") || !__strcmpi(pArgTok, "/episode") )
         {
