@@ -1,5 +1,7 @@
 # Build Success - Libretro Host Integration
 
+> **⚠️ ARCHIVED — HISTORICAL DOC.** Snapshot of the original Dec 2025 "first successful build" for the in-exe Libretro host approach. That code was later moved into `aarcadecore.dll`; the file list below references files that have since been deleted (`src/Platform/Common/libretro_host.c`, `libretro_integration.c`). Kept for history only.
+
 ## Build Information
 
 **Date**: 2025-12-28

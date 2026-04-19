@@ -1,4 +1,4 @@
-#include "jkSession.h"
+#include "aaSession.h"
 
 #include "General/stdJSON.h"
 #include "General/stdString.h"
@@ -15,10 +15,10 @@
 #define JKSESSION_FNAME "openjkdf2_lastsession.json"
 #define JKSESSION_VERSION 1
 
-jkSessionMode jkSession_currentMode      = SESSION_MODE_NONE;
-int           jkSession_pendingMpHosting = 0;
-int           jkSession_bResumed         = 0;
-char          jkSession_resumeShortName[32] = {0};
+aaSessionMode aaSession_currentMode      = SESSION_MODE_NONE;
+int           aaSession_pendingMpHosting = 0;
+int           aaSession_bResumed         = 0;
+char          aaSession_resumeShortName[32] = {0};
 
 // Several engine globals are defined in .c files without a header-declared
 // extern. Re-declare the ones we need here to avoid spreading externs.
@@ -42,14 +42,14 @@ extern sithWorld*  sithWorld_pCurrentWorld;
 
 // Pending teleport state — populated by LoadAndApply, consumed once by
 // ApplyPendingPosition after the player thing becomes valid.
-static int        jkSession_bPendingPosition = 0;
-static rdVector3  jkSession_pendingPos;
-static rdMatrix34 jkSession_pendingLookOrient;
-static rdVector3  jkSession_pendingEyePYR;
-static int        jkSession_pendingSectorIdx = -1;
-static char       jkSession_pendingMapJkl[128] = {0};
+static int        aaSession_bPendingPosition = 0;
+static rdVector3  aaSession_pendingPos;
+static rdMatrix34 aaSession_pendingLookOrient;
+static rdVector3  aaSession_pendingEyePYR;
+static int        aaSession_pendingSectorIdx = -1;
+static char       aaSession_pendingMapJkl[128] = {0};
 
-static const char* jkSession_ModeStr(jkSessionMode mode)
+static const char* aaSession_ModeStr(aaSessionMode mode)
 {
     switch (mode)
     {
@@ -60,7 +60,7 @@ static const char* jkSession_ModeStr(jkSessionMode mode)
     }
 }
 
-static jkSessionMode jkSession_ModeFromStr(const char* s)
+static aaSessionMode aaSession_ModeFromStr(const char* s)
 {
     if (!s || !s[0]) return SESSION_MODE_NONE;
     if (!strcmp(s, "sp"))    return SESSION_MODE_SP;
@@ -69,11 +69,11 @@ static jkSessionMode jkSession_ModeFromStr(const char* s)
     return SESSION_MODE_NONE;
 }
 
-void jkSession_SaveCurrent(void)
+void aaSession_SaveCurrent(void)
 {
     const char* fpath = JKSESSION_FNAME;
 
-    if (jkSession_currentMode == SESSION_MODE_NONE)
+    if (aaSession_currentMode == SESSION_MODE_NONE)
         return;
 
     if (!jkRes_episodeGobName[0] && !jkMain_aLevelJklFname[0])
@@ -89,7 +89,7 @@ void jkSession_SaveCurrent(void)
     stdJSON_EraseAll(fpath);
 
     stdJSON_SaveInt  (fpath, "version",           JKSESSION_VERSION);
-    stdJSON_SetString(fpath, "mode",              jkSession_ModeStr(jkSession_currentMode));
+    stdJSON_SetString(fpath, "mode",              aaSession_ModeStr(aaSession_currentMode));
     stdJSON_SetString(fpath, "episode_gob",       jkRes_episodeGobName);
     stdJSON_SetString(fpath, "map_jkl",           jkMain_aLevelJklFname);
     stdJSON_SetString(fpath, "player_short_name", shortName);
@@ -130,7 +130,7 @@ void jkSession_SaveCurrent(void)
         stdJSON_SaveFloat(fpath, "eye_pyr_z",  pLocal->actorParams.eyePYR.z);
     }
 
-    if (jkSession_currentMode == SESSION_MODE_MP)
+    if (aaSession_currentMode == SESSION_MODE_MP)
     {
         stdJSON_SetWString(fpath, "mp_char_name",       (const char16_t*)jkGuiMultiplayer_mpcInfo.name);
         stdJSON_SetString (fpath, "mp_char_model",      jkGuiMultiplayer_mpcInfo.model);
@@ -139,7 +139,7 @@ void jkSession_SaveCurrent(void)
         stdJSON_SetString (fpath, "mp_saber_tip_mat",   jkGuiMultiplayer_mpcInfo.tipMat);
         stdJSON_SaveInt   (fpath, "mp_char_jedi_rank",  jkGuiMultiplayer_mpcInfo.jediRank);
 
-        stdJSON_SaveBool  (fpath, "mp_was_hosting",     jkSession_pendingMpHosting);
+        stdJSON_SaveBool  (fpath, "mp_was_hosting",     aaSession_pendingMpHosting);
         stdJSON_SetWString(fpath, "mp_server_name",     (const char16_t*)jkGuiNetHost_gameName);
         stdJSON_SaveInt   (fpath, "mp_session_flags",   jkGuiNetHost_sessionFlags);
         stdJSON_SaveInt   (fpath, "mp_multi_mode_flags",jkGuiNetHost_gameFlags);
@@ -151,7 +151,7 @@ void jkSession_SaveCurrent(void)
     }
 }
 
-int jkSession_LoadAndApply(void)
+int aaSession_LoadAndApply(void)
 {
     const char* fpath = JKSESSION_FNAME;
 
@@ -161,7 +161,7 @@ int jkSession_LoadAndApply(void)
 
     char modeStr[16] = {0};
     stdJSON_GetString(fpath, "mode", modeStr, sizeof(modeStr), "");
-    jkSessionMode mode = jkSession_ModeFromStr(modeStr);
+    aaSessionMode mode = aaSession_ModeFromStr(modeStr);
     if (mode == SESSION_MODE_NONE)
         return 0;
 
@@ -181,10 +181,10 @@ int jkSession_LoadAndApply(void)
     stdString_SafeStrCopy(Main_strMap,     mapJkl,  sizeof(Main_strMap));
 
     // Hand the profile short-name off to Main_StartupDedicated via our module buffer.
-    memset(jkSession_resumeShortName, 0, sizeof(jkSession_resumeShortName));
+    memset(aaSession_resumeShortName, 0, sizeof(aaSession_resumeShortName));
     stdJSON_GetString(fpath, "player_short_name",
-                      jkSession_resumeShortName,
-                      sizeof(jkSession_resumeShortName), "");
+                      aaSession_resumeShortName,
+                      sizeof(aaSession_resumeShortName), "");
 
     if (mode == SESSION_MODE_MP)
     {
@@ -216,72 +216,72 @@ int jkSession_LoadAndApply(void)
     }
 
     // Pull the saved position data (if any) into the pending-teleport state.
-    // It'll be consumed by jkSession_ApplyPendingPosition after the first
+    // It'll be consumed by aaSession_ApplyPendingPosition after the first
     // level load completes — if the loaded map matches mapJkl.
-    jkSession_bPendingPosition = 0;
+    aaSession_bPendingPosition = 0;
     if (stdJSON_GetBool(fpath, "has_position", 0))
     {
-        jkSession_pendingSectorIdx = stdJSON_GetInt(fpath, "sector_idx", -1);
-        jkSession_pendingPos.x     = stdJSON_GetFloat(fpath, "pos_x", 0.0f);
-        jkSession_pendingPos.y     = stdJSON_GetFloat(fpath, "pos_y", 0.0f);
-        jkSession_pendingPos.z     = stdJSON_GetFloat(fpath, "pos_z", 0.0f);
-        jkSession_pendingLookOrient.rvec.x = stdJSON_GetFloat(fpath, "look_rvec_x", 1.0f);
-        jkSession_pendingLookOrient.rvec.y = stdJSON_GetFloat(fpath, "look_rvec_y", 0.0f);
-        jkSession_pendingLookOrient.rvec.z = stdJSON_GetFloat(fpath, "look_rvec_z", 0.0f);
-        jkSession_pendingLookOrient.lvec.x = stdJSON_GetFloat(fpath, "look_lvec_x", 0.0f);
-        jkSession_pendingLookOrient.lvec.y = stdJSON_GetFloat(fpath, "look_lvec_y", 1.0f);
-        jkSession_pendingLookOrient.lvec.z = stdJSON_GetFloat(fpath, "look_lvec_z", 0.0f);
-        jkSession_pendingLookOrient.uvec.x = stdJSON_GetFloat(fpath, "look_uvec_x", 0.0f);
-        jkSession_pendingLookOrient.uvec.y = stdJSON_GetFloat(fpath, "look_uvec_y", 0.0f);
-        jkSession_pendingLookOrient.uvec.z = stdJSON_GetFloat(fpath, "look_uvec_z", 1.0f);
-        jkSession_pendingLookOrient.scale.x = 0.0f;
-        jkSession_pendingLookOrient.scale.y = 0.0f;
-        jkSession_pendingLookOrient.scale.z = 0.0f;
-        jkSession_pendingEyePYR.x  = stdJSON_GetFloat(fpath, "eye_pyr_x", 0.0f);
-        jkSession_pendingEyePYR.y  = stdJSON_GetFloat(fpath, "eye_pyr_y", 0.0f);
-        jkSession_pendingEyePYR.z  = stdJSON_GetFloat(fpath, "eye_pyr_z", 0.0f);
-        stdString_SafeStrCopy(jkSession_pendingMapJkl, mapJkl, sizeof(jkSession_pendingMapJkl));
-        jkSession_bPendingPosition = 1;
+        aaSession_pendingSectorIdx = stdJSON_GetInt(fpath, "sector_idx", -1);
+        aaSession_pendingPos.x     = stdJSON_GetFloat(fpath, "pos_x", 0.0f);
+        aaSession_pendingPos.y     = stdJSON_GetFloat(fpath, "pos_y", 0.0f);
+        aaSession_pendingPos.z     = stdJSON_GetFloat(fpath, "pos_z", 0.0f);
+        aaSession_pendingLookOrient.rvec.x = stdJSON_GetFloat(fpath, "look_rvec_x", 1.0f);
+        aaSession_pendingLookOrient.rvec.y = stdJSON_GetFloat(fpath, "look_rvec_y", 0.0f);
+        aaSession_pendingLookOrient.rvec.z = stdJSON_GetFloat(fpath, "look_rvec_z", 0.0f);
+        aaSession_pendingLookOrient.lvec.x = stdJSON_GetFloat(fpath, "look_lvec_x", 0.0f);
+        aaSession_pendingLookOrient.lvec.y = stdJSON_GetFloat(fpath, "look_lvec_y", 1.0f);
+        aaSession_pendingLookOrient.lvec.z = stdJSON_GetFloat(fpath, "look_lvec_z", 0.0f);
+        aaSession_pendingLookOrient.uvec.x = stdJSON_GetFloat(fpath, "look_uvec_x", 0.0f);
+        aaSession_pendingLookOrient.uvec.y = stdJSON_GetFloat(fpath, "look_uvec_y", 0.0f);
+        aaSession_pendingLookOrient.uvec.z = stdJSON_GetFloat(fpath, "look_uvec_z", 1.0f);
+        aaSession_pendingLookOrient.scale.x = 0.0f;
+        aaSession_pendingLookOrient.scale.y = 0.0f;
+        aaSession_pendingLookOrient.scale.z = 0.0f;
+        aaSession_pendingEyePYR.x  = stdJSON_GetFloat(fpath, "eye_pyr_x", 0.0f);
+        aaSession_pendingEyePYR.y  = stdJSON_GetFloat(fpath, "eye_pyr_y", 0.0f);
+        aaSession_pendingEyePYR.z  = stdJSON_GetFloat(fpath, "eye_pyr_z", 0.0f);
+        stdString_SafeStrCopy(aaSession_pendingMapJkl, mapJkl, sizeof(aaSession_pendingMapJkl));
+        aaSession_bPendingPosition = 1;
     }
 
-    jkSession_bResumed   = 1;
-    jkSession_currentMode = mode;
+    aaSession_bResumed   = 1;
+    aaSession_currentMode = mode;
     return 1;
 }
 
-void jkSession_ApplyPendingPosition(void)
+void aaSession_ApplyPendingPosition(void)
 {
-    if (!jkSession_bPendingPosition) return;
+    if (!aaSession_bPendingPosition) return;
 
     sithThing* pLocal = sithPlayer_pLocalPlayerThing;
     sithWorld* pWorld = sithWorld_pCurrentWorld;
     if (!pLocal || !pWorld || !pWorld->sectors) {
-        jkSession_bPendingPosition = 0;
+        aaSession_bPendingPosition = 0;
         return;
     }
 
     // Only teleport if the currently-loaded map matches the one the position
     // was captured in. Prevents wild coordinates on a mismatched world.
-    if (jkSession_pendingMapJkl[0] && jkMain_aLevelJklFname[0]
-        && strcmp(jkSession_pendingMapJkl, jkMain_aLevelJklFname) != 0) {
-        jkSession_bPendingPosition = 0;
+    if (aaSession_pendingMapJkl[0] && jkMain_aLevelJklFname[0]
+        && strcmp(aaSession_pendingMapJkl, jkMain_aLevelJklFname) != 0) {
+        aaSession_bPendingPosition = 0;
         return;
     }
 
-    if (jkSession_pendingSectorIdx < 0
-        || jkSession_pendingSectorIdx >= (int)pWorld->numSectors) {
-        jkSession_bPendingPosition = 0;
+    if (aaSession_pendingSectorIdx < 0
+        || aaSession_pendingSectorIdx >= (int)pWorld->numSectors) {
+        aaSession_bPendingPosition = 0;
         return;
     }
 
-    sithSector* pSector = &pWorld->sectors[jkSession_pendingSectorIdx];
+    sithSector* pSector = &pWorld->sectors[aaSession_pendingSectorIdx];
 
     sithThing_DetachThing(pLocal);
     sithThing_LeaveSector(pLocal);
-    sithThing_SetPosAndRot(pLocal, &jkSession_pendingPos, &jkSession_pendingLookOrient);
+    sithThing_SetPosAndRot(pLocal, &aaSession_pendingPos, &aaSession_pendingLookOrient);
     sithThing_EnterSector(pLocal, pSector, 1, 0);
-    pLocal->actorParams.eyePYR = jkSession_pendingEyePYR;
+    pLocal->actorParams.eyePYR = aaSession_pendingEyePYR;
 
     // One-shot — subsequent level loads during the same session get normal spawn.
-    jkSession_bPendingPosition = 0;
+    aaSession_bPendingPosition = 0;
 }

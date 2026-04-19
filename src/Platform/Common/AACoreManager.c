@@ -23,7 +23,7 @@
 #include "../../World/sithSector.h"
 #include "../../Raster/rdCache.h"
 #include "../../Main/jkRes.h"
-#include "../../Main/jkSession.h"
+#include "../../Main/aaSession.h"
 #include "../../General/stdFnames.h"
 #include "../../Devices/sithConsole.h"
 #include "../../Devices/sithSoundMixer.h"
@@ -864,7 +864,7 @@ void AACoreManager_Update(void)
      * Set g_should_exit so the main loop breaks cleanly and Main_Shutdown()
      * runs — calling jk_exit()/exit() mid-frame deadlocks during DLL teardown. */
     if (g_fn_exit_game_requested && g_fn_exit_game_requested()) {
-        jkSession_SaveCurrent();
+        aaSession_SaveCurrent();
         g_should_exit = 1;
     }
     if (g_deepSleep) return;

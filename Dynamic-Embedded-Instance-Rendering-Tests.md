@@ -95,7 +95,7 @@ The deferred render pipeline stores `rdMaterial*` pointers in proc entries. The 
 - `src/Engine/sithRender.c` — PreRenderThing/PostRenderThing hooks around `rdThing_Draw`
 - `src/Platform/Common/AACoreManager.c` — PreRenderThing (flush + overwrite), RegisterThingTask (GL texture creation)
 - `src/Raster/rdCache.c` — `rdCache_Flush()` used to force per-thing batch isolation
-- `src/Main/jkSpawn.c` — calls RegisterThingTask after spawning
+- `AACoreManager_RegisterThingTask` is called after spawning (via the Build Context Menu spawn path in `aarcadecore.dll`)
 
 ## Files Involved
 - `src/Engine/rdMaterial.c` — `rdMaterial_AddToTextureCache`, `rdMaterial_UpdateDynamicTexture`

@@ -201,14 +201,9 @@ See **LLM-AARCADECORE-README.md** for full DLL architecture and implementation d
 
 ## Spawning 3DO Objects at Runtime
 
-### Key Files
-- `src/Main/jkSpawn.c` / `.h` — Handles H key press to spawn a 3DO at a raycast hit point
+> Spawning is now driven by the Build Context Menu (middle-mouse) in `aarcadecore.dll`, not by a hard-coded H-key entry point. The APIs and patterns documented below are still the correct reference for any spawn path. The old `jkSpawn.c` H-key file has been deleted.
 
 ### How It Works
-
-**Input detection:**
-- `stdControl_ReadKey(DIK_H, &hDown)` checks the H key state each frame
-- Debounced to trigger only on key-down edge
 
 **Aim direction (matching weapon fire):**
 ```c

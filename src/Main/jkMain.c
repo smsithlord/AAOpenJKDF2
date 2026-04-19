@@ -22,7 +22,7 @@
 #include "Main/jkDev.h"
 #include "Main/jkEpisode.h"
 #include "Main/jkRes.h"
-#include "Main/jkSession.h"
+#include "Main/aaSession.h"
 #include "Main/jkStrings.h"
 #include "Gui/jkGUIRend.h"
 #include "Gui/jkGUI.h"
@@ -205,7 +205,7 @@ int jkMain_SwitchTo5(char *pJklFname)
         jkGuiRend_thing_four = 1;
     jkSmack_stopTick = 1;
     jkSmack_nextGuiState = 5;
-    jkSession_SaveCurrent();
+    aaSession_SaveCurrent();
     return result;
 }
 
@@ -759,7 +759,7 @@ void jkMain_GameplayLeave(int a2, int a3)
     // Capture last-session position/orientation/sector before the player
     // thing and world are torn down. Safe to call on any exit transition —
     // the save is a no-op if the player isn't alive/valid.
-    jkSession_SaveCurrent();
+    aaSession_SaveCurrent();
 
     // MOTS added
     if (a3 == JK_GAMEMODE_MOTS_CUTSCENE) return;
@@ -980,7 +980,7 @@ int jkMain_loadFile2(char *pGobPath, char *pEpisodeName)
             jkGuiRend_thing_four = 1;
         jkSmack_stopTick = 1;
         jkSmack_nextGuiState = 5;
-        jkSession_SaveCurrent();
+        aaSession_SaveCurrent();
     }
     else
     {
@@ -1019,7 +1019,7 @@ int jkMain_LoadLevelSingleplayer(char *pGobPath, char *pEpisodeName)
             jkGuiRend_thing_four = 1;
         jkSmack_stopTick = 1;
         jkSmack_nextGuiState = 5;
-        jkSession_SaveCurrent();
+        aaSession_SaveCurrent();
     }
     else
     {

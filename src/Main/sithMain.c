@@ -2,7 +2,7 @@
 
 #include "Platform/Common/AACoreManager.h"
 #include "Main/jkGame.h"
-#include "Main/jkSession.h"
+#include "Main/aaSession.h"
 #include "Main/Main.h"
 #include "World/sithWorld.h"
 #include "World/sithModel.h"
@@ -596,5 +596,5 @@ void sithMain_AutoSave()
     // If -resumeLast captured a position for this map, teleport the local
     // player there now — after cog CREATED messages and the MP-checkpoint
     // teleport have run, so nothing clobbers us. One-shot; consumed flag.
-    jkSession_ApplyPendingPosition();
+    aaSession_ApplyPendingPosition();
 }

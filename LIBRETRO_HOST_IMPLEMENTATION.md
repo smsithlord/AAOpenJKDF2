@@ -1,5 +1,7 @@
 # Libretro HOST Implementation - In-Game Emulation
 
+> **⚠️ ARCHIVED — HISTORICAL DOC.** This describes the original in-exe Libretro host (files `src/Platform/Common/libretro_host.c`, `libretro_integration.c`, etc.). That implementation was superseded and **moved into `aarcadecore.dll`**. The current live implementation lives in `src/aarcadecore/libretro_host.cpp`, `LibretroInstance.cpp`, `LibretroManager.cpp`, with host-side glue in `src/Platform/Common/AACoreManager.c`. See `LLM-AARCADECORE-README.md` for current architecture. The file references in this doc are no longer valid.
+
 This document describes the implementation of a Libretro HOST within OpenJKDF2, allowing emulators to run inside the game with output displayed on dynamic textures like `compscreen.mat`.
 
 ## Overview

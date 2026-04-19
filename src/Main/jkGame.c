@@ -26,7 +26,6 @@
 #include "jk.h"
 #include "Platform/Common/AACoreManager.h"
 #include "Win95/Window.h"
-// jkSpawn.h removed — H-key spawn replaced by Build Context Menu
 #include "Main/aaMainMenu.h"
 
 #if defined(TARGET_TWL)

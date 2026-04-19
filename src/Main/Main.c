@@ -56,7 +56,7 @@
 #include "Main/jkSmack.h"
 #include "Main/smack.h"
 #include "Main/jkMain.h"
-#include "Main/jkSession.h"
+#include "Main/aaSession.h"
 #include "Main/jkQuakeConsole.h"
 #include "Engine/rdroid.h"
 #include "Engine/rdDynamicTexture.h"
@@ -148,8 +148,8 @@ int Main_StartupDedicated(int bFullyDedicated)
         jkPlayer_playerShortName[31] = 0;
         jkPlayer_CreateConf(L"ServerDed");
     }
-    else if (Main_bResumeLast && jkSession_resumeShortName[0]) {
-        stdString_SafeStrCopy(aTmpPlayerShortName, jkSession_resumeShortName, 32);
+    else if (Main_bResumeLast && aaSession_resumeShortName[0]) {
+        stdString_SafeStrCopy(aTmpPlayerShortName, aaSession_resumeShortName, 32);
         stdString_CharToWchar(jkPlayer_playerShortName, aTmpPlayerShortName, 31);
         jkPlayer_playerShortName[31] = 0;
         jkPlayer_CreateConf(jkPlayer_playerShortName);
@@ -170,9 +170,9 @@ int Main_StartupDedicated(int bFullyDedicated)
     jkGuiNetHost_SaveSettings();
     jkGuiNetHost_LoadSettings();
 
-    // When resuming a saved MP session, jkSession_LoadAndApply has already
+    // When resuming a saved MP session, aaSession_LoadAndApply has already
     // populated jkGuiMultiplayer_mpcInfo — don't stomp it with the Kyle default.
-    if (!(Main_bResumeLast && jkSession_currentMode == SESSION_MODE_MP)) {
+    if (!(Main_bResumeLast && aaSession_currentMode == SESSION_MODE_MP)) {
         // Fake player
         stdString_SafeWStrCopy(jkGuiMultiplayer_mpcInfo.name, L"", 32);
         stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.model, "ky.3do", 32);
@@ -328,7 +328,7 @@ int Main_Startup(const char *cmdline)
         // from openjkdf2_lastsession.json so the existing autostart path takes
         // us straight back in. Falls through silently if the file is missing
         // or malformed, leaving the normal title flow intact.
-        jkSession_LoadAndApply();
+        aaSession_LoadAndApply();
     }
 #endif
 #ifdef TARGET_TWL

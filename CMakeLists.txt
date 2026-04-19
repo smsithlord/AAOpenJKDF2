@@ -206,19 +206,6 @@ list(REMOVE_ITEM ENGINE_SOURCE_FILES ${PROJECT_SOURCE_DIR}/src/main.c)
 file(GLOB AARCADECORE_DLL_SRCS ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c)
 list(REMOVE_ITEM ENGINE_SOURCE_FILES ${AARCADECORE_DLL_SRCS})
 
-# Remove files that moved into aarcadecore.dll (keep AACoreManager which is the host-side loader)
-file(GLOB AARCADECORE_MOVED_SRCS
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/EmbeddedInstance.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/EmbeddedInstanceManager.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/LibretroInstance.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/LibretroManager.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/SteamworksWebBrowserInstance.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/SteamworksWebBrowserManager.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/libretro_host.c
-    ${PROJECT_SOURCE_DIR}/src/Platform/Common/libretro_integration.c
-)
-list(REMOVE_ITEM ENGINE_SOURCE_FILES ${AARCADECORE_MOVED_SRCS})
-
 # aarcadecore DLL (C++ for Steamworks callback support)
 file(GLOB AARCADECORE_SOURCES
     ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c
