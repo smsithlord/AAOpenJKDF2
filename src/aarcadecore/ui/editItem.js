@@ -135,7 +135,7 @@ function initEditItem() {
     var typeOptions = [];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            var types = aapi.library.getTypes();
+            var types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes());
             for (var t = 0; t < types.length; t++) {
                 typeOptions.push({ value: types[t].id, label: types[t].title || types[t].id });
             }
@@ -166,8 +166,22 @@ function initEditItem() {
             type: 'select',
             options: typeOptions,
             actions: [
-                { icon: '<img src="icons/editicon.png" class="aa-edit-action-icon">', title: 'Edit type' },
-                { icon: '<img src="icons/plusicon.png" class="aa-edit-action-icon">', title: 'Add new type' }
+                {
+                    icon: '<img src="icons/editicon.png" class="aa-edit-action-icon">',
+                    title: 'Edit type',
+                    onClick: function() {
+                        var sel = r2.input;
+                        if (sel && sel.value)
+                            window.location = 'file:///ui/editType.html?id=' + encodeURIComponent(sel.value);
+                    }
+                },
+                {
+                    icon: '<img src="icons/plusicon.png" class="aa-edit-action-icon">',
+                    title: 'Add new type',
+                    onClick: function() {
+                        window.location = 'file:///ui/createItem.html?tab=type';
+                    }
+                }
             ]
         });
         form.appendChild(r2.row);
@@ -183,10 +197,16 @@ function initEditItem() {
                     onClick: function() {
                         var sel = r3.input;
                         if (sel && sel.value)
-                            window.location = 'file:///aarcadecore/ui/editApp.html?appId=' + encodeURIComponent(sel.value);
+                            window.location = 'file:///ui/editApp.html?appId=' + encodeURIComponent(sel.value);
                     }
                 },
-                { icon: '<img src="icons/plusicon.png" class="aa-edit-action-icon">', title: 'Create new app' }
+                {
+                    icon: '<img src="icons/plusicon.png" class="aa-edit-action-icon">',
+                    title: 'Create new app',
+                    onClick: function() {
+                        window.location = 'file:///ui/createItem.html?tab=app';
+                    }
+                }
             ]
         });
         form.appendChild(r3.row);

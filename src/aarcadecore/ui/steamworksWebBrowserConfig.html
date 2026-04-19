@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Steamworks Web Browser Config</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="imageCache.js"></script>
+    <script src="arcadeHud.js"></script>
+    <script src="steamworksWebBrowserConfig.js"></script>
+</head>
+<body>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initSteamworksWebBrowserConfig(); });
+    } else {
+        arcadeHud.initialize();
+        initSteamworksWebBrowserConfig();
+    }
+</script>
+</body>
+</html>

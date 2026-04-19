@@ -234,16 +234,46 @@ target_link_libraries(aarcadecore PRIVATE
 )
 target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
 
-# Auto-copy aarcadecore UI files to the output directory after build
+# Place aarcadecore.dll (and its sibling runtime deps) inside an aarcadecore/
+# subfolder next to the EXE. Windows then resolves the Ultralight + mpv imports
+# as siblings automatically.
+set_target_properties(aarcadecore PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>/aarcadecore"
+)
+
+# Stage the aarcadecore/ subfolder: UI assets, mpv runtime, Ultralight DLLs + resources
 add_custom_command(TARGET aarcadecore POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aarcadecore>/aarcadecore/ui"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aarcadecore>/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${PROJECT_SOURCE_DIR}/src/aarcadecore/ui"
-        "$<TARGET_FILE_DIR:aarcadecore>/aarcadecore/ui"
+        "$<TARGET_FILE_DIR:aarcadecore>/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${PROJECT_SOURCE_DIR}/mpv-sdk/libmpv-2.dll"
+        "${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/redistributable_bin/win64/steam_api64.dll"
         "$<TARGET_FILE_DIR:aarcadecore>"
-    COMMENT "Copying aarcadecore UI files and mpv DLL to output directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/bin/Ultralight.dll"
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/bin/UltralightCore.dll"
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/bin/WebCore.dll"
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/bin/AppCore.dll"
+        "$<TARGET_FILE_DIR:aarcadecore>"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aarcadecore>/resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/resources/cacert.pem"
+        "${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/resources/icudt67l.dat"
+        "$<TARGET_FILE_DIR:aarcadecore>/resources"
+    COMMENT "Staging aarcadecore subfolder (UI, mpv, Ultralight DLLs + resources)"
+)
+
+# Manual UI-only sync — lets JS/HTML edits reach the runtime folder without
+# relinking aarcadecore. Invoke with:
+#   cmake --build build_aarcade --config Release --target aarcadecore_sync_ui
+add_custom_target(aarcadecore_sync_ui
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${PROJECT_SOURCE_DIR}/src/aarcadecore/ui"
+        "$<TARGET_FILE_DIR:aarcadecore>/ui"
+    COMMENT "Syncing aarcadecore UI assets into runtime folder"
+    VERBATIM
 )
 
 # Remove multiplayer menus from compilation

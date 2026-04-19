@@ -55,8 +55,8 @@ function initBuildContextMenu() {
         iconBtn('moveicon.png', 'Move Object', 'onMoveObject()');
 
     if (info.itemId) {
-        html += iconBtn('itemicon.png', 'Edit Item', 'onEditItem()');
-        html += iconBtn('itemicon.png', 'Launch', 'onLaunchItem()');
+        html += iconBtn('editicon.png', 'Edit Item', 'onEditItem()');
+        html += iconBtn('launchicon.png', 'Launch', 'onLaunchItem()');
         html += iconBtn('photoicon.png', 'Refresh Texture (Shift+Click: wipe cache)', 'onRefreshTexture(event)');
     }
 
@@ -92,7 +92,7 @@ function onPasteUrlSubmit() {
     var input = document.getElementById('pasteUrlInput');
     var file = input ? input.value.trim() : '';
     if (file) {
-        window.location.href = 'file:///aarcadecore/ui/createItem.html?file=' + encodeURIComponent(file);
+        window.location.href = 'file:///ui/createItem.html?file=' + encodeURIComponent(file);
     }
 }
 
@@ -128,23 +128,23 @@ function onLaunchItem() {
     if (info && info.itemId && window.aapi && aapi.manager && aapi.manager.launchItem) {
         var ok = aapi.manager.launchItem(info.itemId);
         if (ok)
-            window.location.href = 'file:///aarcadecore/ui/pause.html';
+            window.location.href = 'file:///ui/pause.html';
         else
-            window.location.href = 'file:///aarcadecore/ui/launchFailed.html';
+            window.location.href = 'file:///ui/launchFailed.html';
     }
 }
 
 function onEditItem() {
     var info = window._buildContextInfo;
     if (info && info.itemId) {
-        window.location.href = 'file:///aarcadecore/ui/editItem.html?id=' + encodeURIComponent(info.itemId);
+        window.location.href = 'file:///ui/editItem.html?id=' + encodeURIComponent(info.itemId);
     }
 }
 
 function onCaptureThumbnail() {
     var modelId = window._buildContextModelId;
     if (modelId) {
-        window.location.href = 'file:///aarcadecore/ui/modelThumbnailMaker.html?modelId=' + encodeURIComponent(modelId);
+        window.location.href = 'file:///ui/modelThumbnailMaker.html?modelId=' + encodeURIComponent(modelId);
     }
 }
 

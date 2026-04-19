@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MPV Media Player Config</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="imageCache.js"></script>
+    <script src="arcadeHud.js"></script>
+    <script src="mpvConfig.js"></script>
+</head>
+<body>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initMpvConfig(); });
+    } else {
+        arcadeHud.initialize();
+        initMpvConfig();
+    }
+</script>
+</body>
+</html>

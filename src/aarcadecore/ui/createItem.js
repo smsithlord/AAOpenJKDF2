@@ -3,6 +3,7 @@ function initCreateItem() {
     var initialFile = params.get('file') || '';
     var givenType  = params.get('type') || '';
     var badyt      = params.get('badyt') === '1';
+    var tabParam   = (params.get('tab') || '').toLowerCase();
 
     var TUBEINFO_URL = 'https://anarchyarcade.com/metaverse/tubeinfo.php';
     var APPLIED_FIELDS = ['title', 'type', 'file', 'screen', 'preview', 'marquee', 'description', 'app'];
@@ -11,15 +12,20 @@ function initCreateItem() {
     var types = [];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            types = aapi.library.getTypes() || [];
+            types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes() || []);
         }
     } catch (e) {}
 
-    function onCreateTab(content) {
+    function onItemTab(content) {
         content.innerHTML = '';
 
         /* In-memory item — accumulates fetched fields until Create & Spawn. */
         var itemFields = { title: '', type: givenType || '', file: initialFile, screen: '', preview: '', marquee: '', description: '', app: '' };
+
+        var intro = document.createElement('p');
+        intro.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        intro.textContent = 'Spawn an item into the world from a URL, Steam App ID, or local file path.';
+        content.appendChild(intro);
 
         /* File/URL input */
         var fileLabel = document.createElement('label');
@@ -320,14 +326,218 @@ function initCreateItem() {
         fileInput.focus();
     }
 
+    function onFavoritesTab(content) {
+        content.innerHTML = '';
+
+        var intro = document.createElement('p');
+        intro.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        intro.textContent = 'Create a new favorites list to organize items and models you care about.';
+        content.appendChild(intro);
+
+        var titleLabel = document.createElement('label');
+        titleLabel.style.cssText = 'color:#aaa; font-size:12px; display:block; margin-bottom:4px;';
+        titleLabel.textContent = 'List name:';
+        content.appendChild(titleLabel);
+
+        var titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'aa-edit-row-input';
+        titleInput.style.cssText = 'width:100%; margin-bottom:12px;';
+        titleInput.placeholder = 'e.g. "Favorites", "Co-op Games"';
+        content.appendChild(titleInput);
+
+        var status = document.createElement('p');
+        status.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        content.appendChild(status);
+
+        var confirmBtn = document.createElement('button');
+        confirmBtn.className = 'aa-btn';
+        confirmBtn.textContent = 'Create Favorites List';
+        confirmBtn.addEventListener('click', function() {
+            var name = titleInput.value.trim();
+            if (!name) { status.style.color = '#e8a735'; status.textContent = 'List name is required.'; return; }
+            try {
+                var list = arcadeHud.favorites.createFavoritesList(null, name, '');
+                if (!list) { status.style.color = '#e87a35'; status.textContent = 'Failed to create list.'; return; }
+                arcadeHud.favorites.setActiveFavoritesList(list.id);
+                if (window.aapi && aapi.manager) aapi.manager.closeMenu();
+            } catch (e) {
+                status.style.color = '#e87a35';
+                status.textContent = 'Error: ' + e;
+            }
+        });
+        content.appendChild(confirmBtn);
+
+        titleInput.focus();
+    }
+
+    function onAppTab(content) {
+        content.innerHTML = '';
+
+        var intro = document.createElement('p');
+        intro.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        intro.textContent = 'Register an "Open With" app so items can be launched through it.';
+        content.appendChild(intro);
+
+        /* Executable path */
+        var fileLabel = document.createElement('label');
+        fileLabel.style.cssText = 'color:#aaa; font-size:12px; display:block; margin-bottom:4px;';
+        fileLabel.textContent = 'Executable:';
+        content.appendChild(fileLabel);
+
+        var fileRow = document.createElement('div');
+        fileRow.style.cssText = 'display:flex; align-items:stretch; gap:6px; margin-bottom:12px;';
+        var fileInput = document.createElement('input');
+        fileInput.type = 'text';
+        fileInput.className = 'aa-edit-row-input';
+        /* min-width:0 lets the flex input shrink below its intrinsic content width — without
+         * it, the placeholder/value holds the input at natural size and squashes the row. */
+        fileInput.style.cssText = 'flex:1 1 auto; min-width:0;';
+        fileInput.placeholder = 'Full path to the app executable…';
+        var browseBtn = document.createElement('button');
+        browseBtn.className = 'aa-btn';
+        browseBtn.title = 'Browse…';
+        browseBtn.setAttribute('helpText', 'Browse for executable');
+        /* Hidden until the aapi.manager.browseForFile native binding is wired up. */
+        browseBtn.style.cssText = 'display:none; flex:0 0 auto; padding:4px 8px; line-height:1;';
+        browseBtn.innerHTML = '<img src="icons/browseicon.png" style="width:16px; height:16px; vertical-align:middle; display:block;">';
+        browseBtn.addEventListener('click', function() {
+            try {
+                if (window.aapi && aapi.manager && aapi.manager.browseForFile) {
+                    var picked = aapi.manager.browseForFile('', 'exe');
+                    if (picked) fileInput.value = picked;
+                } else {
+                    status.style.color = '#e8a735';
+                    status.textContent = 'File browser not available — paste the executable path manually.';
+                }
+            } catch (e) {
+                status.style.color = '#e87a35';
+                status.textContent = 'Browse error: ' + e;
+            }
+        });
+        fileRow.appendChild(fileInput);
+        fileRow.appendChild(browseBtn);
+        content.appendChild(fileRow);
+
+        /* Title */
+        var titleLabel = document.createElement('label');
+        titleLabel.style.cssText = 'color:#aaa; font-size:12px; display:block; margin-bottom:4px;';
+        titleLabel.textContent = 'Title:';
+        content.appendChild(titleLabel);
+
+        var titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'aa-edit-row-input';
+        titleInput.style.cssText = 'width:100%; margin-bottom:12px;';
+        titleInput.placeholder = 'App name';
+        content.appendChild(titleInput);
+
+        var status = document.createElement('p');
+        status.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        content.appendChild(status);
+
+        var confirmBtn = document.createElement('button');
+        confirmBtn.className = 'aa-btn';
+        confirmBtn.textContent = 'Create App';
+        confirmBtn.addEventListener('click', function() {
+            var file = fileInput.value.trim();
+            var title = titleInput.value.trim();
+            if (!file) { status.style.color = '#e8a735'; status.textContent = 'Executable is required.'; return; }
+            if (!title) title = file.replace(/\\/g, '/').split('/').pop().replace(/\.\w+$/, '') || file;
+
+            try {
+                if (!(window.aapi && aapi.library && aapi.library.createApp)) {
+                    status.style.color = '#e8a735';
+                    status.textContent = 'aapi.library.createApp is not available in this build.';
+                    return;
+                }
+                var newId = aapi.library.createApp(title, '', file);
+                if (!newId) { status.style.color = '#e87a35'; status.textContent = 'Failed to create app.'; return; }
+                window.location.href = 'file:///ui/editApp.html?id=' + encodeURIComponent(newId);
+            } catch (e) {
+                status.style.color = '#e87a35';
+                status.textContent = 'Error: ' + e;
+            }
+        });
+        content.appendChild(confirmBtn);
+
+        fileInput.focus();
+    }
+
+    function onTypeTab(content) {
+        content.innerHTML = '';
+
+        var intro = document.createElement('p');
+        intro.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        intro.textContent = 'Create a new item type so library items can be organized by it.';
+        content.appendChild(intro);
+
+        var titleLabel = document.createElement('label');
+        titleLabel.style.cssText = 'color:#aaa; font-size:12px; display:block; margin-bottom:4px;';
+        titleLabel.textContent = 'Title:';
+        content.appendChild(titleLabel);
+
+        var titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'aa-edit-row-input';
+        titleInput.style.cssText = 'width:100%; margin-bottom:12px;';
+        titleInput.placeholder = 'e.g. "videos", "games"';
+        content.appendChild(titleInput);
+
+        var status = document.createElement('p');
+        status.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
+        content.appendChild(status);
+
+        var confirmBtn = document.createElement('button');
+        confirmBtn.className = 'aa-btn';
+        confirmBtn.textContent = 'Create Type';
+        confirmBtn.addEventListener('click', function() {
+            var title = titleInput.value.trim();
+            if (!title) { status.style.color = '#e8a735'; status.textContent = 'Title is required.'; return; }
+            /* Refuse to create a duplicate — compare case-insensitively on title. */
+            var needle = title.toLowerCase();
+            for (var i = 0; i < types.length; i++) {
+                var existing = String(types[i].title || types[i].id || '').trim().toLowerCase();
+                if (existing === needle) {
+                    status.style.color = '#e8a735';
+                    status.textContent = 'A type named "' + (types[i].title || types[i].id) + '" already exists.';
+                    return;
+                }
+            }
+            try {
+                if (!(window.aapi && aapi.library && aapi.library.createType)) {
+                    status.style.color = '#e8a735';
+                    status.textContent = 'aapi.library.createType is not available in this build.';
+                    return;
+                }
+                var newId = aapi.library.createType(title);
+                if (!newId) { status.style.color = '#e87a35'; status.textContent = 'Failed to create type.'; return; }
+                window.location.href = 'file:///ui/editType.html?id=' + encodeURIComponent(newId);
+            } catch (e) {
+                status.style.color = '#e87a35';
+                status.textContent = 'Error: ' + e;
+            }
+        });
+        content.appendChild(confirmBtn);
+
+        titleInput.focus();
+    }
+
+    var tabMap = { item: 0, favorites: 1, app: 2, type: 3 };
+    var tabOverride = (tabParam in tabMap) ? tabMap[tabParam] : 0;
+
     arcadeHud.ui.createWindow({
-        title: 'Create New Item',
+        title: 'Create New',
         showBack: true,
         showClose: true,
         onBack: function() { window.history.back(); },
         onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); },
+        tabOverride: tabOverride,
         tabs: [
-            { label: 'Create', onActivate: onCreateTab }
+            { label: 'Item',      onActivate: onItemTab },
+            { label: 'Favorites', onActivate: onFavoritesTab },
+            { label: 'App',       onActivate: onAppTab },
+            { label: 'Type',      onActivate: onTypeTab }
         ]
     });
 }

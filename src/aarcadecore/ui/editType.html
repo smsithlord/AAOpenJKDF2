@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Edit Type</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="imageCache.js"></script>
+    <script src="arcadeHud.js"></script>
+    <script src="editType.js"></script>
+</head>
+<body>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initEditType(); });
+    } else {
+        arcadeHud.initialize();
+        initEditType();
+    }
+</script>
+</body>
+</html>

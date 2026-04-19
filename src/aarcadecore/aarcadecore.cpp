@@ -303,13 +303,23 @@ AARCADECORE_EXPORT bool aarcadecore_init(const AACoreHostCallbacks* host_callbac
     UltralightManager_Init();
 
     /* Open the library database and ensure schema is up to date */
-    g_library.open("library.db");
+    g_library.open("aarcadecore/library.db");
     g_library.ensureSchema();
     g_library.setPlatformKey(OPENJK_PLATFORM_ID);
 
     /* Load Libretro core configurations and scan for DLLs */
     g_coreConfigMgr.loadConfig();
     g_coreConfigMgr.scanCores();
+
+    /* First-run: seed the default OpenJK model library if empty. Gate checks
+     * the OpenJK-scoped models table (platformKey_ was set on line 308) so
+     * existing users with any OpenJK models already registered are untouched.
+     * importDefaultLibrary() is itself idempotent per-template as a safety net. */
+    if (g_library.getModels(0, 1).empty()) {
+        if (g_host.host_printf)
+            g_host.host_printf("AACore: Empty library detected, importing default OpenJK models...\n");
+        g_instanceManager.importDefaultLibrary();
+    }
 
     /* Initialize the image loader (headless Ultralight view for thumbnail caching) */
     g_imageLoader.init();

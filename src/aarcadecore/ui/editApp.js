@@ -1,9 +1,9 @@
 /* editApp.js — Open-With App Properties Editor */
 
 function initEditApp() {
-    /* Parse appId from URL params */
+    /* Parse appId from URL params. Accept either ?appId= (legacy) or ?id= (shared edit-page convention). */
     var params = new URLSearchParams(window.location.search);
-    var appId = params.get('appId') || '';
+    var appId = params.get('appId') || params.get('id') || '';
 
     var app = null;
     var filepaths = [];
@@ -20,7 +20,7 @@ function initEditApp() {
     var typeOptions = [{ value: '', label: '(none)' }];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            var types = aapi.library.getTypes();
+            var types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes());
             for (var t = 0; t < types.length; t++)
                 typeOptions.push({ value: types[t].id, label: types[t].title || types[t].id });
         }

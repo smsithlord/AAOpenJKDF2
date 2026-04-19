@@ -250,6 +250,23 @@ const arcadeHud = (function() {
         return favoritesLists[id];
     }
 
+    function updateFavoritesList(id, field, value) {
+        var list = favoritesLists[id];
+        if (!list) return false;
+        list[field] = value;
+        saveFavoritesLists();
+        return true;
+    }
+
+    function deleteFavoritesList(id) {
+        if (!favoritesLists[id]) return false;
+        delete favoritesLists[id];
+        /* If we just removed the active list, fall back to the default. */
+        if (activeFavoritesListId === id) setActiveFavoritesList('favorites');
+        saveFavoritesLists();
+        return true;
+    }
+
     function addToFavorites(mode, entryId) {
         var list = getActiveFavoritesList();
         if (!list) return;
@@ -332,6 +349,21 @@ const arcadeHud = (function() {
         return encodeURIComponent(str)
             .replace(/['()*]/g, function(c) { return '%' + c.charCodeAt(0).toString(16).toUpperCase(); })
             .replace(/%(7C|60|5E)/g, function(_, hex) { return String.fromCharCode(parseInt(hex, 16)); });
+    }
+
+    /* Drop later duplicates so each human-visible label appears at most once.
+     * Keeps the first occurrence; compares on trimmed, case-insensitive label. */
+    function dedupTypesByLabel(types) {
+        if (!types) return [];
+        var seen = {}, out = [];
+        for (var i = 0; i < types.length; i++) {
+            var t = types[i];
+            var label = String(t.title || t.id || '').trim().toLowerCase();
+            if (!label || seen[label]) continue;
+            seen[label] = true;
+            out.push(t);
+        }
+        return out;
     }
 
     /* Find a type by case-insensitive exact title match. Returns the id, or ''. */
@@ -686,9 +718,7 @@ const arcadeHud = (function() {
     var libraryTypes = [
         { key: 'items',     icon: 'icons/itemicon.png', help: 'Browse items' },
         { key: 'apps',      icon: 'icons/appicon.png', help: 'Browse apps' },
-        { key: 'maps',      icon: 'icons/map.png', help: 'Browse maps' },
-        { key: 'models',    icon: 'icons/3dmodelicon.png', help: 'Browse models' },
-        { key: 'instances', icon: 'icons/instanceicon.png', help: 'Browse instances' }
+        { key: 'models',    icon: 'icons/3dmodelicon.png', help: 'Browse models' }
     ];
 
     var DISPLAY_MODES = ['list', 'square', 'landscape', 'large' /*, 'dynamic' */];
@@ -719,6 +749,10 @@ const arcadeHud = (function() {
                 if (saved.itemType) state.itemType = saved.itemType;
             }
         } catch (e) {}
+        /* Drop restored state if it points at a tab that's no longer exposed. */
+        var visibleTypeKeys = {};
+        for (var vti = 0; vti < libraryTypes.length; vti++) visibleTypeKeys[libraryTypes[vti].key] = true;
+        if (!visibleTypeKeys[state.type]) state.type = 'items';
 
         function saveOpts() {
             try {
@@ -779,7 +813,7 @@ const arcadeHud = (function() {
         addNewBtn.innerHTML = '<img src="icons/plusicon.png" class="aa-library-bar-icon">';
         addNewBtn.title = 'Add New Item';
         addNewBtn.addEventListener('click', function() {
-            window.location.href = 'file:///aarcadecore/ui/createItem.html';
+            window.location.href = 'file:///ui/createItem.html';
         });
         bar.appendChild(addNewBtn);
 
@@ -871,18 +905,25 @@ const arcadeHud = (function() {
         });
         favBar.appendChild(favSelect);
 
-        /* Edit favorites button (placeholder) */
+        /* Edit favorites button — opens the edit-favorites page for the active list */
         var editFavBtn = document.createElement('button');
         editFavBtn.className = 'aa-library-icon-btn';
         editFavBtn.innerHTML = '<img src="icons/editicon.png" class="aa-library-bar-icon">';
         editFavBtn.title = 'Edit favorites list';
+        editFavBtn.addEventListener('click', function() {
+            var id = activeFavoritesListId || 'favorites';
+            window.location.href = 'file:///ui/editFavorites.html?id=' + encodeURIComponent(id);
+        });
         favBar.appendChild(editFavBtn);
 
-        /* Create favorites list button (placeholder) */
+        /* Create favorites list button — opens the create page on the Favorites tab */
         var createFavBtn = document.createElement('button');
         createFavBtn.className = 'aa-library-icon-btn';
         createFavBtn.innerHTML = '<img src="icons/plusicon.png" class="aa-library-bar-icon">';
         createFavBtn.title = 'Create new favorites list';
+        createFavBtn.addEventListener('click', function() {
+            window.location.href = 'file:///ui/createItem.html?tab=favorites';
+        });
         favBar.appendChild(createFavBtn);
 
         /* Item Types drop-down */
@@ -895,7 +936,7 @@ const arcadeHud = (function() {
         try {
             var api = (window.aapi && aapi.library) ? aapi.library : null;
             if (api && api.getTypes) {
-                var types = api.getTypes();
+                var types = dedupTypesByLabel(api.getTypes());
                 for (var ti = 0; ti < types.length; ti++) {
                     var topt = document.createElement('option');
                     topt.value = types[ti].id;
@@ -974,7 +1015,14 @@ const arcadeHud = (function() {
                     saveOpts();
                     removeSearchOption();
                     favSelect.value = activeFavoritesListId;
-                    showFavorites();
+                    /* Clearing search keeps you on the current tab. Favorites is
+                     * the home view only for the items tab; other tabs reload
+                     * their full list instead. */
+                    if (state.type === 'items') {
+                        showFavorites();
+                    } else {
+                        loadEntries(true);
+                    }
                 }
             }, 300);
         });
@@ -1064,7 +1112,7 @@ const arcadeHud = (function() {
                     }
                 } catch (ex) {}
             }
-            renderCards(entries, false);
+            renderCards(entries, false, true);
             loadMoreBtn.style.display = 'none';
             /* Update favSelect to show this list */
             var searchOpt = favSelect.querySelector('.aa-fav-search-opt');
@@ -1093,12 +1141,9 @@ const arcadeHud = (function() {
             }
         }
 
-        function renderCards(entries, append) {
+        function renderCards(entries, append, mixedTypes) {
             if (!append) grid.innerHTML = '';
-            if (!entries.length && !append) {
-                grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">No entries found</div>';
-                return;
-            }
+            var rendered = 0;
             for (var i = 0; i < entries.length; i++) {
                 /* In models view, hide cabinet models (they're accessed via items) */
                 if (state.type === 'models' && entries[i].id) {
@@ -1107,11 +1152,19 @@ const arcadeHud = (function() {
                             aapi.manager.isModelCabinet(entries[i].id)) continue;
                     } catch (e) {}
                 }
-                grid.appendChild(createCard(entries[i]));
+                /* When entries can be a mix of items/models (favorites, cross-type results),
+                 * let createCard fall back to per-entry shape detection instead of
+                 * pinning everything to the current tab. */
+                var cardType = mixedTypes ? null : state.type;
+                grid.appendChild(createCard(entries[i], cardType));
+                rendered++;
+            }
+            if (!append && rendered === 0) {
+                grid.innerHTML = '<div class="aa-empty-message" style="grid-column:1/-1">No results found.</div>';
             }
         }
 
-        function createCard(entry) {
+        function createCard(entry, entryType) {
             var card = document.createElement('div');
             card.className = 'aa-library-card';
 
@@ -1132,8 +1185,11 @@ const arcadeHud = (function() {
             card.appendChild(imgDiv);
             card.appendChild(titleDiv);
 
-            /* Determine entry mode: items have a 'type' field, models don't */
-            var entryMode = (entry.type !== undefined) ? 'items' : 'models';
+            /* Use the caller-supplied current tab when we have one; otherwise fall
+             * back to a shape-based guess (items have a 'type' field, models don't).
+             * The fallback matters for favorites/search rendering where entries of
+             * multiple types can be interleaved. */
+            var entryMode = entryType || ((entry.type !== undefined) ? 'items' : 'models');
 
             /* Action buttons (hover-only): edit + favorite */
             var actions = document.createElement('div');
@@ -1148,7 +1204,7 @@ const arcadeHud = (function() {
                 var page = editPages[t] || 'editItem';
                 editBtn.addEventListener('click', function(ev) {
                     ev.stopPropagation();
-                    window.location.href = 'file:///aarcadecore/ui/' + page + '.html?id=' + encodeURIComponent(eId);
+                    window.location.href = 'file:///ui/' + page + '.html?id=' + encodeURIComponent(eId);
                 });
             })(entryMode, entry.id);
             actions.appendChild(editBtn);
@@ -1423,6 +1479,8 @@ const arcadeHud = (function() {
             getActiveFavoritesList: getActiveFavoritesList,
             setActiveFavoritesList: setActiveFavoritesList,
             createFavoritesList: createFavoritesList,
+            updateFavoritesList: updateFavoritesList,
+            deleteFavoritesList: deleteFavoritesList,
             getLists: function() { return favoritesLists; }
         },
 
@@ -1442,6 +1500,7 @@ const arcadeHud = (function() {
         findTypeIdByTitle: findTypeIdByTitle,
         detectItemType: detectItemType,
         resolveTypeValue: resolveTypeValue,
+        dedupTypesByLabel: dedupTypesByLabel,
 
         // Overlay cursor
         initOverlayCursor: initOverlayCursor,

@@ -20,7 +20,7 @@ function onResume() {
 }
 
 function onOptions() {
-    window.location.href = 'file:///aarcadecore/ui/options.html';
+    window.location.href = 'file:///ui/options.html';
 }
 
 function onEngineMenu() {
@@ -28,7 +28,7 @@ function onEngineMenu() {
 }
 
 function onPause() {
-    window.location.href = 'file:///aarcadecore/ui/pause.html';
+    window.location.href = 'file:///ui/pause.html';
 }
 
 function onExitGame() {

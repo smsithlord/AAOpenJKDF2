@@ -2,14 +2,23 @@
 
 function initOptions() {
     function onGeneralTab(content) {
-        content.innerHTML = '<p style="color:#888; padding:16px;">No options yet.</p>';
+        content.innerHTML = '<p style="color:#888; padding:16px;">General settings placeholder.</p>';
     }
 
     function onImportTab(content) {
-        content.innerHTML = '';
+        content.innerHTML = '<p style="color:#888; padding:16px;">Import actions placeholder.</p>';
+
+        /* Hidden re-enable-later controls. Kept attached so the click handlers and
+         * status targets survive; all marked display:none so they don't alter the
+         * tab's layout height versus the General tab. */
+        var status = document.createElement('p');
+        status.style.cssText = 'display:none; color:#aaa; padding:8px 0; margin:0;';
+        var status2 = document.createElement('p');
+        status2.style.cssText = 'display:none; color:#aaa; padding:8px 0; margin:0;';
 
         var btn = document.createElement('button');
         btn.className = 'aa-btn';
+        btn.style.display = 'none';
         btn.textContent = 'Import Default Library';
         btn.addEventListener('click', function() {
             var result = null;
@@ -28,14 +37,11 @@ function initOptions() {
             }
         });
         content.appendChild(btn);
-
-        var status = document.createElement('p');
-        status.style.cssText = 'color:#aaa; padding:8px 0; margin:0;';
         content.appendChild(status);
 
         var btn2 = document.createElement('button');
         btn2.className = 'aa-btn';
-        btn2.style.marginTop = '12px';
+        btn2.style.cssText = 'display:none; margin-top:12px;';
         btn2.textContent = 'Import Adopted Templates';
         btn2.addEventListener('click', function() {
             var result = null;
@@ -54,9 +60,6 @@ function initOptions() {
             }
         });
         content.appendChild(btn2);
-
-        var status2 = document.createElement('p');
-        status2.style.cssText = 'color:#aaa; padding:8px 0; margin:0;';
         content.appendChild(status2);
     }
 
@@ -66,9 +69,27 @@ function initOptions() {
         btn.className = 'aa-btn';
         btn.textContent = 'Libretro Config';
         btn.addEventListener('click', function() {
-            window.location.href = 'file:///aarcadecore/ui/libretroConfig.html';
+            window.location.href = 'file:///ui/libretroConfig.html';
         });
         content.appendChild(btn);
+
+        var btn2 = document.createElement('button');
+        btn2.className = 'aa-btn';
+        btn2.style.marginTop = '8px';
+        btn2.textContent = 'MPV Media Player Config';
+        btn2.addEventListener('click', function() {
+            window.location.href = 'file:///ui/mpvConfig.html';
+        });
+        content.appendChild(btn2);
+
+        var btn3 = document.createElement('button');
+        btn3.className = 'aa-btn';
+        btn3.style.marginTop = '8px';
+        btn3.textContent = 'Steamworks Web Browser Config';
+        btn3.addEventListener('click', function() {
+            window.location.href = 'file:///ui/steamworksWebBrowserConfig.html';
+        });
+        content.appendChild(btn3);
     }
 
     arcadeHud.ui.createWindow({
