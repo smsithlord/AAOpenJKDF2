@@ -57,7 +57,7 @@ function initBuildContextMenu() {
     if (info.itemId) {
         html += iconBtn('itemicon.png', 'Edit Item', 'onEditItem()');
         html += iconBtn('itemicon.png', 'Launch', 'onLaunchItem()');
-        html += iconBtn('photoicon.png', 'Refresh Texture', 'onRefreshTexture()');
+        html += iconBtn('photoicon.png', 'Refresh Texture (Shift+Click: wipe cache)', 'onRefreshTexture(event)');
     }
 
     if (isModel) {
@@ -96,10 +96,11 @@ function onPasteUrlSubmit() {
     }
 }
 
-function onRefreshTexture() {
+function onRefreshTexture(evt) {
     var info = window._buildContextInfo;
     if (info && info.itemId && window.aapi && aapi.manager && aapi.manager.refreshItemTextures) {
-        aapi.manager.refreshItemTextures(info.itemId);
+        var deleteDiskCache = !!(evt && evt.shiftKey);
+        aapi.manager.refreshItemTextures(info.itemId, deleteDiskCache);
         aapi.manager.closeMenu();
     }
 }

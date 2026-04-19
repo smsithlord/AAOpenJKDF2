@@ -106,6 +106,11 @@ AAPI_CALLBACK(js_manager_requestDeepSleep) {
     g_deepSleepRequested = true;
     return JSValueMakeBoolean(ctx, true);
 }
+extern bool g_exitGameRequested;
+AAPI_CALLBACK(js_manager_exitGame) {
+    g_exitGameRequested = true;
+    return JSValueMakeBoolean(ctx, true);
+}
 AAPI_CALLBACK(js_manager_startLibretro) {
     UltralightManager_RequestStartLibretro();
     return JSValueMakeBoolean(ctx, true);
@@ -322,6 +327,21 @@ AAPI_CALLBACK(js_manager_deactivateInstance) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+AAPI_CALLBACK(js_manager_rememberItem) {
+    if (argumentCount < 1) return JSValueMakeBoolean(ctx, false);
+    std::string itemId = jsValueToString(ctx, arguments[0]);
+    g_instanceManager.setRememberedItemId(itemId);
+    return JSValueMakeBoolean(ctx, true);
+}
+
+AAPI_CALLBACK(js_manager_getRememberedItemId) {
+    const std::string& id = g_instanceManager.getRememberedItemId();
+    JSStringRef s = JSStringCreateWithUTF8CString(id.c_str());
+    JSValueRef v = JSValueMakeString(ctx, s);
+    JSStringRelease(s);
+    return v;
+}
+
 static JSObjectRef itemToJS(JSContextRef ctx, const Arcade::Item& item);
 
 AAPI_CALLBACK(js_manager_getAimedObjectInfo) {
@@ -407,7 +427,8 @@ AAPI_CALLBACK(js_manager_seekVideo) {
 AAPI_CALLBACK(js_manager_refreshItemTextures) {
     if (argumentCount < 1) return JSValueMakeUndefined(ctx);
     std::string itemId = jsValueToString(ctx, arguments[0]);
-    g_instanceManager.refreshItemTextures(itemId);
+    bool deleteDiskCache = (argumentCount >= 2) && JSValueToBoolean(ctx, arguments[1]);
+    g_instanceManager.refreshItemTextures(itemId, deleteDiskCache);
     return JSValueMakeUndefined(ctx);
 }
 
@@ -1059,6 +1080,7 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "closeMenu", js_manager_closeMenu);
     addJSMethod(ctx, managerObj, "openEngineMenu", js_manager_openEngineMenu);
     addJSMethod(ctx, managerObj, "requestDeepSleep", js_manager_requestDeepSleep);
+    addJSMethod(ctx, managerObj, "exitGame", js_manager_exitGame);
     addJSMethod(ctx, managerObj, "startLibretro", js_manager_startLibretro);
     addJSMethod(ctx, managerObj, "openLibraryBrowser", js_manager_openLibraryBrowser);
     addJSMethod(ctx, managerObj, "getVersion", js_manager_getVersion);
@@ -1070,6 +1092,8 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "openMainMenu", js_manager_openMainMenu);
     addJSMethod(ctx, managerObj, "getActiveInstances", js_manager_getActiveInstances);
     addJSMethod(ctx, managerObj, "deactivateInstance", js_manager_deactivateInstance);
+    addJSMethod(ctx, managerObj, "rememberItem", js_manager_rememberItem);
+    addJSMethod(ctx, managerObj, "getRememberedItemId", js_manager_getRememberedItemId);
     addJSMethod(ctx, managerObj, "getOverlayInstanceInfo", js_manager_getOverlayInstanceInfo);
     addJSMethod(ctx, managerObj, "setHudInputActive", js_manager_setHudInputActive);
     addJSMethod(ctx, managerObj, "navigateInstance", js_manager_navigateInstance);

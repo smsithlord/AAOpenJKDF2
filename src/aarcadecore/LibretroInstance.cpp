@@ -377,6 +377,91 @@ EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* gam
     return inst;
 }
 
+/* Capture a snapshot of the core's current frame at its native pixel aspect,
+ * resized so the longest side is ≤ 512. Simple (no PAR correction) — frame
+ * dimensions as reported by the core drive the output aspect directly. */
+extern "C" bool LibretroInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                                 unsigned char** bgraOut,
+                                                 int* widthOut, int* heightOut)
+{
+    if (!inst || inst->type != EMBEDDED_LIBRETRO) return false;
+    if (!bgraOut || !widthOut || !heightOut) return false;
+    LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
+    if (!data || !data->host) return false;
+
+    unsigned frame_width = 0, frame_height = 0;
+    size_t frame_pitch = 0;
+    bool is_xrgb8888 = false;
+    const void* frame_data = libretro_host_get_frame(data->host,
+                                                     &frame_width, &frame_height,
+                                                     &frame_pitch, &is_xrgb8888);
+    if (!frame_data || frame_width == 0 || frame_height == 0) return false;
+
+    int fw = (int)frame_width;
+    int fh = (int)frame_height;
+
+    /* Longest-side ≤ 512, aspect preserved. */
+    const int maxDim = 512;
+    int targetW = fw, targetH = fh;
+    if (fw > maxDim || fh > maxDim) {
+        if (fw >= fh) {
+            targetW = maxDim;
+            targetH = (int)((double)fh * maxDim / fw + 0.5);
+        } else {
+            targetH = maxDim;
+            targetW = (int)((double)fw * maxDim / fh + 0.5);
+        }
+        if (targetW < 1) targetW = 1;
+        if (targetH < 1) targetH = 1;
+    }
+
+    size_t outBytes = (size_t)targetW * targetH * 4;
+    unsigned char* out = (unsigned char*)malloc(outBytes);
+    if (!out) return false;
+
+    if (is_xrgb8888) {
+        const uint32_t* src = (const uint32_t*)frame_data;
+        size_t srcStride = frame_pitch / 4;
+        for (int ty = 0; ty < targetH; ty++) {
+            int sy = ty * fh / targetH;
+            if (sy >= fh) sy = fh - 1;
+            for (int tx = 0; tx < targetW; tx++) {
+                int sx = tx * fw / targetW;
+                if (sx >= fw) sx = fw - 1;
+                uint32_t color = src[(size_t)sy * srcStride + sx];
+                uint8_t r = (color >> 16) & 0xFF;
+                uint8_t g = (color >> 8)  & 0xFF;
+                uint8_t b = (color >> 0)  & 0xFF;
+                unsigned char* dst = out + ((size_t)ty * targetW + tx) * 4;
+                dst[0] = b; dst[1] = g; dst[2] = r; dst[3] = 255;
+            }
+        }
+    } else {
+        /* RGB565 */
+        const uint16_t* src = (const uint16_t*)frame_data;
+        size_t srcStride = frame_pitch / 2;
+        for (int ty = 0; ty < targetH; ty++) {
+            int sy = ty * fh / targetH;
+            if (sy >= fh) sy = fh - 1;
+            for (int tx = 0; tx < targetW; tx++) {
+                int sx = tx * fw / targetW;
+                if (sx >= fw) sx = fw - 1;
+                uint16_t pixel = src[(size_t)sy * srcStride + sx];
+                uint8_t r = ((pixel >> 11) & 0x1F) << 3;
+                uint8_t g = ((pixel >> 5)  & 0x3F) << 2;
+                uint8_t b = ((pixel >> 0)  & 0x1F) << 3;
+                unsigned char* dst = out + ((size_t)ty * targetW + tx) * 4;
+                dst[0] = b; dst[1] = g; dst[2] = r; dst[3] = 255;
+            }
+        }
+    }
+
+    *bgraOut = out;
+    *widthOut = targetW;
+    *heightOut = targetH;
+    return true;
+}
+
 void LibretroInstance_Destroy(EmbeddedInstance* inst)
 {
     if (!inst) return;

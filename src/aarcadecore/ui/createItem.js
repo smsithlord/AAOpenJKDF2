@@ -1,20 +1,25 @@
 function initCreateItem() {
     var params = new URLSearchParams(window.location.search);
     var initialFile = params.get('file') || '';
+    var givenType  = params.get('type') || '';
+    var badyt      = params.get('badyt') === '1';
+
+    var TUBEINFO_URL = 'https://anarchyarcade.com/metaverse/tubeinfo.php';
+    var APPLIED_FIELDS = ['title', 'type', 'file', 'screen', 'preview', 'marquee', 'description', 'app'];
 
     /* Load types for dropdown */
-    var typeOptions = [];
+    var types = [];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            var types = aapi.library.getTypes();
-            for (var t = 0; t < types.length; t++) {
-                typeOptions.push({ value: types[t].id, label: types[t].title || types[t].id });
-            }
+            types = aapi.library.getTypes() || [];
         }
     } catch (e) {}
 
     function onCreateTab(content) {
         content.innerHTML = '';
+
+        /* In-memory item — accumulates fetched fields until Create & Spawn. */
+        var itemFields = { title: '', type: givenType || '', file: initialFile, screen: '', preview: '', marquee: '', description: '', app: '' };
 
         /* File/URL input */
         var fileLabel = document.createElement('label');
@@ -30,10 +35,23 @@ function initCreateItem() {
         fileInput.placeholder = 'Enter a URL, Steam App ID, or local file path...';
         content.appendChild(fileInput);
 
+        /* Check button */
+        var checkBtn = document.createElement('button');
+        checkBtn.className = 'aa-btn';
+        checkBtn.style.marginBottom = '8px';
+        checkBtn.textContent = 'Check & Continue';
+        content.appendChild(checkBtn);
+
         /* Status message */
         var status = document.createElement('p');
         status.style.cssText = 'color:#aaa; font-size:12px; margin:0 0 12px;';
         content.appendChild(status);
+
+        /* Fetching spinner area (shown while tubeinfo request is in flight) */
+        var fetchingArea = document.createElement('div');
+        fetchingArea.style.cssText = 'display:none; color:#e8a735; font-size:14px; padding:16px; text-align:center;';
+        fetchingArea.textContent = 'PLEASE WAIT — fetching video info…';
+        content.appendChild(fetchingArea);
 
         /* Form area (hidden until check passes) */
         var formArea = document.createElement('div');
@@ -62,10 +80,11 @@ function initCreateItem() {
         var typeSelect = document.createElement('select');
         typeSelect.className = 'aa-edit-row-input aa-edit-row-select';
         typeSelect.style.cssText = 'width:100%; margin-bottom:12px;';
-        for (var i = 0; i < typeOptions.length; i++) {
+        for (var i = 0; i < types.length; i++) {
             var opt = document.createElement('option');
-            opt.value = typeOptions[i].value;
-            opt.textContent = typeOptions[i].label;
+            opt.value = types[i].id;
+            opt.textContent = types[i].title || types[i].id;
+            if (givenType && types[i].id === givenType) opt.selected = true;
             typeSelect.appendChild(opt);
         }
         formArea.appendChild(typeSelect);
@@ -91,36 +110,149 @@ function initCreateItem() {
 
             try {
                 var newId = aapi.library.createItem(title, type, file);
-                if (newId) {
-                    aapi.manager.spawnItemObject(newId);
-                    aapi.manager.closeMenu();
-                } else {
-                    status.textContent = 'Failed to create item.';
+                if (!newId) { status.textContent = 'Failed to create item.'; return; }
+
+                /* Apply any extra fields gathered from tubeinfo.php / badyt fallback. */
+                if (aapi.library.updateItem) {
+                    var extras = ['screen', 'preview', 'marquee', 'description', 'app'];
+                    for (var e = 0; e < extras.length; e++) {
+                        var field = extras[e];
+                        var val = itemFields[field];
+                        if (val) {
+                            try { aapi.library.updateItem(newId, field, val); } catch (_) {}
+                        }
+                    }
                 }
+
+                aapi.manager.spawnItemObject(newId);
+                aapi.manager.closeMenu();
             } catch (e) {
                 status.textContent = 'Error: ' + e;
             }
         });
         formArea.appendChild(confirmBtn);
 
-        /* Check button */
-        var checkBtn = document.createElement('button');
-        checkBtn.className = 'aa-btn';
-        checkBtn.style.marginBottom = '8px';
-        checkBtn.textContent = 'Check & Continue';
         checkBtn.addEventListener('click', doCheck);
-        content.insertBefore(checkBtn, status);
 
         /* Enter key on file input triggers check */
         fileInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') { e.preventDefault(); doCheck(); }
         });
 
+        function showForm(file) {
+            fetchingArea.style.display = 'none';
+            formArea.style.display = 'block';
+            checkBtn.style.display = '';
+            fileDisplay.textContent = 'File: ' + file;
+        }
+
+        function hideFormForFetch() {
+            formArea.style.display = 'none';
+            checkBtn.style.display = 'none';
+            fetchingArea.style.display = 'block';
+            status.textContent = '';
+        }
+
+        function defaultTitleFromFile(file) {
+            var name = file.replace(/\\/g, '/');
+            name = name.split('/').pop().split('?')[0];
+            name = name.replace(/[_-]/g, ' ').replace(/\.\w+$/, '');
+            return name || file;
+        }
+
+        function applyServerFields(data) {
+            /* Copy every scalar field the server returned into itemFields so it
+             * gets persisted when the user hits Create & Spawn. */
+            if (!data || typeof data !== 'object') return;
+            for (var k in data) {
+                if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+                var v = data[k];
+                if (v === null || typeof v === 'object') continue;
+                itemFields[k] = String(v);
+            }
+            /* Echo user-visible fields into the form. */
+            if (itemFields.title) titleInput.value = itemFields.title;
+            if (itemFields.type) {
+                var tid = arcadeHud.resolveTypeValue(itemFields.type, types);
+                if (tid) {
+                    typeSelect.value = tid;
+                    itemFields.type = tid;
+                }
+            }
+        }
+
+        function reloadWithBadyt() {
+            var url = window.location.href;
+            var sep = url.indexOf('?') >= 0 ? '&' : '?';
+            window.location.href = url + sep + 'badyt=1';
+        }
+
+        function fetchYouTubeInfo(ytId, file) {
+            /* Preset type to "videos" before the request fires — server may overwrite. */
+            var videosTypeId = arcadeHud.findTypeIdByTitle(types, 'videos');
+            if (videosTypeId) {
+                itemFields.type = videosTypeId;
+                typeSelect.value = videosTypeId;
+            }
+
+            var isPlaylist = /[?&]list=/i.test(file);
+
+            /* Build the item payload exactly as legacy did:
+             * JSON.stringify → encodeURIComponent → encodeRFC5987ValueChars. */
+            var payload = {
+                title: itemFields.title || defaultTitleFromFile(file),
+                type: itemFields.type,
+                file: file,
+                screen: '', preview: '', marquee: '', description: '', app: ''
+            };
+            var encodedItem = arcadeHud.encodeRFC5987ValueChars(
+                encodeURIComponent(JSON.stringify(payload))
+            );
+            var url = TUBEINFO_URL + '?item=' + encodedItem;
+
+            hideFormForFetch();
+
+            fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store', credentials: 'omit' })
+                .then(function(resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.text();
+                })
+                .then(function(body) {
+                    if (!body) { reloadWithBadyt(); return; }
+                    var parsed;
+                    try { parsed = JSON.parse(body); } catch (_) { reloadWithBadyt(); return; }
+                    if (!parsed || !parsed.data) { reloadWithBadyt(); return; }
+
+                    applyServerFields(parsed.data);
+                    if (isPlaylist && titleInput.value) {
+                        titleInput.value = 'Playlist: ' + titleInput.value;
+                        itemFields.title = titleInput.value;
+                    }
+                    status.style.color = '#0f9d58';
+                    status.textContent = 'Video info loaded.';
+                    showForm(file);
+                })
+                .catch(function() { reloadWithBadyt(); });
+        }
+
+        function applyBadytFallback(ytId, file) {
+            var videosTypeId = arcadeHud.findTypeIdByTitle(types, 'videos');
+            if (videosTypeId) {
+                itemFields.type = videosTypeId;
+                typeSelect.value = videosTypeId;
+            }
+            itemFields.screen = 'https://i.ytimg.com/vi/' + ytId + '/maxresdefault.jpg';
+            status.style.color = '#e8a735';
+            status.textContent = 'Could not fetch video info. Using fallback thumbnail.';
+        }
+
         function doCheck() {
             var file = fileInput.value.trim();
             if (!file) { status.textContent = 'Please enter a file or URL.'; return; }
 
-            /* Check if item already exists */
+            itemFields.file = file;
+
+            /* Already in the library? */
             var existingId = null;
             try {
                 if (window.aapi && aapi.library && aapi.library.findItemByFile) {
@@ -132,10 +264,10 @@ function initCreateItem() {
                 status.textContent = 'Item already exists in your library.';
                 status.style.color = '#e8a735';
                 formArea.style.display = 'none';
+                fetchingArea.style.display = 'none';
 
-                /* Add spawn existing button */
                 var spawnExisting = document.createElement('button');
-                spawnExisting.className = 'aa-btn';
+                spawnExisting.className = 'aa-btn aa-spawn-existing';
                 spawnExisting.style.marginTop = '8px';
                 spawnExisting.textContent = 'Spawn Existing Item';
                 spawnExisting.addEventListener('click', function() {
@@ -144,31 +276,43 @@ function initCreateItem() {
                         aapi.manager.closeMenu();
                     } catch (e) {}
                 });
-                /* Remove previous spawn button if any */
                 var prev = content.querySelector('.aa-spawn-existing');
                 if (prev) prev.remove();
-                spawnExisting.className += ' aa-spawn-existing';
                 content.appendChild(spawnExisting);
-            } else {
-                status.textContent = 'New item. Fill in the details below.';
-                status.style.color = '#0f9d58';
-                formArea.style.display = 'block';
-                fileDisplay.textContent = 'File: ' + file;
-                /* Default title from file */
-                if (!titleInput.value) {
-                    /* Try to extract a reasonable title from URL or path */
-                    var name = file.replace(/\\/g, '/');
-                    name = name.split('/').pop().split('?')[0];
-                    name = name.replace(/[_-]/g, ' ').replace(/\.\w+$/, '');
-                    titleInput.value = name || file;
-                }
-                /* Remove spawn existing button if shown */
-                var prev = content.querySelector('.aa-spawn-existing');
-                if (prev) prev.remove();
+                return;
             }
+
+            /* New item — kick off detection. */
+            status.textContent = 'New item. Fill in the details below.';
+            status.style.color = '#0f9d58';
+            var prev = content.querySelector('.aa-spawn-existing');
+            if (prev) prev.remove();
+
+            if (!titleInput.value) titleInput.value = defaultTitleFromFile(file);
+            itemFields.title = titleInput.value;
+
+            var ytId = arcadeHud.extractYouTubeId(file);
+
+            if (ytId && !badyt) {
+                fetchYouTubeInfo(ytId, file);
+                return;
+            }
+            if (ytId && badyt) {
+                applyBadytFallback(ytId, file);
+                showForm(file);
+                return;
+            }
+
+            /* Non-YouTube auto-detect. */
+            var detectedTypeId = arcadeHud.detectItemType(file, types, { badyt: badyt });
+            if (detectedTypeId) {
+                itemFields.type = detectedTypeId;
+                typeSelect.value = detectedTypeId;
+            }
+            showForm(file);
         }
 
-        /* Auto-check if file was passed via URL parameter */
+        /* Auto-run check when a file was passed in via ?file=... */
         if (initialFile) {
             setTimeout(doCheck, 100);
         }

@@ -525,6 +525,93 @@ void VideoPlayerInstance_Seek(EmbeddedInstance* inst, double position)
     mpv_command_async(data->mpv, 0, cmd);
 }
 
+bool VideoPlayerInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                         unsigned char** bgraOut,
+                                         int* widthOut, int* heightOut)
+{
+    if (!inst || inst->type != EMBEDDED_VIDEO_PLAYER) return false;
+    if (!bgraOut || !widthOut || !heightOut) return false;
+    VideoPlayerInstanceData* data = (VideoPlayerInstanceData*)inst->user_data;
+    if (!data) return false;
+
+    /* mpv renders into a square game texture with letterbox/pillarbox padding
+     * to preserve the video's display aspect. Query those display dimensions
+     * so we can crop the padding off the saved snapshot. */
+    int64_t dwidth = 0, dheight = 0;
+    if (data->mpv) {
+        mpv_get_property(data->mpv, "dwidth", MPV_FORMAT_INT64, &dwidth);
+        mpv_get_property(data->mpv, "dheight", MPV_FORMAT_INT64, &dheight);
+    }
+
+    /* Snapshot of the current front buffer under the swap lock. */
+    std::lock_guard<std::mutex> lock(data->swap_mutex);
+    if (!data->front_buffer || data->buf_width <= 0 || data->buf_height <= 0)
+        return false;
+    int bw = data->buf_width;
+    int bh = data->buf_height;
+
+    /* Compute the content rect inside the square buffer. */
+    int cx = 0, cy = 0, cw = bw, ch = bh;
+    if (dwidth > 0 && dheight > 0) {
+        double videoAspect = (double)dwidth / (double)dheight;
+        double bufAspect   = (double)bw     / (double)bh;
+        if (videoAspect > bufAspect) {
+            /* Letterbox (video wider than buffer) — content fills width. */
+            ch = (int)((double)bw / videoAspect + 0.5);
+            if (ch < 1) ch = 1;
+            if (ch > bh) ch = bh;
+            cy = (bh - ch) / 2;
+        } else if (videoAspect < bufAspect) {
+            /* Pillarbox (video taller than buffer) — content fills height. */
+            cw = (int)((double)bh * videoAspect + 0.5);
+            if (cw < 1) cw = 1;
+            if (cw > bw) cw = bw;
+            cx = (bw - cw) / 2;
+        }
+    }
+
+    /* Scale the content rect down so the longest side is ≤ 512, preserving
+     * aspect. Smaller-than-512 sources pass through unchanged. Same sizing
+     * policy as ImageLoader::saveThumbnail. */
+    const int maxDim = 512;
+    int targetW = cw, targetH = ch;
+    if (cw > maxDim || ch > maxDim) {
+        if (cw >= ch) {
+            targetW = maxDim;
+            targetH = (int)((double)ch * maxDim / cw + 0.5);
+        } else {
+            targetH = maxDim;
+            targetW = (int)((double)cw * maxDim / ch + 0.5);
+        }
+        if (targetW < 1) targetW = 1;
+        if (targetH < 1) targetH = 1;
+    }
+
+    /* Nearest-neighbour sample from the cropped content rect into a fresh
+     * BGRA buffer with alpha=255. Combines crop + downsample in one pass. */
+    size_t outBytes = (size_t)targetW * targetH * 4;
+    unsigned char* out = (unsigned char*)malloc(outBytes);
+    if (!out) return false;
+    int srcStride = bw * 4;
+    for (int ty = 0; ty < targetH; ty++) {
+        int sy = cy + ty * ch / targetH;
+        for (int tx = 0; tx < targetW; tx++) {
+            int sx = cx + tx * cw / targetW;
+            const unsigned char* srcPx = data->front_buffer + sy * srcStride + sx * 4;
+            unsigned char* dstPx = out + ((size_t)ty * targetW + tx) * 4;
+            dstPx[0] = srcPx[0];
+            dstPx[1] = srcPx[1];
+            dstPx[2] = srcPx[2];
+            dstPx[3] = 255;
+        }
+    }
+
+    *bgraOut = out;
+    *widthOut = targetW;
+    *heightOut = targetH;
+    return true;
+}
+
 void VideoPlayerInstance_Destroy(EmbeddedInstance* inst)
 {
     if (!inst) return;

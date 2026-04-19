@@ -17,6 +17,7 @@
 #include "Main/jkRes.h"
 #include "Main/jkEpisode.h"
 #include "Main/jkMain.h"
+#include "Main/jkSession.h"
 #include "Main/jk.h"
 #include "Win95/Windows.h"
 #include "Primitives/rdVector.h"
@@ -125,6 +126,7 @@ int jkGuiSingleplayer_Show()
             switch ( clicked )
             {
                 case JKGUI_NEWGAME:
+                    jkSession_currentMode = SESSION_MODE_SP;
                     v24[0] = 0;
                     jkGui_sub_412E20(&jkGuiSingleplayer_menu2, JKGUI_NEWGAME, JKGUI_DEBUGPLAY, JKGUI_NEWGAME);
                     jkGuiRend_DarrayNewStr(&darray, jkEpisode_var2 + 1, 0);
@@ -176,6 +178,7 @@ int jkGuiSingleplayer_Show()
                         clicked = 1;
                     break;
                 case JKGUI_DEBUGPLAY:
+                    jkSession_currentMode = SESSION_MODE_DEBUG;
                     a1[0] = 0;
                     jkGui_sub_412E20(&jkGuiSingleplayer_menu2, JKGUI_NEWGAME, JKGUI_DEBUGPLAY, JKGUI_DEBUGPLAY);
                     jkGuiRend_DarrayNewStr(&array, jkEpisode_var2 + 1, 0);

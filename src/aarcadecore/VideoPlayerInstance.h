@@ -18,6 +18,15 @@ bool VideoPlayerInstance_GetTimeInfo(EmbeddedInstance* inst, double* posOut, dou
 /* Seek to absolute position in seconds. */
 void VideoPlayerInstance_Seek(EmbeddedInstance* inst, double position);
 
+/* Capture a snapshot of the last rendered frame.
+ * Copies the current front buffer and crops out the letterbox mpv added
+ * to fit its output into the square game texture, so the saved image has
+ * the video's true aspect ratio.
+ * On success sets *bgraOut (caller must free), *widthOut, *heightOut. */
+bool VideoPlayerInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                         unsigned char** bgraOut,
+                                         int* widthOut, int* heightOut);
+
 #ifdef __cplusplus
 }
 #endif

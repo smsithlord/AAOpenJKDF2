@@ -74,22 +74,31 @@ static JSValueRef js_onImageQueued(JSContextRef ctx, JSObjectRef function,
     return JSValueMakeUndefined(ctx);
 }
 
+static std::string jsValueToString(JSContextRef ctx, JSValueRef val)
+{
+    JSStringRef s = JSValueToStringCopy(ctx, val, nullptr);
+    size_t maxLen = JSStringGetMaximumUTF8CStringSize(s);
+    std::string out(maxLen, '\0');
+    size_t len = JSStringGetUTF8CString(s, &out[0], maxLen);
+    out.resize(len > 0 ? len - 1 : 0);
+    JSStringRelease(s);
+    return out;
+}
+
 static JSValueRef js_onImageLoaded(JSContextRef ctx, JSObjectRef function,
     JSObjectRef thisObject, size_t argc, const JSValueRef args[], JSValueRef* exc)
 {
     if (!g_activeImageLoader || argc < 6) return JSValueMakeUndefined(ctx);
     bool success = JSValueToBoolean(ctx, args[0]);
-    JSStringRef urlStr = JSValueToStringCopy(ctx, args[1], nullptr);
-    size_t maxLen = JSStringGetMaximumUTF8CStringSize(urlStr);
-    std::string url(maxLen, '\0');
-    size_t len = JSStringGetUTF8CString(urlStr, &url[0], maxLen);
-    url.resize(len > 0 ? len - 1 : 0);
-    JSStringRelease(urlStr);
+    std::string identifier = jsValueToString(ctx, args[1]);
     int x = (int)JSValueToNumber(ctx, args[2], nullptr);
     int y = (int)JSValueToNumber(ctx, args[3], nullptr);
     int w = (int)JSValueToNumber(ctx, args[4], nullptr);
     int h = (int)JSValueToNumber(ctx, args[5], nullptr);
-    g_activeImageLoader->onImageLoaded(success, url, x, y, w, h);
+    std::string sourceUrl;
+    if (argc >= 7 && JSValueIsString(ctx, args[6]))
+        sourceUrl = jsValueToString(ctx, args[6]);
+    g_activeImageLoader->onImageLoaded(success, identifier, x, y, w, h, sourceUrl);
     return JSValueMakeUndefined(ctx);
 }
 
@@ -152,7 +161,7 @@ void ImageLoader::update()
         showNextAndCapture();
     }
     /* If no capture pending, check if any images are ready */
-    else if (!captureUrl_.empty() == false) {
+    else if (captureIdentifier_.empty()) {
         showNextAndCapture();
     }
 }
@@ -363,6 +372,73 @@ void ImageLoader::loadAndCacheImage(const std::string& url, std::function<void(c
     }
 }
 
+void ImageLoader::requestItemChannel(const std::string& requestId,
+                                     const ItemChannelFields& fields,
+                                     const std::string& channel,
+                                     std::function<void(const ImageLoadResult&)> callback)
+{
+    if (requestId.empty()) return;
+
+    {
+        std::lock_guard<std::mutex> lock(pendingItemChannelMutex_);
+        auto it = pendingItemChannels_.find(requestId);
+        if (it != pendingItemChannels_.end()) {
+            /* Replace prior pending request for the same identifier — the old callback
+             * will not fire, but the caller already committed to this newer request. */
+            it->second.callback = callback;
+            return;
+        }
+        PendingItemChannel pic;
+        pic.callback = callback;
+        pendingItemChannels_[requestId] = pic;
+    }
+
+    if (isInitialized_)
+        sendItemChannelToJS(requestId, fields, channel);
+}
+
+void ImageLoader::sendItemChannelToJS(const std::string& requestId,
+                                      const ItemChannelFields& fields,
+                                      const std::string& channel)
+{
+    if (!view_ || !isInitialized_) return;
+
+    auto ctx_lock = view_->LockJSContext();
+    JSContextRef ctx = (*ctx_lock);
+    JSObjectRef global = JSContextGetGlobalObject(ctx);
+
+    JSStringRef fnName = JSStringCreateWithUTF8CString("loadItemChannel");
+    JSValueRef fnVal = JSObjectGetProperty(ctx, global, fnName, nullptr);
+    JSStringRelease(fnName);
+    if (!JSValueIsObject(ctx, fnVal)) return;
+
+    auto makeString = [&](const std::string& s) {
+        JSStringRef js = JSStringCreateWithUTF8CString(s.c_str());
+        JSValueRef v = JSValueMakeString(ctx, js);
+        JSStringRelease(js);
+        return v;
+    };
+    auto setProp = [&](JSObjectRef obj, const char* key, const std::string& val) {
+        JSStringRef k = JSStringCreateWithUTF8CString(key);
+        JSObjectSetProperty(ctx, obj, k, makeString(val), 0, nullptr);
+        JSStringRelease(k);
+    };
+
+    JSObjectRef fieldsObj = JSObjectMake(ctx, nullptr, nullptr);
+    setProp(fieldsObj, "id", fields.id);
+    setProp(fieldsObj, "marquee", fields.marquee);
+    setProp(fieldsObj, "screen", fields.screen);
+    setProp(fieldsObj, "preview", fields.preview);
+    setProp(fieldsObj, "file", fields.file);
+
+    JSValueRef args[] = {
+        makeString(requestId),
+        fieldsObj,
+        makeString(channel)
+    };
+    JSObjectCallAsFunction(ctx, (JSObjectRef)fnVal, nullptr, 3, args, nullptr);
+}
+
 void ImageLoader::sendUrlToJS(const std::string& url)
 {
     if (!view_ || !isInitialized_) return;
@@ -386,7 +462,7 @@ void ImageLoader::sendUrlToJS(const std::string& url)
 
 void ImageLoader::showNextAndCapture()
 {
-    if (!captureUrl_.empty()) return; /* already waiting for a capture */
+    if (!captureIdentifier_.empty()) return; /* already waiting for a capture */
 
     if (!view_ || !isInitialized_) return;
 
@@ -449,35 +525,41 @@ void ImageLoader::renderAndSave()
         cropped = bitmap;
     }
 
-    /* Find the original URL for this capture (captureUrl_ may be a file:// URL for cache hits) */
-    std::string origUrl = captureUrl_;
-    /* Look up the pending image by scanning for matching URL */
+    /* Determine the URL used for cache keying.
+     * - Item-channel flow: JS provided captureSourceUrl_ — use it directly.
+     * - Legacy URL flow: scan pendingImages_ to find a match (captureIdentifier_
+     *   may be the raw URL, a file:// cache URL, or a snapshot file:// URL). */
+    std::string origUrl;
     std::string hash;
-    {
+    bool itemFlow = !captureSourceUrl_.empty();
+
+    if (itemFlow) {
+        origUrl = captureSourceUrl_;
+    } else {
+        origUrl = captureIdentifier_;
         std::lock_guard<std::mutex> lock(pendingMutex_);
         for (auto& pair : pendingImages_) {
-            if (pair.second.url == captureUrl_) {
+            if (pair.second.url == captureIdentifier_) {
                 origUrl = pair.second.url;
                 hash = pair.first;
                 break;
             }
-            /* Check if captureUrl_ is the file:// version of this pending's cached path */
+            /* captureIdentifier_ may be the file:// version of this pending's cached path */
             std::string cachedPath = getCachedFilePath(pair.second.url);
             if (!cachedPath.empty()) {
                 std::string fileUrl = "file:///" + cachedPath;
                 for (char& c : fileUrl) { if (c == '\\') c = '/'; }
-                if (fileUrl == captureUrl_) {
+                if (fileUrl == captureIdentifier_) {
                     origUrl = pair.second.url;
                     hash = pair.first;
                     break;
                 }
             }
-            /* Also check snapshot cache */
             std::string snapPath = getCachedFilePath(pair.second.url, "snapshot");
             if (!snapPath.empty()) {
                 std::string fileUrl = "file:///" + snapPath;
                 for (char& c : fileUrl) { if (c == '\\') c = '/'; }
-                if (fileUrl == captureUrl_) {
+                if (fileUrl == captureIdentifier_) {
                     origUrl = pair.second.url;
                     hash = pair.first;
                     break;
@@ -511,59 +593,99 @@ void ImageLoader::renderAndSave()
 
     if (g_host.host_printf) g_host.host_printf("ImageLoader: Saved %s\n", outputPath.c_str());
 
-    /* Complete all callbacks for this URL */
-    PendingImage pi;
-    {
-        std::lock_guard<std::mutex> lock(pendingMutex_);
-        if (!hash.empty()) {
-            auto it = pendingImages_.find(hash);
-            if (it != pendingImages_.end()) {
-                pi = it->second;
-                pendingImages_.erase(it);
+    /* Dispatch completions. */
+    if (itemFlow) {
+        PendingItemChannel pic;
+        bool found = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingItemChannelMutex_);
+            auto it = pendingItemChannels_.find(captureIdentifier_);
+            if (it != pendingItemChannels_.end()) {
+                pic = it->second;
+                pendingItemChannels_.erase(it);
+                found = true;
             }
         }
-    }
-
-    {
+        if (found && pic.callback) {
+            std::lock_guard<std::mutex> lock(completionMutex_);
+            completionQueue_.push({true, outputPath, origUrl, pic.callback});
+        }
+    } else {
+        PendingImage pi;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex_);
+            if (!hash.empty()) {
+                auto it = pendingImages_.find(hash);
+                if (it != pendingImages_.end()) {
+                    pi = it->second;
+                    pendingImages_.erase(it);
+                }
+            }
+        }
         std::lock_guard<std::mutex> lock(completionMutex_);
         for (auto& cb : pi.callbacks)
             completionQueue_.push({true, outputPath, origUrl, cb});
     }
 
-    captureUrl_.clear();
+    captureIdentifier_.clear();
+    captureSourceUrl_.clear();
 }
 
 // --- JS callbacks ---
 
-void ImageLoader::onImageQueued(const std::string& url)
+void ImageLoader::onImageQueued(const std::string& identifier)
 {
     /* An image finished downloading in JS. It's in the ready queue. */
     /* Next update() will call showNextAndCapture() to display and capture it. */
 }
 
-void ImageLoader::onImageLoaded(bool success, const std::string& url, int x, int y, int w, int h)
+void ImageLoader::onImageLoaded(bool success, const std::string& identifier,
+                                int x, int y, int w, int h,
+                                const std::string& sourceUrl)
 {
     if (success) {
-        captureUrl_ = url;
+        captureIdentifier_ = identifier;
+        captureSourceUrl_ = sourceUrl;
         captureRectX_ = x; captureRectY_ = y; captureRectW_ = w; captureRectH_ = h;
         captureReady_ = true; /* capture on next update() after view paints */
-    } else {
-        /* Find and fail all callbacks for this URL */
-        std::string hash;
-        PendingImage pi;
+        return;
+    }
+
+    /* Failure. Item-channel requests are keyed by identifier; legacy URL requests
+     * are keyed by URL hash in pendingImages_. Dispatch to whichever owns this id. */
+    {
+        PendingItemChannel pic;
+        bool found = false;
         {
-            std::lock_guard<std::mutex> lock(pendingMutex_);
-            for (auto& pair : pendingImages_) {
-                if (pair.second.url == url) { hash = pair.first; pi = pair.second; break; }
+            std::lock_guard<std::mutex> lock(pendingItemChannelMutex_);
+            auto it = pendingItemChannels_.find(identifier);
+            if (it != pendingItemChannels_.end()) {
+                pic = it->second;
+                pendingItemChannels_.erase(it);
+                found = true;
             }
-            if (!hash.empty()) pendingImages_.erase(hash);
         }
-        {
-            std::lock_guard<std::mutex> lock(completionMutex_);
-            for (auto& cb : pi.callbacks)
-                completionQueue_.push({false, "", url, cb});
+        if (found) {
+            if (pic.callback) {
+                std::lock_guard<std::mutex> lock(completionMutex_);
+                completionQueue_.push({false, "", identifier, pic.callback});
+            }
+            return;
         }
     }
+
+    std::string hash;
+    PendingImage pi;
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex_);
+        for (auto& pair : pendingImages_) {
+            if (pair.second.url == identifier) { hash = pair.first; pi = pair.second; break; }
+        }
+        if (!hash.empty()) pendingImages_.erase(hash);
+    }
+    std::lock_guard<std::mutex> lock(completionMutex_);
+    for (auto& cb : pi.callbacks)
+        completionQueue_.push({false, "", identifier, cb});
 }
 
 void ImageLoader::onImageLoaderReady()
@@ -608,8 +730,53 @@ void ImageLoader::clearPixelCache(const std::string& cachePath)
         delete[] it->second.pixels;
         pixelCache_.erase(it);
     }
-    /* Also delete the on-disk cache file so it gets re-downloaded */
-    std::remove(cachePath.c_str());
+}
+
+/* Security: only accept paths rooted at ./cache/ (the app-managed cache
+ * directory) and reject anything containing `..` traversal. Paths come from
+ * internal state today, but keeping the check tight means JS-driven deletion
+ * requests can never escape the cache folder regardless of what they pass. */
+static bool isInsideCacheFolder(const std::string& path)
+{
+    if (path.empty()) return false;
+    std::string p = path;
+    for (char& c : p) { if (c == '\\') c = '/'; }
+    std::string lower = p;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    if (lower.compare(0, 8, "./cache/") != 0) return false;
+    if (p.find("/../") != std::string::npos) return false;
+    if (p.size() >= 3 && p.compare(p.size() - 3, 3, "/..") == 0) return false;
+    return true;
+}
+
+bool ImageLoader::deleteCacheFile(const std::string& cachePath)
+{
+    if (!isInsideCacheFolder(cachePath)) {
+        if (g_host.host_printf)
+            g_host.host_printf("ImageLoader: Refusing to delete non-cache path: %s\n",
+                              cachePath.c_str());
+        return false;
+    }
+    clearPixelCache(cachePath);
+    if (std::remove(cachePath.c_str()) == 0) {
+        if (g_host.host_printf)
+            g_host.host_printf("ImageLoader: Deleted cache file %s\n", cachePath.c_str());
+        return true;
+    }
+    return false;
+}
+
+bool ImageLoader::deleteCacheForUrl(const std::string& url, const std::string& cacheType)
+{
+    if (url.empty()) return false;
+    /* Compute the path deterministically so we can delete even when the in-memory
+     * existence check (getCachedFilePath) would miss due to race or prior deletion. */
+    std::string hash = calculateKodiHash(normalizeUrl(url));
+    std::string base = (cacheType == "snapshot") ? ".\\cache\\snapshots"
+                     : (cacheType == "thumbnail") ? ".\\cache\\thumbnails"
+                                                  : cacheBasePath_;
+    std::string path = base + "\\" + hash.substr(0, 1) + "\\" + hash + ".png";
+    return deleteCacheFile(path);
 }
 
 // --- LoadListener ---

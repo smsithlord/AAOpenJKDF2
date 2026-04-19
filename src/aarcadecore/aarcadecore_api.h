@@ -162,6 +162,14 @@ AARCADECORE_EXPORT bool aarcadecore_load_thing_screen_pixels(int thingIdx, void*
 AARCADECORE_EXPORT bool aarcadecore_load_thing_marquee_pixels(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels);
 
+/* Per-thing dynamic image status:
+ *   1 = loaded (pixels available)
+ *   0 = pending (a load is still in flight)
+ *  -1 = failed (every fallback exhausted — host should render the model's
+ *       original, non-dynamic material instead of any dynamic texture). */
+AARCADECORE_EXPORT int aarcadecore_get_thing_screen_status(int thingIdx);
+AARCADECORE_EXPORT int aarcadecore_get_thing_marquee_status(int thingIdx);
+
 /* Notify DLL that the player "used" (activated) an object in the game world.
  * Selects the object and activates its embedded instance (e.g. starts video). */
 AARCADECORE_EXPORT void aarcadecore_object_used(int thingIdx);
@@ -254,6 +262,9 @@ AARCADECORE_EXPORT bool aarcadecore_action_command(const char* cmd);
 AARCADECORE_EXPORT bool aarcadecore_deep_sleep_requested(void);
 AARCADECORE_EXPORT void aarcadecore_deep_sleep_changed(bool sleeping);
 
+/* Exit game — DLL returns true once to request the host quit OpenJK (fire & forget). */
+AARCADECORE_EXPORT bool aarcadecore_exit_game_requested(void);
+
 /* ========================================================================
  * Function pointer typedefs for dynamic loading
  * ======================================================================== */
@@ -297,6 +308,8 @@ typedef int   (*aarcadecore_get_thing_task_index_t)(int thingIdx);
 typedef bool  (*aarcadecore_get_thing_screen_path_t)(int thingIdx, char* pathOut, int pathSize);
 typedef bool  (*aarcadecore_load_thing_screen_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
 typedef bool  (*aarcadecore_load_thing_marquee_pixels_t)(int thingIdx, void** pixelsOut, int* widthOut, int* heightOut);
+typedef int   (*aarcadecore_get_thing_screen_status_t)(int thingIdx);
+typedef int   (*aarcadecore_get_thing_marquee_status_t)(int thingIdx);
 typedef void  (*aarcadecore_free_pixels_t)(void* pixels);
 typedef void  (*aarcadecore_object_used_t)(int thingIdx);
 typedef void  (*aarcadecore_enter_input_mode_for_selected_t)(void);
@@ -334,6 +347,7 @@ typedef bool  (*aarcadecore_register_adopted_template_t)(const char* templateNam
 typedef bool  (*aarcadecore_action_command_t)(const char* cmd);
 typedef bool  (*aarcadecore_deep_sleep_requested_t)(void);
 typedef void  (*aarcadecore_deep_sleep_changed_t)(bool sleeping);
+typedef bool  (*aarcadecore_exit_game_requested_t)(void);
 
 #ifdef __cplusplus
 }

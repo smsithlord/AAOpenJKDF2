@@ -13,22 +13,36 @@
         img { max-width: 100%; max-height: 100%; margin: 0; padding: 0;
               object-fit: contain; display: block; }
     </style>
+    <script src="imageCache.js"></script>
 </head>
 <body>
     <div id="image-container"></div>
     <script>
         /*
-         * Parallel image loader.
-         * - loadImageUrl(url): creates a hidden <img> that downloads in parallel
-         * - When onload fires, the image is queued as "ready"
-         * - C++ calls showNextReady() to display one ready image for capture
-         * - After capture, C++ calls captureComplete() to clean up
+         * Image loader.
+         * - loadImageUrl(url):           legacy single-URL path; hidden <img> downloads in parallel.
+         * - loadItemChannel(id, f, ch):  full item-channel fallback walk using legacy AArcade
+         *                                field × variation priority. Iterates candidates
+         *                                sequentially; first one that loads wins.
+         *
+         * When a candidate loads, its <img> is pushed to readyQueue keyed by the caller's
+         * identifier (raw URL for loadImageUrl, requestId for loadItemChannel). C++ calls
+         * showNextReady() to display + capture it, then captureComplete() to clean up.
+         * For item-channel responses, onImageLoaded is called with a 7th arg (sourceUrl) so
+         * C++ can save the capture under the correct URL hash.
          */
 
         const container = document.getElementById('image-container');
         const readyQueue = [];
-        const imageMap = {};
+        const imageMap = {};          /* identifier → <img> */
+        const imageSourceUrl = {};    /* identifier → source URL for cache keying (item flow only) */
         let currentDisplayed = null;
+
+        /* Delay between displaying an image and telling C++ to capture its pixels.
+         * img.onload fires when decoded, but display:block + RAF only guarantee
+         * layout — the paint commit can slip a frame, giving C++ a black bitmap.
+         * One RAF for layout + this timeout for paint = reliable captures. */
+        const CAPTURE_SETTLE_MS = 10;
 
         function isLocalFile(u) {
             return /^[a-zA-Z]:[\/\\]/.test(u);
@@ -39,6 +53,7 @@
         }
 
         function extractYouTubeVideoId(u) {
+            if (!u) return '';
             var m = u.match(/youtu\.be\/([^?&#]+)/i);
             if (m) return m[1];
             m = u.match(/youtube\.com.*[?&]v=([^&#]+)/i);
@@ -52,6 +67,91 @@
             return /\.(jpe?g|png|gif|webp)/i.test(u);
         }
 
+        /* -----------------------------------------------------------------
+         * Item channel: candidate list construction
+         * ----------------------------------------------------------------- */
+
+        /* Variation templates — controls per-field ordering. */
+        var VARIATION_ORDER_DEFAULT = ['auto_cache', 'auto', 'cache', 'raw'];
+        var VARIATION_ORDER_FILE    = ['auto', 'cache', 'raw', 'auto_cache'];
+
+        /* Channel → ordered list of base fields to walk. */
+        var CHANNEL_FIELD_ORDER = {
+            marquee: ['marquee', 'file', 'preview', 'screen'],
+            screen:  ['screen', 'preview', 'file', 'marquee']
+        };
+
+        /* Resolve one (field, variation) pair into a concrete
+         * {loadUrl, sourceUrl, isYouTube} entry. Returns null if the variation
+         * does not apply to this URL. */
+        function resolveVariation(baseUrl, variation) {
+            if (!baseUrl) return null;
+            var ytId = extractYouTubeVideoId(baseUrl);
+            var thumbUrl = ytId ? ('https://img.youtube.com/vi/' + ytId + '/0.jpg') : '';
+            var isYT = !!ytId;
+
+            switch (variation) {
+                case 'auto_cache':
+                    if (!ytId) return null;
+                    return { loadUrl: window.imageCache.predictCachePath(thumbUrl),
+                             sourceUrl: thumbUrl, isYouTube: isYT };
+                case 'auto':
+                    if (!ytId) return null;
+                    return { loadUrl: thumbUrl, sourceUrl: thumbUrl, isYouTube: isYT };
+                case 'cache':
+                    return { loadUrl: window.imageCache.predictCachePath(baseUrl),
+                             sourceUrl: baseUrl, isYouTube: isYT };
+                case 'raw':
+                    var loadUrl;
+                    if (ytId) {
+                        /* Raw YouTube page isn't an image — skip. */
+                        return null;
+                    } else if (isLocalFile(baseUrl)) {
+                        loadUrl = toFileUrl(baseUrl);
+                    } else {
+                        loadUrl = baseUrl;
+                    }
+                    if (!probablyAnImage(loadUrl)) return null;
+                    return { loadUrl: loadUrl, sourceUrl: baseUrl, isYouTube: isYT };
+            }
+            return null;
+        }
+
+        function buildCandidateList(fields, channel) {
+            fields = fields || {};
+            var fieldOrder = CHANNEL_FIELD_ORDER[channel] || CHANNEL_FIELD_ORDER.screen;
+            var candidates = [];
+            var seen = {};
+
+            for (var i = 0; i < fieldOrder.length; i++) {
+                var fieldName = fieldOrder[i];
+                var baseUrl = fields[fieldName];
+                if (!baseUrl) continue;
+                var variations = (fieldName === 'file') ? VARIATION_ORDER_FILE : VARIATION_ORDER_DEFAULT;
+                for (var v = 0; v < variations.length; v++) {
+                    var entry = resolveVariation(baseUrl, variations[v]);
+                    if (!entry) continue;
+                    if (seen[entry.loadUrl]) continue;
+                    seen[entry.loadUrl] = true;
+                    candidates.push(entry);
+                }
+            }
+
+            /* Snapshot tail: use fields.id as the snapshot key. */
+            if (fields.id) {
+                var snapPath = window.imageCache.predictSnapshotPath(fields.id);
+                if (snapPath && !seen[snapPath]) {
+                    seen[snapPath] = true;
+                    candidates.push({ loadUrl: snapPath, sourceUrl: fields.id });
+                }
+            }
+
+            return candidates;
+        }
+
+        /* -----------------------------------------------------------------
+         * Legacy single-URL entry point (unchanged behavior).
+         * ----------------------------------------------------------------- */
         window.loadImageUrl = function(url) {
             const img = document.createElement('img');
             img.style.display = 'none';
@@ -74,6 +174,16 @@
             }
 
             img.onload = function() {
+                /* YouTube 120x90 "video unavailable" placeholder — treat as
+                 * a failure so C++ doesn't capture it into the cache.
+                 * Mirrors the same guard in loadItemChannel's tryNextCandidate. */
+                if (ytId && img.naturalWidth === 120 && img.naturalHeight === 90) {
+                    if (window.cppBridge && window.cppBridge.onImageLoaded)
+                        window.cppBridge.onImageLoaded(false, url, 0, 0, 0, 0);
+                    try { container.removeChild(img); } catch (e) {}
+                    delete imageMap[url];
+                    return;
+                }
                 readyQueue.push(url);
                 if (window.cppBridge && window.cppBridge.onImageQueued) {
                     window.cppBridge.onImageQueued(url);
@@ -97,26 +207,90 @@
             img.src = processedUrl;
         };
 
-        window.showNextReady = function() {
-            if (currentDisplayed && imageMap[currentDisplayed]) {
-                imageMap[currentDisplayed].style.display = 'none';
+        /* -----------------------------------------------------------------
+         * Item channel entry point.
+         * ----------------------------------------------------------------- */
+        function reportItemFailure(requestId) {
+            if (window.cppBridge && window.cppBridge.onImageLoaded)
+                window.cppBridge.onImageLoaded(false, requestId, 0, 0, 0, 0, '');
+        }
+
+        function tryNextCandidate(requestId, candidates, idx) {
+            if (idx >= candidates.length) {
+                reportItemFailure(requestId);
+                return;
             }
+            var cand = candidates[idx];
+            var img = document.createElement('img');
+            img.style.display = 'none';
+
+            img.onload = function() {
+                /* YouTube returns a 120x90 placeholder ("video unavailable") when
+                 * the thumbnail can't be served. Treat it as a failure and fall
+                 * through to the next candidate. */
+                if (cand.isYouTube && img.naturalWidth === 120 && img.naturalHeight === 90) {
+                    try { container.removeChild(img); } catch (e) {}
+                    tryNextCandidate(requestId, candidates, idx + 1);
+                    return;
+                }
+                imageMap[requestId] = img;
+                imageSourceUrl[requestId] = cand.sourceUrl;
+                readyQueue.push(requestId);
+                if (window.cppBridge && window.cppBridge.onImageQueued)
+                    window.cppBridge.onImageQueued(requestId);
+            };
+
+            img.onerror = function() {
+                try { container.removeChild(img); } catch (e) {}
+                tryNextCandidate(requestId, candidates, idx + 1);
+            };
+
+            container.appendChild(img);
+            img.src = cand.loadUrl;
+        }
+
+        window.loadItemChannel = function(requestId, fields, channel) {
+            if (!requestId) return;
+            var candidates = buildCandidateList(fields, channel);
+            if (!candidates.length) {
+                reportItemFailure(requestId);
+                return;
+            }
+            tryNextCandidate(requestId, candidates, 0);
+        };
+
+        /* -----------------------------------------------------------------
+         * Display + capture orchestration (shared by both entry points).
+         * ----------------------------------------------------------------- */
+        window.showNextReady = function() {
+            /* A capture is already in flight — the pending setTimeout will
+             * read its rect. Don't pop/swap the image out from under it or
+             * its getBoundingClientRect will return 0x0 and C++ will save a
+             * 512x512 uncropped bitmap. captureComplete clears this. */
+            if (currentDisplayed) return false;
             if (readyQueue.length === 0) return false;
 
-            var url = readyQueue.shift();
-            var img = imageMap[url];
+            var id = readyQueue.shift();
+            var img = imageMap[id];
             if (!img) return false;
 
             img.style.display = 'block';
-            currentDisplayed = url;
+            currentDisplayed = id;
+            var sourceUrl = imageSourceUrl[id] || '';
 
+            /* One RAF to finish layout, then a short timeout so the next paint
+             * commit lands before C++ reads the bitmap — otherwise captures
+             * occasionally come back black even though onload already fired. */
             requestAnimationFrame(function() {
-                var rect = img.getBoundingClientRect();
-                if (window.cppBridge && window.cppBridge.onImageLoaded) {
-                    window.cppBridge.onImageLoaded(true, url,
-                        Math.round(rect.left), Math.round(rect.top),
-                        Math.round(rect.width), Math.round(rect.height));
-                }
+                setTimeout(function() {
+                    var rect = img.getBoundingClientRect();
+                    if (window.cppBridge && window.cppBridge.onImageLoaded) {
+                        window.cppBridge.onImageLoaded(true, id,
+                            Math.round(rect.left), Math.round(rect.top),
+                            Math.round(rect.width), Math.round(rect.height),
+                            sourceUrl);
+                    }
+                }, CAPTURE_SETTLE_MS);
             });
             return true;
         };
@@ -125,8 +299,9 @@
             if (currentDisplayed && imageMap[currentDisplayed]) {
                 var img = imageMap[currentDisplayed];
                 img.style.display = 'none';
-                container.removeChild(img);
+                try { container.removeChild(img); } catch (e) {}
                 delete imageMap[currentDisplayed];
+                delete imageSourceUrl[currentDisplayed];
                 currentDisplayed = null;
             }
         };

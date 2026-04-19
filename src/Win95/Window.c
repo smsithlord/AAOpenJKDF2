@@ -1036,9 +1036,12 @@ void Window_SdlUpdate()
 
                     /* Synthesize key_char for printable characters since
                      * SDL_TEXTINPUT may not fire in relative mouse mode.
+                     * Only fall back to synthesis when actually in relative
+                     * mode — otherwise SDL_TEXTINPUT delivers the char and
+                     * we'd double it up.
                      * Must handle shift+symbol mappings (e.g. shift+; → ':') */
                     SDL_Keycode sym = event.key.keysym.sym;
-                    if (sym >= SDLK_SPACE && sym <= SDLK_z && sym < 128) {
+                    if (sym >= SDLK_SPACE && sym <= SDLK_z && sym < 128 && SDL_GetRelativeMouseMode()) {
                         unsigned int ch = (unsigned int)sym;
                         if (mods & 4) { /* AACORE_MOD_SHIFT */
                             if (ch >= 'a' && ch <= 'z') ch -= 32; /* uppercase */

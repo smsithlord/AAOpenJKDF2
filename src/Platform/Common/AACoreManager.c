@@ -23,6 +23,7 @@
 #include "../../World/sithSector.h"
 #include "../../Raster/rdCache.h"
 #include "../../Main/jkRes.h"
+#include "../../Main/jkSession.h"
 #include "../../General/stdFnames.h"
 #include "../../Devices/sithConsole.h"
 #include "../../Devices/sithSoundMixer.h"
@@ -77,6 +78,8 @@ static aarcadecore_on_map_unloaded_t g_fn_on_map_unloaded = NULL;
 static aarcadecore_report_thing_transform_t g_fn_report_thing_transform = NULL;
 static aarcadecore_load_thing_screen_pixels_t g_fn_load_thing_screen_pixels = NULL;
 static aarcadecore_load_thing_marquee_pixels_t g_fn_load_thing_marquee_pixels = NULL;
+static aarcadecore_get_thing_screen_status_t g_fn_get_thing_screen_status = NULL;
+static aarcadecore_get_thing_marquee_status_t g_fn_get_thing_marquee_status = NULL;
 static aarcadecore_free_pixels_t g_fn_free_pixels = NULL;
 static aarcadecore_object_used_t g_fn_object_used = NULL;
 static aarcadecore_has_spawn_transform_t g_fn_has_spawn_transform = NULL;
@@ -114,6 +117,7 @@ static aarcadecore_register_adopted_template_t g_fn_register_adopted_template = 
 static aarcadecore_action_command_t g_fn_action_command = NULL;
 static aarcadecore_deep_sleep_requested_t g_fn_deep_sleep_requested = NULL;
 static aarcadecore_deep_sleep_changed_t   g_fn_deep_sleep_changed = NULL;
+static aarcadecore_exit_game_requested_t  g_fn_exit_game_requested = NULL;
 static int g_deepSleep = 0;
 
 /* Forward declarations */
@@ -412,6 +416,8 @@ void AACoreManager_Init(void)
     LOAD_FN(report_thing_transform)
     LOAD_FN(load_thing_screen_pixels)
     LOAD_FN(load_thing_marquee_pixels)
+    LOAD_FN(get_thing_screen_status)
+    LOAD_FN(get_thing_marquee_status)
     LOAD_FN(free_pixels)
     LOAD_FN(object_used)
     LOAD_FN(has_spawn_transform)
@@ -449,6 +455,7 @@ void AACoreManager_Init(void)
     LOAD_FN(action_command)
     LOAD_FN(deep_sleep_requested)
     LOAD_FN(deep_sleep_changed)
+    LOAD_FN(exit_game_requested)
     #undef LOAD_FN
 
     /* Verify API version */
@@ -561,6 +568,8 @@ void AACoreManager_Shutdown(void)
     g_fn_report_thing_transform = NULL;
     g_fn_load_thing_screen_pixels = NULL;
     g_fn_load_thing_marquee_pixels = NULL;
+    g_fn_get_thing_screen_status = NULL;
+    g_fn_get_thing_marquee_status = NULL;
     g_fn_free_pixels = NULL;
     g_fn_object_used = NULL;
     g_fn_has_spawn_transform = NULL;
@@ -598,6 +607,7 @@ void AACoreManager_Shutdown(void)
     g_fn_action_command = NULL;
     g_fn_deep_sleep_requested = NULL;
     g_fn_deep_sleep_changed = NULL;
+    g_fn_exit_game_requested = NULL;
     g_deepSleep = 0;
 
     for (int i = 0; i < g_taskTexturesCapacity; i++) {
@@ -846,6 +856,16 @@ void AACoreManager_Update(void)
     /* Poll deep sleep request (fire & forget — DLL auto-clears after returning true) */
     if (!g_deepSleep && g_fn_deep_sleep_requested && g_fn_deep_sleep_requested()) {
         AACoreManager_EnterDeepSleep();
+    }
+
+    /* Poll exit-game request from the AArcade Main Menu (fire & forget).
+     * Save the current session first so -resumeLast can restore the player's
+     * position; the engine's normal exit paths only persist on level transitions.
+     * Set g_should_exit so the main loop breaks cleanly and Main_Shutdown()
+     * runs — calling jk_exit()/exit() mid-frame deadlocks during DLL teardown. */
+    if (g_fn_exit_game_requested && g_fn_exit_game_requested()) {
+        jkSession_SaveCurrent();
+        g_should_exit = 1;
     }
     if (g_deepSleep) return;
 
@@ -1349,6 +1369,19 @@ void AACoreManager_Update(void)
         for (int i = 0; i < g_thingTaskCount; i++) {
             if (g_thingTaskMap[i].imageLoaded != 0) continue; /* already loaded or failed */
 
+            /* Ask the DLL if the fallback chain has definitively failed; if so, stop
+             * polling and mark failed so PreRenderThing can render the model's
+             * original (non-dynamic) material. */
+            if (g_fn_get_thing_screen_status) {
+                int st = g_fn_get_thing_screen_status(g_thingTaskMap[i].thingIdx);
+                if (st == -1) {
+                    g_thingTaskMap[i].imageLoaded = -1;
+                    stdPlatform_Printf("AACoreManager: Screen image failed for thingIdx=%d — using original material\n",
+                                      g_thingTaskMap[i].thingIdx);
+                    continue;
+                }
+            }
+
             void* pixels = NULL;
             int w = 0, h = 0;
             if (g_fn_load_thing_screen_pixels(g_thingTaskMap[i].thingIdx, &pixels, &w, &h)) {
@@ -1380,6 +1413,16 @@ void AACoreManager_Update(void)
     if (g_fn_load_thing_marquee_pixels && g_fn_free_pixels) {
         for (int i = 0; i < g_thingTaskCount; i++) {
             if (g_thingTaskMap[i].marqueeImageLoaded != 0) continue;
+
+            if (g_fn_get_thing_marquee_status) {
+                int st = g_fn_get_thing_marquee_status(g_thingTaskMap[i].thingIdx);
+                if (st == -1) {
+                    g_thingTaskMap[i].marqueeImageLoaded = -1;
+                    stdPlatform_Printf("AACoreManager: Marquee image failed for thingIdx=%d — using original material\n",
+                                      g_thingTaskMap[i].thingIdx);
+                    continue;
+                }
+            }
 
             void* pixels = NULL;
             int w = 0, h = 0;
@@ -1888,21 +1931,27 @@ void AACoreManager_PreRenderThing(void* pSithThing)
             /* Flush pending faces so previous thing's faces draw with previous texture_id */
             rdCache_Flush();
 
-            /* Try to use the task's rendered texture (browser content) */
-            GLuint texToUse = g_thingTaskMap[i].glTexture; /* fallback: solid color */
-            if (g_fn_get_thing_task_index) {
-                int taskIdx = g_fn_get_thing_task_index(g_thingTaskMap[i].thingIdx);
-                if (taskIdx >= 0 && taskIdx < g_taskTexturesCapacity && g_taskTextures[taskIdx]) {
-                    texToUse = g_taskTextures[taskIdx];
-                }
-            }
+            /* Pick the screen texture:
+             *   - Active embedded task (browser, libretro, video) → task texture
+             *   - Otherwise → per-thing solid color texture (used for both pending
+             *     and definitively-failed loads; the -1 status still matters for
+             *     halting the poll loop, but both states render the same way). */
+            int taskIdx = -1;
+            if (g_fn_get_thing_task_index)
+                taskIdx = g_fn_get_thing_task_index(g_thingTaskMap[i].thingIdx);
+            bool hasTaskTex = (taskIdx >= 0 && taskIdx < g_taskTexturesCapacity && g_taskTextures[taskIdx]);
+
+            GLuint texToUse = hasTaskTex ? g_taskTextures[taskIdx]
+                                         : g_thingTaskMap[i].glTexture;
 
             g_originalTextures[0].alphaMats[0].texture_id = texToUse;
             g_originalTextures[0].alphaMats[0].texture_loaded = 1;
             g_originalTextures[0].opaqueMats[0].texture_id = texToUse;
             g_originalTextures[0].opaqueMats[0].texture_loaded = 1;
 
-            /* Also swap DynMarquee if available */
+            /* Also swap DynMarquee if available. An embedded task only drives the
+             * screen — marquees always come from the image-loader chain, so they
+             * use the per-thing solid color whenever no real image is bound. */
             if (g_dynmarqueeMaterial && g_origMarqueeTextures) {
                 GLuint marqueeTex = g_thingTaskMap[i].marqueeGlTexture;
                 g_origMarqueeTextures[0].alphaMats[0].texture_id = marqueeTex;

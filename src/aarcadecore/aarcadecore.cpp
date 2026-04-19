@@ -770,6 +770,16 @@ AARCADECORE_EXPORT void aarcadecore_free_pixels(void* pixels)
     free(pixels);
 }
 
+AARCADECORE_EXPORT int aarcadecore_get_thing_screen_status(int thingIdx)
+{
+    return g_instanceManager.getScreenImageStatus(thingIdx);
+}
+
+AARCADECORE_EXPORT int aarcadecore_get_thing_marquee_status(int thingIdx)
+{
+    return g_instanceManager.getMarqueeImageStatus(thingIdx);
+}
+
 AARCADECORE_EXPORT void aarcadecore_on_map_loaded(void)
 {
     g_instanceManager.onMapLoaded();
@@ -1139,4 +1149,15 @@ AARCADECORE_EXPORT void aarcadecore_deep_sleep_changed(bool sleeping)
     g_isDeepSleeping = sleeping;
     if (g_host.host_printf)
         g_host.host_printf("aarcadecore: Deep sleep %s\n", sleeping ? "entered" : "exited");
+}
+
+bool g_exitGameRequested = false;
+
+AARCADECORE_EXPORT bool aarcadecore_exit_game_requested(void)
+{
+    if (g_exitGameRequested) {
+        g_exitGameRequested = false;
+        return true;
+    }
+    return false;
 }

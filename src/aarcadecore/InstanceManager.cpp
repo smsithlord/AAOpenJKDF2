@@ -6,10 +6,19 @@
 /* Forward declarations for embedded instance creation */
 EmbeddedInstance* SteamworksWebBrowserInstance_Create(const char* url, const char* material_name);
 void SteamworksWebBrowserInstance_Destroy(EmbeddedInstance* inst);
+extern "C" bool SteamworksWebBrowserInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                                             unsigned char** bgraOut,
+                                                             int* widthOut, int* heightOut);
 EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* game_path, const char* material_name);
 extern "C" EmbeddedInstance* VideoPlayerInstance_Create(const char* file_path, const char* material_name);
 extern "C" void VideoPlayerInstance_Destroy(EmbeddedInstance* inst);
+extern "C" bool VideoPlayerInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                                    unsigned char** bgraOut,
+                                                    int* widthOut, int* heightOut);
 void LibretroInstance_Destroy(EmbeddedInstance* inst);
+extern "C" bool LibretroInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                                 unsigned char** bgraOut,
+                                                 int* widthOut, int* heightOut);
 
 /* Exposed from aarcadecore.cpp */
 int aarcadecore_addTask(EmbeddedInstance* inst);
@@ -138,36 +147,6 @@ static bool isVideoFile(const std::string& file)
     return false;
 }
 
-/* Build ordered list of screen image URL candidates (screen → preview → file → snapshot → marquee) */
-static std::vector<std::string> getScreenUrlCandidates(const Arcade::Item& item)
-{
-    std::vector<std::string> urls;
-    if (!item.screen.empty()) urls.push_back(item.screen);
-    if (!item.preview.empty()) urls.push_back(item.preview);
-    if (!item.file.empty()) urls.push_back(item.file);
-    if (!item.id.empty()) {
-        std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
-        if (!snapPath.empty()) urls.push_back(item.id);
-    }
-    if (!item.marquee.empty()) urls.push_back(item.marquee);
-    return urls;
-}
-
-/* Build ordered list of marquee image URL candidates (marquee → preview → file → screen) */
-static std::vector<std::string> getMarqueeUrlCandidates(const Arcade::Item& item)
-{
-    std::vector<std::string> urls;
-    if (!item.marquee.empty()) urls.push_back(item.marquee);
-    if (!item.preview.empty()) urls.push_back(item.preview);
-    if (!item.file.empty()) urls.push_back(item.file);
-    if (!item.screen.empty()) urls.push_back(item.screen);
-    if (!item.id.empty()) {
-        std::string snapPath = g_imageLoader.getSnapshotPath(item.id);
-        if (!snapPath.empty()) urls.push_back(item.id);
-    }
-    return urls;
-}
-
 /* Case-insensitive substring search */
 static bool containsIgnoreCase(const std::string& haystack, const std::string& needle)
 {
@@ -175,6 +154,97 @@ static bool containsIgnoreCase(const std::string& haystack, const std::string& n
     std::transform(h.begin(), h.end(), h.begin(), ::tolower);
     std::transform(n.begin(), n.end(), n.begin(), ::tolower);
     return h.find(n) != std::string::npos;
+}
+
+/* URL-like detection: anything that should NOT be probed as a local file */
+static bool isUrlLike(const std::string& s)
+{
+    if (s.empty()) return false;
+    std::string lower = s;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    if (lower.find("://") != std::string::npos) return true;
+    if (lower.rfind("www.", 0) == 0) return true;
+    if (lower.rfind("//", 0) == 0) return true;
+    return false;
+}
+
+/* Resolve item.file to an existing local path, else "".
+ * Handles:
+ *   - full path (drive letter / UNC) that exists on disk
+ *   - bare filename that resolves under one of the Open With app's filepaths
+ *     (with extension gating against fp.extensions)
+ * Returns "" for URLs, empty paths, broken full paths, and unresolvable filenames. */
+static std::string resolveLocalItemFile(const Arcade::Item& item)
+{
+    if (item.file.empty()) return "";
+    if (isUrlLike(item.file)) return "";
+
+    /* Full path: drive letter (X:) or UNC (\\) */
+    bool isFullPath = false;
+    if (item.file.size() >= 2 && isalpha((unsigned char)item.file[0]) && item.file[1] == ':')
+        isFullPath = true;
+    else if (item.file.size() >= 2 && (item.file[0] == '\\' || item.file[0] == '/')
+                                    && (item.file[1] == '\\' || item.file[1] == '/'))
+        isFullPath = true;
+
+    if (isFullPath) {
+        FILE* f = fopen(item.file.c_str(), "rb");
+        if (f) { fclose(f); return item.file; }
+        return ""; /* broken full path — do NOT try app resolution */
+    }
+
+    if (item.app.empty()) return "";
+
+    /* Extract item.file's extension for the gate */
+    std::string fileExt;
+    {
+        size_t dot = item.file.rfind('.');
+        if (dot != std::string::npos) {
+            fileExt = item.file.substr(dot + 1);
+            std::transform(fileExt.begin(), fileExt.end(), fileExt.begin(), ::tolower);
+        }
+    }
+
+    /* Normalize item.file's separators for joining */
+    std::string relFile = item.file;
+    for (char& c : relFile) if (c == '/') c = '\\';
+
+    auto appFilepaths = g_library.getAppFilepaths(item.app);
+    for (const auto& fp : appFilepaths) {
+        /* Extension gate */
+        if (!fp.extensions.empty()) {
+            if (fileExt.empty()) continue;
+            bool extOk = false;
+            std::string exts = fp.extensions;
+            size_t start = 0;
+            while (start <= exts.size()) {
+                size_t comma = exts.find(',', start);
+                std::string tok = exts.substr(start, (comma == std::string::npos) ? std::string::npos : comma - start);
+                /* trim */
+                size_t a = tok.find_first_not_of(" \t");
+                size_t b = tok.find_last_not_of(" \t");
+                if (a != std::string::npos) tok = tok.substr(a, b - a + 1);
+                else tok.clear();
+                if (!tok.empty() && tok[0] == '.') tok.erase(0, 1);
+                std::transform(tok.begin(), tok.end(), tok.begin(), ::tolower);
+                if (!tok.empty() && tok == fileExt) { extOk = true; break; }
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+            if (!extOk) continue;
+        }
+
+        /* Normalize base path */
+        std::string base = fp.path;
+        for (char& c : base) if (c == '/') c = '\\';
+        if (!base.empty() && base.back() != '\\') base += '\\';
+
+        std::string candidate = base + relFile;
+        FILE* f = fopen(candidate.c_str(), "rb");
+        if (f) { fclose(f); return candidate; }
+    }
+
+    return "";
 }
 
 void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl)
@@ -193,56 +263,55 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
     inst.browser = nullptr;
     inst.taskIndex = -1;
 
-    /* Decide which embedded instance type to create based on item data */
+    /* Decide which embedded instance type to create based on item data.
+     * Rule: prefer FILE behavior (video/Libretro) only if item.file resolves to a
+     * local file that actually exists. Otherwise prefer PREVIEW in the web browser. */
     EmbeddedInstance* task = nullptr;
+    std::string localPath = resolveLocalItemFile(item);
 
-    /* Check for video files first — use mpv video player */
-    bool useVideo = isVideoFile(item.file);
-    if (useVideo) {
-        if (g_host.host_printf)
-            g_host.host_printf("InstanceManager: '%s' is a video file — creating VideoPlayer instance\n",
-                              item.file.c_str());
-        task = VideoPlayerInstance_Create(item.file.c_str(), "DynScreen.mat");
-    }
-
-    if (!useVideo) {
-        /* Determine if this item should use Libretro instead of SWB */
-        bool useLibretro = false;
-        std::string coreDll, gamePath;
-
-        /* Case 1: item.file is a full local path (drive letter + colon) */
-        if (item.file.size() >= 2 && isalpha((unsigned char)item.file[0]) && item.file[1] == ':') {
-            coreDll = g_coreConfigMgr.findCoreForFile(item.file);
-            if (!coreDll.empty()) {
-                useLibretro = true;
-                gamePath = item.file;
-            }
-        }
-
-        /* Case 2: item has an "Open With" app whose file paths overlap with a Libretro core's content paths */
-        if (!useLibretro && !item.app.empty() && !item.file.empty()) {
-            auto appFilepaths = g_library.getAppFilepaths(item.app);
-            if (!appFilepaths.empty()) {
-                std::vector<std::pair<std::string, std::string>> appPaths;
-                for (const auto& fp : appFilepaths)
-                    appPaths.push_back({fp.path, fp.extensions});
-                coreDll = g_coreConfigMgr.findCoreMatchingAppPaths(appPaths);
-                if (!coreDll.empty()) {
-                    gamePath = g_coreConfigMgr.resolveFileInCorePaths(coreDll, item.file);
-                    if (!gamePath.empty()) useLibretro = true;
+    if (!localPath.empty()) {
+        if (isVideoFile(localPath)) {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: '%s' is a video file — creating VideoPlayer instance (resolved: %s)\n",
+                                  item.file.c_str(), localPath.c_str());
+            task = VideoPlayerInstance_Create(localPath.c_str(), "DynScreen.mat");
+        } else {
+            /* Libretro: full-path match first, then app-filepath overlap */
+            std::string coreDll = g_coreConfigMgr.findCoreForFile(localPath);
+            if (coreDll.empty() && !item.app.empty()) {
+                auto appFilepaths = g_library.getAppFilepaths(item.app);
+                if (!appFilepaths.empty()) {
+                    std::vector<std::pair<std::string, std::string>> appPaths;
+                    for (const auto& fp : appFilepaths)
+                        appPaths.push_back({fp.path, fp.extensions});
+                    coreDll = g_coreConfigMgr.findCoreMatchingAppPaths(appPaths);
                 }
             }
+            if (!coreDll.empty()) {
+                std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
+                                      item.file.c_str(), coreDll.c_str(), localPath.c_str());
+                task = LibretroInstance_Create(corePath.c_str(), localPath.c_str(), "DynScreen.mat");
+            }
+            /* else: local file exists but no handler — fall through to preview/skip */
         }
+    }
 
-        if (useLibretro) {
-            std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
-                                  item.file.c_str(), coreDll.c_str(), gamePath.c_str());
-            task = LibretroInstance_Create(corePath.c_str(), gamePath.c_str(), "DynScreen.mat");
+    if (!task) {
+        /* FILE wasn't a usable local file (or was unhandled). Prefer PREVIEW. */
+        std::string browserUrl;
+        if (!item.preview.empty())      browserUrl = item.preview;
+        else if (isUrlLike(item.file))  browserUrl = item.file;
+        else if (!item.screen.empty())  browserUrl = item.screen;
+
+        if (!browserUrl.empty()) {
+            std::string finalUrl = resolveUrl(browserUrl, "", item.title);
+            task = SteamworksWebBrowserInstance_Create(finalUrl.c_str(), "DynScreen.mat");
         } else {
-            /* Default: Steamworks Web Browser */
-            task = SteamworksWebBrowserInstance_Create(resolvedUrl.c_str(), "DynScreen.mat");
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: no usable file/preview/screen — skipping instance for item=%s\n",
+                                  item.id.c_str());
         }
     }
 
@@ -521,49 +590,54 @@ SpawnRequest InstanceManager::popPendingSpawn()
     return lastPopped_;
 }
 
-void InstanceManager::tryLoadImage(int objIdx, int thingIdx,
-                                    std::vector<std::string> candidates, int candidateIdx,
-                                    bool isScreen)
+/* Kick off an item-channel image request. JS walks the full legacy
+ * (field × variation) priority list and reports back success/failure. */
+void InstanceManager::requestChannelImage(int objIdx, int thingIdx, const Arcade::Item& item, bool isScreen)
 {
-    if (candidateIdx >= (int)candidates.size()) {
-        /* All candidates exhausted — give up gracefully */
-        if (objIdx < (int)objects_.size() && objects_[objIdx].thingIdx == thingIdx) {
-            if (isScreen)
-                objects_[objIdx].screenImageRequested = false;
-            else
-                objects_[objIdx].marqueeImageRequested = false;
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: All %s image candidates failed for thingIdx=%d\n",
-                                  isScreen ? "screen" : "marquee", thingIdx);
-        }
-        return;
-    }
+    if (!g_imageLoader.isInitialized()) return;
 
-    std::string url = candidates[candidateIdx];
-    g_imageLoader.loadAndCacheImage(url, [this, objIdx, thingIdx, candidates, candidateIdx, isScreen](const ImageLoadResult& result) {
-        if (objIdx >= (int)objects_.size() || objects_[objIdx].thingIdx != thingIdx) return;
-        if (result.success) {
-            if (isScreen)
-                objects_[objIdx].screenImagePath = result.filePath;
-            else
-                objects_[objIdx].marqueeImagePath = result.filePath;
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: %s image ready for thingIdx=%d: %s\n",
-                                  isScreen ? "Screen" : "Marquee", thingIdx, result.filePath.c_str());
-        } else {
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: %s image failed for thingIdx=%d (candidate %d/%d: %s), trying next\n",
-                                  isScreen ? "Screen" : "Marquee", thingIdx,
-                                  candidateIdx + 1, (int)candidates.size(), candidates[candidateIdx].c_str());
-            tryLoadImage(objIdx, thingIdx, candidates, candidateIdx + 1, isScreen);
-        }
-    });
+    ImageLoader::ItemChannelFields fields;
+    fields.id = item.id;
+    fields.marquee = item.marquee;
+    fields.screen = item.screen;
+    fields.preview = item.preview;
+    fields.file = item.file;
+
+    std::string channel = isScreen ? "screen" : "marquee";
+    std::string requestId = std::to_string(thingIdx) + "|" + channel;
+
+    if (isScreen)
+        objects_[objIdx].screenImageRequested = true;
+    else
+        objects_[objIdx].marqueeImageRequested = true;
+
+    g_imageLoader.requestItemChannel(requestId, fields, channel,
+        [this, objIdx, thingIdx, isScreen](const ImageLoadResult& result) {
+            if (objIdx >= (int)objects_.size() || objects_[objIdx].thingIdx != thingIdx) return;
+            if (result.success) {
+                if (isScreen)
+                    objects_[objIdx].screenImagePath = result.filePath;
+                else
+                    objects_[objIdx].marqueeImagePath = result.filePath;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: %s image ready for thingIdx=%d: %s\n",
+                                      isScreen ? "Screen" : "Marquee", thingIdx, result.filePath.c_str());
+            } else {
+                if (isScreen)
+                    objects_[objIdx].screenImageRequested = false;
+                else
+                    objects_[objIdx].marqueeImageRequested = false;
+                if (g_host.host_printf)
+                    g_host.host_printf("InstanceManager: All %s image candidates failed for thingIdx=%d\n",
+                                      isScreen ? "screen" : "marquee", thingIdx);
+            }
+        });
 }
 
 void InstanceManager::initSpawnedObject(int thingIdx)
 {
     const Arcade::Item& item = lastPopped_.item;
-    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+    std::string resolvedUrl = resolveUrl(item.file, !item.preview.empty() ? item.preview : item.screen, item.title);
 
     /* Add spawned object */
     SpawnedObject obj;
@@ -578,20 +652,11 @@ void InstanceManager::initSpawnedObject(int thingIdx)
     obj.marqueeImageRequested = false;
     objects_.push_back(obj);
 
-    /* Request screen image with fallback chain */
+    /* Request screen + marquee images via item-channel loader (JS walks the full
+     * legacy field × variation fallback list and reports a winning URL). */
     int objIdx = (int)objects_.size() - 1;
-    auto screenCandidates = getScreenUrlCandidates(item);
-    if (!screenCandidates.empty() && g_imageLoader.isInitialized()) {
-        objects_[objIdx].screenImageRequested = true;
-        tryLoadImage(objIdx, thingIdx, screenCandidates, 0, true);
-    }
-
-    /* Request marquee image with fallback chain */
-    auto marqueeCandidates = getMarqueeUrlCandidates(item);
-    if (!marqueeCandidates.empty() && g_imageLoader.isInitialized()) {
-        objects_[objIdx].marqueeImageRequested = true;
-        tryLoadImage(objIdx, thingIdx, marqueeCandidates, 0, false);
-    }
+    requestChannelImage(objIdx, thingIdx, item, true);
+    requestChannelImage(objIdx, thingIdx, item, false);
 
     int newIndex = (int)objects_.size() - 1;
 
@@ -735,7 +800,7 @@ void InstanceManager::objectUsed(int thingIdx)
         return;
     }
 
-    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+    std::string resolvedUrl = resolveUrl(item.file, !item.preview.empty() ? item.preview : item.screen, item.title);
     ensureItemInstance(item, resolvedUrl);
 }
 
@@ -948,26 +1013,17 @@ void InstanceManager::reloadImagesForThing(int thingIdx)
     Arcade::Item item = g_library.getItemById(obj.itemId);
     if (item.id.empty()) return;
 
-    auto screenCandidates = getScreenUrlCandidates(item);
-    if (!screenCandidates.empty() && g_imageLoader.isInitialized()) {
-        obj.screenImageRequested = true;
-        obj.screenImagePath.clear();
-        tryLoadImage(objIdx, thingIdx, screenCandidates, 0, true);
-    }
-
-    auto marqueeCandidates = getMarqueeUrlCandidates(item);
-    if (!marqueeCandidates.empty() && g_imageLoader.isInitialized()) {
-        obj.marqueeImageRequested = true;
-        obj.marqueeImagePath.clear();
-        tryLoadImage(objIdx, thingIdx, marqueeCandidates, 0, false);
-    }
+    obj.screenImagePath.clear();
+    obj.marqueeImagePath.clear();
+    requestChannelImage(objIdx, thingIdx, item, true);
+    requestChannelImage(objIdx, thingIdx, item, false);
 }
 
-void InstanceManager::refreshItemTextures(const std::string& itemId)
+void InstanceManager::refreshItemTextures(const std::string& itemId, bool deleteDiskCache)
 {
     if (itemId.empty()) return;
 
-    /* Clear pixelCache entries for this item's cached image paths */
+    /* Always clear the in-memory pixel cache so the next capture re-reads from disk. */
     for (auto& obj : objects_) {
         if (obj.itemId != itemId) continue;
         if (!obj.screenImagePath.empty())
@@ -976,7 +1032,34 @@ void InstanceManager::refreshItemTextures(const std::string& itemId)
             g_imageLoader.clearPixelCache(obj.marqueeImagePath);
     }
 
-    /* Reload images and reset host texture polling for each instance */
+    /* Optionally nuke every on-disk cache file this item could resolve to, forcing
+     * a full re-download. Mirrors image-loader.html's buildCandidateList: four
+     * field URLs + their YouTube thumbnail variants + the item snapshot. */
+    if (deleteDiskCache) {
+        Arcade::Item item = g_library.getItemById(itemId);
+        auto wipeUrl = [](const std::string& url) {
+            if (url.empty()) return;
+            g_imageLoader.deleteCacheForUrl(url, "url");
+            std::string ytId = InstanceManager::extractYouTubeVideoId(url);
+            if (!ytId.empty())
+                g_imageLoader.deleteCacheForUrl(
+                    "https://img.youtube.com/vi/" + ytId + "/0.jpg", "url");
+        };
+        wipeUrl(item.marquee);
+        wipeUrl(item.screen);
+        wipeUrl(item.preview);
+        wipeUrl(item.file);
+        if (!item.id.empty()) g_imageLoader.deleteCacheForUrl(item.id, "snapshot");
+
+        /* Also nuke the currently-loaded paths. In the legacy URL flow a capture
+         * could have been saved under the snapshot key instead of the URL hash. */
+        for (auto& obj : objects_) {
+            if (obj.itemId != itemId) continue;
+            if (!obj.screenImagePath.empty()) g_imageLoader.deleteCacheFile(obj.screenImagePath);
+            if (!obj.marqueeImagePath.empty()) g_imageLoader.deleteCacheFile(obj.marqueeImagePath);
+        }
+    }
+
     for (auto& obj : objects_) {
         if (obj.itemId != itemId) continue;
         reloadImagesForThing(obj.thingIdx);
@@ -985,7 +1068,8 @@ void InstanceManager::refreshItemTextures(const std::string& itemId)
     }
 
     if (g_host.host_printf)
-        g_host.host_printf("InstanceManager: Refreshing textures for item %s\n", itemId.c_str());
+        g_host.host_printf("InstanceManager: Refreshing textures for item %s%s\n",
+                          itemId.c_str(), deleteDiskCache ? " (disk cache wiped)" : "");
 }
 
 std::string InstanceManager::getTemplateForThing(int thingIdx) const
@@ -1299,12 +1383,43 @@ void InstanceManager::deactivateInstance(const std::string& itemId)
         std::string snapshotKey = itemId;
         if (!snapshotKey.empty() && g_imageLoader.isInitialized()
             && g_imageLoader.getSnapshotPath(snapshotKey).empty()) {
-            const int snapW = 512, snapH = 512;
-            uint8_t* snapBuf = (uint8_t*)malloc(snapW * snapH * 4);
-            if (snapBuf) {
-                inst.browser->vtable->render(inst.browser, snapBuf, snapW, snapH, 0, 32);
-                g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
-                free(snapBuf);
+
+            if (inst.browser->type == EMBEDDED_VIDEO_PLAYER) {
+                /* Video player: crop the front buffer to the video's true
+                 * aspect ratio (strips the letterbox mpv added for the
+                 * square texture). */
+                unsigned char* snapBuf = nullptr;
+                int snapW = 0, snapH = 0;
+                if (VideoPlayerInstance_CaptureSnapshot(inst.browser, &snapBuf, &snapW, &snapH)) {
+                    g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
+                    free(snapBuf);
+                }
+            } else if (inst.browser->type == EMBEDDED_STEAMWORKS_BROWSER) {
+                /* Web browser: the internal pixelBuffer is already at the
+                 * browser's native aspect — resize to max 512 longest side. */
+                unsigned char* snapBuf = nullptr;
+                int snapW = 0, snapH = 0;
+                if (SteamworksWebBrowserInstance_CaptureSnapshot(inst.browser, &snapBuf, &snapW, &snapH)) {
+                    g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
+                    free(snapBuf);
+                }
+            } else if (inst.browser->type == EMBEDDED_LIBRETRO) {
+                /* Libretro: snapshot from the core's native frame at the
+                 * reported pixel dimensions (no PAR correction). */
+                unsigned char* snapBuf = nullptr;
+                int snapW = 0, snapH = 0;
+                if (LibretroInstance_CaptureSnapshot(inst.browser, &snapBuf, &snapW, &snapH)) {
+                    g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
+                    free(snapBuf);
+                }
+            } else {
+                const int snapW = 512, snapH = 512;
+                uint8_t* snapBuf = (uint8_t*)malloc(snapW * snapH * 4);
+                if (snapBuf) {
+                    inst.browser->vtable->render(inst.browser, snapBuf, snapW, snapH, 0, 32);
+                    g_imageLoader.saveSnapshot(snapshotKey, snapBuf, snapW, snapH);
+                    free(snapBuf);
+                }
             }
         }
     }
@@ -1377,7 +1492,7 @@ void InstanceManager::rememberObject(int thingIdx)
     Arcade::Item item = g_library.getItemById(obj.itemId);
     if (item.id.empty()) return;
 
-    std::string resolvedUrl = resolveUrl(item.file, item.screen, item.title);
+    std::string resolvedUrl = resolveUrl(item.file, !item.preview.empty() ? item.preview : item.screen, item.title);
     ensureItemInstance(item, resolvedUrl);
 
     if (g_host.host_printf)
@@ -1450,6 +1565,28 @@ std::string InstanceManager::getMarqueeImagePath(int thingIdx) const
             return obj.marqueeImagePath;
     }
     return "";
+}
+
+int InstanceManager::getScreenImageStatus(int thingIdx) const
+{
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx != thingIdx) continue;
+        if (!obj.screenImagePath.empty()) return 1;
+        if (obj.screenImageRequested) return 0;
+        return -1;
+    }
+    return 0;
+}
+
+int InstanceManager::getMarqueeImageStatus(int thingIdx) const
+{
+    for (const auto& obj : objects_) {
+        if (obj.thingIdx != thingIdx) continue;
+        if (!obj.marqueeImagePath.empty()) return 1;
+        if (obj.marqueeImageRequested) return 0;
+        return -1;
+    }
+    return 0;
 }
 
 int InstanceManager::resolveMasterThingIdx(int thingIdx) const

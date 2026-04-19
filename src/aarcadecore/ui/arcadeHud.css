@@ -351,6 +351,23 @@ html, body {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.aa-task-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.aa-task-item-remembered {
+    background: rgba(232, 167, 53, 0.10);
+    border-color: rgba(232, 167, 53, 0.45);
+}
+
+.aa-task-item-remembered:hover {
+    background: rgba(232, 167, 53, 0.16);
+    border-color: rgba(232, 167, 53, 0.65);
 }
 
 .aa-task-item .aa-task-info {

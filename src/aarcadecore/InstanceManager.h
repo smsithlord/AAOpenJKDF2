@@ -88,6 +88,14 @@ public:
     std::string getScreenImagePath(int thingIdx) const;
     std::string getMarqueeImagePath(int thingIdx) const;
 
+    /* Status of the per-thing dynamic image load.
+     *   1 = loaded (pixels available via get*ImagePath / load_thing_*_pixels)
+     *   0 = pending (a request is in flight)
+     *  -1 = failed (every candidate in the fallback chain exhausted) — caller
+     *       should fall back to the model's original (non-dynamic) material. */
+    int getScreenImageStatus(int thingIdx) const;
+    int getMarqueeImageStatus(int thingIdx) const;
+
     /* Per-frame update — sync titles from browsers */
     void updateTitles();
 
@@ -137,8 +145,13 @@ public:
     /* Re-request images for an existing SpawnedObject */
     void reloadImagesForThing(int thingIdx);
 
-    /* Force re-download and re-apply textures for all instances of an item */
-    void refreshItemTextures(const std::string& itemId);
+    /* Re-apply textures for all spawned instances of an item.
+     * If deleteDiskCache is true, also deletes on-disk cache files for every
+     * image URL the item could resolve to (each field's raw + derived YouTube
+     * thumbnail, plus the snapshot). This forces the next load to bypass the
+     * cache and re-download from the source — useful when a cached image is
+     * stale or corrupt (e.g. a YouTube 120x90 error thumbnail). */
+    void refreshItemTextures(const std::string& itemId, bool deleteDiskCache = false);
 
     /* Get the template name for a spawned object by thingIdx */
     std::string getTemplateForThing(int thingIdx) const;
@@ -180,6 +193,7 @@ public:
     void deselectOnly();
     void rememberObject(int thingIdx);
     void setRememberedItemId(const std::string& itemId) { rememberedItemId_ = itemId; }
+    const std::string& getRememberedItemId() const { return rememberedItemId_; }
     int getSlaveTaskIndex() const;
     int resolveMasterThingIdx(int thingIdx) const;
     bool toggleSlave(int thingIdx);
@@ -216,7 +230,7 @@ private:
     SpawnRequest lastPopped_;
 
     void ensureItemInstance(const Arcade::Item& item, const std::string& resolvedUrl);
-    void tryLoadImage(int objIdx, int thingIdx, std::vector<std::string> candidates, int candidateIdx, bool isScreen);
+    void requestChannelImage(int objIdx, int thingIdx, const Arcade::Item& item, bool isScreen);
 };
 
 #endif

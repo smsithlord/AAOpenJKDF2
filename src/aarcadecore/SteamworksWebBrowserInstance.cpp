@@ -480,3 +480,61 @@ void SteamworksWebBrowserInstance_Destroy(EmbeddedInstance* inst)
         delete (SteamworksData*)inst->user_data;
     free(inst);
 }
+
+/* Capture a snapshot of the current browser pixels, preserving aspect ratio
+ * and resized so the longest side is ≤ 512. The SWB pixelBuffer is always at
+ * the browser's native size (no letterbox) so we just nearest-neighbour
+ * downsample into a fresh BGRA buffer with alpha = 255. */
+extern "C" bool SteamworksWebBrowserInstance_CaptureSnapshot(EmbeddedInstance* inst,
+                                                             unsigned char** bgraOut,
+                                                             int* widthOut, int* heightOut)
+{
+    if (!inst || inst->type != EMBEDDED_STEAMWORKS_BROWSER) return false;
+    if (!bgraOut || !widthOut || !heightOut) return false;
+    SteamworksData* data = (SteamworksData*)inst->user_data;
+    if (!data || !data->pixelBuffer || data->bufferWidth == 0 || data->bufferHeight == 0)
+        return false;
+
+    int bw = (int)data->bufferWidth;
+    int bh = (int)data->bufferHeight;
+
+    /* Longest-side ≤ 512, aspect preserved. Same rule as saveThumbnail. */
+    const int maxDim = 512;
+    int targetW = bw, targetH = bh;
+    if (bw > maxDim || bh > maxDim) {
+        if (bw >= bh) {
+            targetW = maxDim;
+            targetH = (int)((double)bh * maxDim / bw + 0.5);
+        } else {
+            targetH = maxDim;
+            targetW = (int)((double)bw * maxDim / bh + 0.5);
+        }
+        if (targetW < 1) targetW = 1;
+        if (targetH < 1) targetH = 1;
+    }
+
+    size_t outBytes = (size_t)targetW * targetH * 4;
+    unsigned char* out = (unsigned char*)malloc(outBytes);
+    if (!out) return false;
+
+    int srcStride = bw * 4;
+    for (int ty = 0; ty < targetH; ty++) {
+        int sy = ty * bh / targetH;
+        if (sy >= bh) sy = bh - 1;
+        for (int tx = 0; tx < targetW; tx++) {
+            int sx = tx * bw / targetW;
+            if (sx >= bw) sx = bw - 1;
+            const unsigned char* srcPx = data->pixelBuffer + sy * srcStride + sx * 4;
+            unsigned char* dstPx = out + ((size_t)ty * targetW + tx) * 4;
+            dstPx[0] = srcPx[0];
+            dstPx[1] = srcPx[1];
+            dstPx[2] = srcPx[2];
+            dstPx[3] = 255;
+        }
+    }
+
+    *bgraOut = out;
+    *widthOut = targetW;
+    *heightOut = targetH;
+    return true;
+}

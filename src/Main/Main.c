@@ -56,6 +56,7 @@
 #include "Main/jkSmack.h"
 #include "Main/smack.h"
 #include "Main/jkMain.h"
+#include "Main/jkSession.h"
 #include "Main/jkQuakeConsole.h"
 #include "Engine/rdroid.h"
 #include "Engine/rdDynamicTexture.h"
@@ -101,6 +102,7 @@ static HostServices hs;
 int32_t Main_bDedicatedServer = 0;
 int32_t Main_bAutostart = 0;
 int32_t Main_bAutostartSp = 0;
+int32_t Main_bResumeLast = 0;
 int32_t Main_bHeadless = 0;
 int32_t Main_bVerboseNetworking = 0;
 int32_t Main_bMotsCompat = 0;
@@ -146,13 +148,19 @@ int Main_StartupDedicated(int bFullyDedicated)
         jkPlayer_playerShortName[31] = 0;
         jkPlayer_CreateConf(L"ServerDed");
     }
+    else if (Main_bResumeLast && jkSession_resumeShortName[0]) {
+        stdString_SafeStrCopy(aTmpPlayerShortName, jkSession_resumeShortName, 32);
+        stdString_CharToWchar(jkPlayer_playerShortName, aTmpPlayerShortName, 31);
+        jkPlayer_playerShortName[31] = 0;
+        jkPlayer_CreateConf(jkPlayer_playerShortName);
+    }
     else {
         wuRegistry_GetString("playerShortName", aTmpPlayerShortName, 32, "ServerDed");
         stdString_CharToWchar(jkPlayer_playerShortName, aTmpPlayerShortName, 31);
         jkPlayer_playerShortName[31] = 0;
         jkPlayer_CreateConf(jkPlayer_playerShortName);
     }
-    
+
 
     // Dedicated player has no control at all
     if (bFullyDedicated) {
@@ -162,16 +170,20 @@ int Main_StartupDedicated(int bFullyDedicated)
     jkGuiNetHost_SaveSettings();
     jkGuiNetHost_LoadSettings();
 
-    // Fake player
-    stdString_SafeWStrCopy(jkGuiMultiplayer_mpcInfo.name, L"", 32);
-    stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.model, "ky.3do", 32);
-    stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.soundClass, "ky.snd", 32);
+    // When resuming a saved MP session, jkSession_LoadAndApply has already
+    // populated jkGuiMultiplayer_mpcInfo — don't stomp it with the Kyle default.
+    if (!(Main_bResumeLast && jkSession_currentMode == SESSION_MODE_MP)) {
+        // Fake player
+        stdString_SafeWStrCopy(jkGuiMultiplayer_mpcInfo.name, L"", 32);
+        stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.model, "ky.3do", 32);
+        stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.soundClass, "ky.snd", 32);
 #ifndef OPTIMIZE_OUT_UNUSED_FIELDS
-    //stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.gap80, "", 32);
+        //stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.gap80, "", 32);
 #endif
-    stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.sideMat, "sabergreen1.mat", 32);
-    stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.tipMat, "sabergreen0.mat", 32);
-    jkGuiMultiplayer_mpcInfo.jediRank = 0;
+        stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.sideMat, "sabergreen1.mat", 32);
+        stdString_SafeStrCopy(jkGuiMultiplayer_mpcInfo.tipMat, "sabergreen0.mat", 32);
+        jkGuiMultiplayer_mpcInfo.jediRank = 0;
+    }
 
     // Set up minimal render settings
     //jkPlayer_fov = 90;
@@ -310,6 +322,15 @@ int Main_Startup(const char *cmdline)
     jkGuiSound_musicVolume = 1.0;
     stdPlatform_Printf("%s\n", Main_path);
     Main_ParseCmdLine((char *)cmdline);
+#ifdef QOL_IMPROVEMENTS
+    if (Main_bResumeLast) {
+        // Populate Main_b*/Main_str*/jkGuiNetHost_*/jkGuiMultiplayer_mpcInfo
+        // from openjkdf2_lastsession.json so the existing autostart path takes
+        // us straight back in. Falls through silently if the file is missing
+        // or malformed, leaving the normal title flow intact.
+        jkSession_LoadAndApply();
+    }
+#endif
 #ifdef TARGET_TWL
     Main_bNoHUD = 1;
 #endif
@@ -556,6 +577,7 @@ void Main_Shutdown()
     // Added
     Main_bDedicatedServer = 0;
     Main_bAutostart = 0;
+    Main_bResumeLast = 0;
     Main_bHeadless = 0;
     Main_bVerboseNetworking = 0;
     Main_bDwCompat = 0;
@@ -694,6 +716,10 @@ void Main_ParseCmdLine(char *cmdline)
         else if (!__strcmpi(pArgTok, "-mp") || !__strcmpi(pArgTok, "/mp") || !__strcmpi(pArgTok, "-multiplayer") || !__strcmpi(pArgTok, "/multiplayer"))
         {
             Main_bAutostartSp = 0;
+        }
+        else if (!__strcmpi(pArgTok, "-resumeLast") || !__strcmpi(pArgTok, "/resumeLast") )
+        {
+            Main_bResumeLast = 1;
         }
         else if (!__strcmpi(pArgTok, "-episode") || !__strcmpi(pArgTok, "/episode") )
         {

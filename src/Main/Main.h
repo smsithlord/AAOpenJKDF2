@@ -16,7 +16,13 @@ extern int32_t Main_bVerboseNetworking;
 extern int32_t Main_bMotsCompat;
 extern int32_t Main_bDwCompat;
 extern int32_t Main_bEnhancedCogVerbs;
+extern int32_t Main_bAutostart;
+extern int32_t Main_bAutostartSp;
+extern int32_t Main_bResumeLast;
+extern char    Main_strEpisode[129];
+extern char    Main_strMap[128+4];
 #endif
+extern int     Main_bDevMode;
 
 int Main_Startup(const char *cmdline);
 void Main_Shutdown();

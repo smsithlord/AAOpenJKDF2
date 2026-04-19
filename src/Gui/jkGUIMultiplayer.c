@@ -13,6 +13,7 @@
 #include "Gui/jkGUIDialog.h"
 #include "Main/jkStrings.h"
 #include "Main/jkMain.h"
+#include "Main/jkSession.h"
 #include "Win95/stdComm.h"
 #include "Platform/wuRegistry.h"
 #include "General/stdString.h"
@@ -292,9 +293,13 @@ LABEL_1:
                                 v22 = jkStrings_GetUniStringWithFallback("GUINET_HOSTERROR");
                                 jkGuiDialog_ErrorDialog(v22, v30);
                             }
-                            else if ( jkMain_loadFile2(v34.episodeGobName, v34.mapJklFname) )
-                            {
-                                return 1;
+                            else {
+                                jkSession_currentMode = SESSION_MODE_MP;
+                                jkSession_pendingMpHosting = 1;
+                                if ( jkMain_loadFile2(v34.episodeGobName, v34.mapJklFname) )
+                                {
+                                    return 1;
+                                }
                             }
                         }
                     }
@@ -385,6 +390,8 @@ LABEL_29:
         v35.tickRateMs = v13;
         jkGuiRend_DarrayFree(&jkGuiMultiplayer_stru_5564A8);
         sithMulti_InitTick(v35.tickRateMs);
+        jkSession_currentMode = SESSION_MODE_MP;
+        jkSession_pendingMpHosting = 0;
         if ( !jkMain_loadFile2(v35.episodeGobName, v35.mapJklFname) )
             continue;
         return 1;
@@ -681,6 +688,8 @@ int jkGuiMultiplayer_Show2()
               && jkGuiBuildMulti_ShowLoad(&jkGuiMultiplayer_mpcInfo, jkGuiMultiplayer_multiEntry.episodeGobName, jkGuiMultiplayer_multiEntry.mapJklFname, 0, jkGuiMultiplayer_multiEntry.maxRank, jkGuiMultiplayer_multiEntry.multiModeFlags & MULTIMODEFLAG_1000) == 1 )
             {
                 sithMulti_InitTick(jkGuiMultiplayer_multiEntry.tickRateMs);
+                jkSession_currentMode = SESSION_MODE_MP;
+                jkSession_pendingMpHosting = 0;
                 jkMain_loadFile2(jkGuiMultiplayer_multiEntry.episodeGobName, jkGuiMultiplayer_multiEntry.mapJklFname);
                 return 1;
             }
@@ -715,6 +724,8 @@ LABEL_10:
         {
             if ( !v3 )
             {
+                jkSession_currentMode = SESSION_MODE_MP;
+                jkSession_pendingMpHosting = 1;
                 jkMain_loadFile2(v8.episodeGobName, v8.mapJklFname);
                 return 1;
             }
