@@ -121,6 +121,8 @@ nintendo-dsi-shareware-demo/*
 build_openjkdf2_venv/*
 build_msvc/
 build_libretro_host/
+build_aarcade/
+__pycache__/
 .claude/
 .vscode/
 steamworks_sdk_164/

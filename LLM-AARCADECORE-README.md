@@ -383,7 +383,7 @@ target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
 - Links Windows system libs (required by SDL2 static)
 - Source files in `src/aarcadecore/` are excluded from the main engine build via `list(REMOVE_ITEM ...)`
 
-Output: `build_libretro_host/Release/aarcadecore.dll`
+Output: `build_aarcade/Release/aarcadecore.dll`
 
 ## Porting to Another Engine
 

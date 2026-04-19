@@ -29,8 +29,8 @@ This is the main development build. It includes the AArcade Core DLL, Ultralight
 
 ```bash
 git submodule update --init
-mkdir build_libretro_host
-cd build_libretro_host
+mkdir build_aarcade
+cd build_aarcade
 cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
@@ -38,9 +38,9 @@ cmake --build . --config Release
 This builds both `openjkdf2-64.exe` and `aarcadecore.dll`. UI files are auto-copied to the output directory via a CMake post-build step.
 
 ### Output Location
-- **Executable**: `build_libretro_host/Release/openjkdf2-64.exe` (or `build_msvc/Release/`)
-- **DLL**: `build_libretro_host/Release/aarcadecore.dll`
-- **UI files**: `build_libretro_host/Release/aarcadecore/ui/` (auto-copied from `src/aarcadecore/ui/`)
+- **Executable**: `build_aarcade/Release/openjkdf2-64.exe` (or `build_msvc/Release/`)
+- **DLL**: `build_aarcade/Release/aarcadecore.dll`
+- **UI files**: `build_aarcade/Release/aarcadecore/ui/` (auto-copied from `src/aarcadecore/ui/`)
 - **Required DLLs**: OpenAL32.dll, exchndl.dll, mgwhelp.dll, symsrv.dll, Ultralight*.dll, steam_api64.dll
 - **Image cache**: `./cache/urls/` (created automatically by ImageLoader)
 

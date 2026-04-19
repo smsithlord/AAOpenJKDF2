@@ -3,7 +3,7 @@
 ## Build Information
 
 **Date**: 2025-12-28
-**Build Directory**: `build_libretro_host/`
+**Build Directory**: `build_aarcade/`
 **Configuration**: Release
 **Compiler**: MSVC 19.43 (Visual Studio 2022)
 **Target**: Windows x64
@@ -12,7 +12,7 @@
 
 ✅ **Successfully compiled**: `openjkdf2-64.exe` (3.9 MB)
 
-**Location**: `build_libretro_host/Release/openjkdf2-64.exe`
+**Location**: `build_aarcade/Release/openjkdf2-64.exe`
 
 ## What Was Built
 
@@ -54,7 +54,7 @@ To test the Libretro integration, you'll need:
 
 ```bash
 # 1. Copy executable to JK directory
-cp build_libretro_host/Release/openjkdf2-64.exe <jk_install_dir>/
+cp build_aarcade/Release/openjkdf2-64.exe <jk_install_dir>/
 
 # 2. Add required files
 #    - bsnes_libretro.dll
@@ -122,11 +122,11 @@ None of these warnings affect functionality.
 
 ```bash
 # Clean build
-rm -rf build_libretro_host
+rm -rf build_aarcade
 
 # Reconfigure
-mkdir build_libretro_host
-cd build_libretro_host
+mkdir build_aarcade
+cd build_aarcade
 cmake .. -G "Visual Studio 17 2022" -A x64
 
 # Rebuild
