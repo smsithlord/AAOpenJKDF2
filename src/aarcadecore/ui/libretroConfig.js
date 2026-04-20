@@ -359,7 +359,7 @@ function initLibretroConfig() {
             + '<div style="color:#4a9eda; font-size:20px; font-weight:bold;">Libretro</div>'
             + '</div>'
             + '<p>Libretro is a library programming interface. Programs get ported to this library and can then be run with any libretro-compatible frontend.</p>'
-            + '<p>Libretro programs are called <b>cores</b>. They are DLL files that can be embedded into frontends, such as AArcade, and run directly on in-game screens.</p>'
+            + '<p>Libretro programs are called <b>cores</b>. They are DLL files that can be embedded into frontends, such as AAOpenJKDF2, and run directly on in-game screens.</p>'
             + '<br>'
             + '<div style="color:#4a9eda; font-size:16px; font-weight:bold;">Addon Cores</div>'
             + '<p><b>NOTE:</b> Addon cores are 3rd party apps so you might have to look up their websites for help or configuration instructions.</p>'
@@ -371,6 +371,7 @@ function initLibretroConfig() {
             + '<li style="margin-bottom:8px;"><b>Enable Cores At Menu:</b><br>Main Menu &gt; Settings &gt; Embedded &gt; Libretro</li>'
             + '<li style="margin-bottom:8px;"><b>Add Content Folders:</b><br>Specify which folders contain files that a core can run.</li>'
             + '</ol>'
+            + '<div style="display:none;">'
             + '<br>'
             + '<div style="color:#4a9eda; font-size:16px; font-weight:bold;">Cores That Work</div>'
             + '<p><b>(ARCADE)</b> fbneo_libretro, mame_libretro</p>'
@@ -388,6 +389,7 @@ function initLibretroConfig() {
             + '<br>'
             + '<div style="color:#4a9eda; font-size:16px; font-weight:bold;">Cores That DO NOT Work</div>'
             + '<p>flycast_libretro, yabasanshiro_libretro</p>'
+            + '</div>'
             + '<br>'
             + '<div style="color:#4a9eda; font-size:16px; font-weight:bold;">System BIOS</div>'
             + '<p>Some cores expect BIOS to be present. Place them in:</p>'
@@ -395,9 +397,7 @@ function initLibretroConfig() {
             + '<br>'
             + '<div style="color:#4a9eda; font-size:16px; font-weight:bold;">Technical Notes</div>'
             + '<ul>'
-            + '<li>AArcade OpenJK supports 64-bit Libretro DLLs.</li>'
-            + '<li>Untested cores not listed here <b>MAY</b> work fine.</li>'
-            + '<li>All compatibility lists last updated March 2026.</li>'
+            + '<li>AAOpenJKDF2 supports 64-bit Libretro DLLs.</li>'
             + '</ul>';
 
         content.appendChild(wrap);

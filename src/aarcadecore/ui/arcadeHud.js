@@ -366,6 +366,21 @@ const arcadeHud = (function() {
         return out;
     }
 
+    /* Build a {value,label} options array for a Type dropdown with the blank
+     * "Other" sentinel at position 0. Any existing real type titled "Other"
+     * (case-insensitive) is filtered out so the sentinel stands alone, the
+     * same way "Default (Windows)" stands in for an unset Open-With app. */
+    function typeOptionsWithOther(types) {
+        var deduped = dedupTypesByLabel(types);
+        var out = [{ value: '', label: 'Other' }];
+        for (var i = 0; i < deduped.length; i++) {
+            var title = String(deduped[i].title || '').trim().toLowerCase();
+            if (title === 'other') continue;
+            out.push({ value: deduped[i].id, label: deduped[i].title || deduped[i].id });
+        }
+        return out;
+    }
+
     /* Find a type by case-insensitive exact title match. Returns the id, or ''. */
     function findTypeIdByTitle(types, title) {
         if (!types || !title) return '';
@@ -1501,6 +1516,7 @@ const arcadeHud = (function() {
         detectItemType: detectItemType,
         resolveTypeValue: resolveTypeValue,
         dedupTypesByLabel: dedupTypesByLabel,
+        typeOptionsWithOther: typeOptionsWithOther,
 
         // Overlay cursor
         initOverlayCursor: initOverlayCursor,

@@ -127,6 +127,16 @@ static int  host_is_template_cabinet(const char* templateName);
 static int  host_capture_rect_pixels(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
 static void host_reset_thing_texture(int thingIdx);
 
+/* Phase 4: Libretro hardware-render context helpers.
+ * These let the aarcadecore DLL request a GL context so cores like
+ * Mupen64Plus-Next / PPSSPP can render through their own context. The context
+ * is created on the engine's main displayWindow and lives on the libretro
+ * worker thread; readback is CPU-side via glReadPixels. */
+extern SDL_Window* displayWindow;
+static void* host_libretro_create_gl_context(int major, int minor, int profile_mask, int need_depth, int need_stencil);
+static void  host_libretro_set_current_gl_context(void* ctx);
+static void  host_libretro_destroy_gl_context(void* ctx);
+
 /* Cursor state (in screen coords) */
 static int g_cursorX = 0;
 static int g_cursorY = 0;
@@ -242,6 +252,32 @@ static int host_get_key_state(int key_index)
     if (key_index < 0 || key_index >= JK_NUM_KEYS)
         return 0;
     return stdControl_aKeyInfo[key_index];
+}
+
+/* Reads the gamepad at pad_index directly from SDL. Bypasses stdControl so
+ * the DLL gets gamepad state even when the engine's input polling is
+ * suppressed (input lock mode, pause menus, etc.). */
+extern void* stdControl_GetGamepad(int idx);
+static void host_get_gamepad_state(int pad_index, AACoreGamepadState* out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    SDL_GameController* pad = (SDL_GameController*)stdControl_GetGamepad(pad_index);
+    if (!pad) return;
+
+    out->connected = 1;
+    uint32_t mask = 0;
+    for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX && b < 32; ++b) {
+        if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)b))
+            mask |= (1u << b);
+    }
+    out->buttons = mask;
+    out->lx = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
+    out->ly = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
+    out->rx = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
+    out->ry = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTY);
+    out->lt = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+    out->rt = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
 }
 
 /* ========================================================================
@@ -485,6 +521,10 @@ void AACoreManager_Init(void)
     callbacks.is_template_cabinet = host_is_template_cabinet;
     callbacks.capture_rect_pixels = host_capture_rect_pixels;
     callbacks.reset_thing_texture = host_reset_thing_texture;
+    callbacks.libretro_create_gl_context     = host_libretro_create_gl_context;
+    callbacks.libretro_set_current_gl_context = host_libretro_set_current_gl_context;
+    callbacks.libretro_destroy_gl_context     = host_libretro_destroy_gl_context;
+    callbacks.get_gamepad_state              = host_get_gamepad_state;
 
     if (!g_fn_init(&callbacks)) {
         stdPlatform_Printf("AACoreManager: DLL init failed\n");
@@ -1925,6 +1965,81 @@ static void host_reset_thing_texture(int thingIdx)
             return;
         }
     }
+}
+
+/* ========================================================================
+ * Libretro hardware-render context helpers (Phase 4)
+ *
+ * Created on the engine main thread (where the engine's primary GL context is
+ * current, so SHARE_WITH_CURRENT_CONTEXT picks it up). The libretro worker
+ * thread then activates the returned context on its own thread via
+ * libretro_set_current_gl_context.
+ * ======================================================================== */
+
+static void* host_libretro_create_gl_context(int major, int minor, int profile_mask, int need_depth, int need_stencil)
+{
+    if (!displayWindow) {
+        stdPlatform_Printf("AACoreManager: libretro_create_gl_context with no displayWindow\n");
+        return NULL;
+    }
+
+    /* These attributes are read at SDL_GL_CreateContext time. We deliberately
+     * do NOT request SHARE_WITH_CURRENT_CONTEXT — our render path is CPU-side
+     * (glReadPixels → memcpy → existing texture upload) and never shares GL
+     * resources between contexts. Demanding sharing across incompatible
+     * profiles silently fails on NVIDIA. */
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, major);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, minor);
+    if (profile_mask)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, profile_mask);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,   need_depth   ? 24 : 0);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, need_stencil ? 8  : 0);
+    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
+
+    stdPlatform_Printf("AACoreManager: Creating libretro GL context (GL %d.%d, profile=0x%x, depth=%d, stencil=%d)\n",
+                       major, minor, profile_mask, need_depth, need_stencil);
+    SDL_GLContext ctx = SDL_GL_CreateContext(displayWindow);
+    if (!ctx) {
+        stdPlatform_Printf("AACoreManager: SDL_GL_CreateContext FAILED: %s\n", SDL_GetError());
+        /* Fallback: GL 3.3 Core if the requested version was rejected. */
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        ctx = SDL_GL_CreateContext(displayWindow);
+        if (!ctx) {
+            stdPlatform_Printf("AACoreManager: Fallback to GL 3.3 Core also FAILED: %s\n", SDL_GetError());
+            return NULL;
+        }
+        stdPlatform_Printf("AACoreManager: Created libretro GL context with fallback GL 3.3 Core\n");
+    }
+    /* SDL_GL_CreateContext can leave the new context current on the calling
+     * thread on some SDL backends; restore the engine's context immediately. */
+    extern SDL_GLContext glWindowContext;
+    if (SDL_GL_MakeCurrent(displayWindow, glWindowContext) != 0) {
+        stdPlatform_Printf("AACoreManager: post-create restore SDL_GL_MakeCurrent FAILED: %s\n", SDL_GetError());
+    }
+    stdPlatform_Printf("AACoreManager: Created libretro GL context %p\n", ctx);
+    return (void*)ctx;
+}
+
+static void host_libretro_set_current_gl_context(void* ctx)
+{
+    if (!displayWindow) {
+        stdPlatform_Printf("AACoreManager: set_current_gl_context: no displayWindow\n");
+        return;
+    }
+    if (SDL_GL_MakeCurrent(displayWindow, (SDL_GLContext)ctx) != 0) {
+        stdPlatform_Printf("AACoreManager: SDL_GL_MakeCurrent(ctx=%p) FAILED on calling thread: %s\n",
+                           ctx, SDL_GetError());
+    } else {
+        stdPlatform_Printf("AACoreManager: SDL_GL_MakeCurrent(ctx=%p) OK\n", ctx);
+    }
+}
+
+static void host_libretro_destroy_gl_context(void* ctx)
+{
+    if (!ctx) return;
+    SDL_GL_DeleteContext((SDL_GLContext)ctx);
 }
 
 void AACoreManager_PreRenderThing(void* pSithThing)

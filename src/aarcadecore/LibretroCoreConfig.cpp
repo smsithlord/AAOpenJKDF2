@@ -59,12 +59,16 @@ static std::string jsonGetString(const std::string& json, const std::string& key
 }
 
 static bool jsonGetBool(const std::string& json, const std::string& key) {
-    std::string needle = "\"" + key + "\"";
+    /* Old impl searched for "true" anywhere after the colon, scoped only by the
+     * next '\n' — but our serializer writes each entry on a single line with no
+     * embedded newlines, so a later `cartSaves:true` would make `enabled` read
+     * back as true. Inspect the immediate value after the colon instead. */
+    std::string needle = "\"" + key + "\":";
     size_t pos = json.find(needle);
     if (pos == std::string::npos) return false;
-    pos = json.find(':', pos);
-    if (pos == std::string::npos) return false;
-    return json.find("true", pos) < json.find('\n', pos);
+    pos += needle.size();
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+    return json.compare(pos, 4, "true") == 0;
 }
 
 static int jsonGetInt(const std::string& json, const std::string& key) {

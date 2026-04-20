@@ -5,6 +5,32 @@ function initEditApp() {
     var params = new URLSearchParams(window.location.search);
     var appId = params.get('appId') || params.get('id') || '';
 
+    /* "Default (Windows)" is the "no app set" sentinel in the Open-With
+     * dropdown (value=''). It isn't a real app row and has nothing to edit.
+     * Render a short explanatory page instead of an editable form if someone
+     * lands here with an empty appId. */
+    if (!appId) {
+        arcadeHud.ui.createWindow({
+            title: 'Open-With App Properties',
+            showBack: true,
+            showClose: true,
+            onBack: function() { window.history.back(); },
+            onClose: function() { if (window.aapi && aapi.manager) aapi.manager.closeMenu(); },
+            tabs: [
+                { label: 'General', onActivate: function(content) {
+                    content.innerHTML = '';
+                    var p = document.createElement('div');
+                    p.style.padding = '40px 20px';
+                    p.style.textAlign = 'center';
+                    p.style.color = '#888';
+                    p.textContent = 'Default (Windows) is the "no app set" sentinel and cannot be edited.';
+                    content.appendChild(p);
+                } }
+            ]
+        });
+        return;
+    }
+
     var app = null;
     var filepaths = [];
 
@@ -16,13 +42,12 @@ function initEditApp() {
         }
     } catch (e) { console.log('editApp load error: ' + e); }
 
-    /* Load types for dropdown */
-    var typeOptions = [{ value: '', label: '(none)' }];
+    /* Load types for dropdown. Blank "Other" sentinel sits at position 0, same
+     * as createItem.js / editItem.js. */
+    var typeOptions = [{ value: '', label: 'Other' }];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            var types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes());
-            for (var t = 0; t < types.length; t++)
-                typeOptions.push({ value: types[t].id, label: types[t].title || types[t].id });
+            typeOptions = arcadeHud.typeOptionsWithOther(aapi.library.getTypes() || []);
         }
     } catch (e) {}
 

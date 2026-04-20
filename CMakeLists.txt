@@ -213,6 +213,21 @@ file(GLOB AARCADECORE_SOURCES
     ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.c
     ${PROJECT_SOURCE_DIR}/src/aarcadecore/*.cpp
 )
+# Phase 5: vendor minizip's unzip.c + ioapi.c into aarcadecore for ZIP extraction.
+# minizip ships with the bundled zlib at lib/zlib/contrib/minizip; we just compile
+# the unzip-side sources into the DLL and link against the existing ZLIB::ZLIB
+# target (which sith_engine already uses).
+list(APPEND AARCADECORE_SOURCES
+    ${PROJECT_SOURCE_DIR}/lib/zlib/contrib/minizip/unzip.c
+    ${PROJECT_SOURCE_DIR}/lib/zlib/contrib/minizip/ioapi.c
+)
+
+# Phase 5b: vendor LZMA SDK (Igor Pavlov's public-domain reference) for .7z
+# extraction. Files were lifted as-is from aarcade-source-client/mp/src/7z/
+# (same set the Source-engine plugin uses). Just compile them into the DLL.
+file(GLOB LZMA_SDK_SOURCES ${PROJECT_SOURCE_DIR}/lib/lzma_sdk/*.c)
+list(APPEND AARCADECORE_SOURCES ${LZMA_SDK_SOURCES})
+
 add_library(aarcadecore SHARED ${AARCADECORE_SOURCES})
 target_include_directories(aarcadecore PRIVATE
     ${PROJECT_SOURCE_DIR}/src/aarcadecore
@@ -221,16 +236,21 @@ target_include_directories(aarcadecore PRIVATE
     ${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/public/steam
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/include
     ${PROJECT_SOURCE_DIR}/mpv-sdk/include
+    ${PROJECT_SOURCE_DIR}/lib/zlib
+    ${PROJECT_SOURCE_DIR}/lib/zlib/contrib/minizip
+    ${PROJECT_SOURCE_DIR}/lib/lzma_sdk
+    ${CMAKE_BINARY_DIR}/zlib/Windows/AMD64/include  # cross-built zlib's zconf.h
 )
 target_link_libraries(aarcadecore PRIVATE
     SDL::SDL
+    ZLIB::ZLIB
     ${PROJECT_SOURCE_DIR}/steamworks_sdk_164/sdk/redistributable_bin/win64/steam_api64.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/Ultralight.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/UltralightCore.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/AppCore.lib
     ${PROJECT_SOURCE_DIR}/ultralight-free-sdk-1.4.0-win-x64/lib/WebCore.lib
     ${PROJECT_SOURCE_DIR}/mpv-sdk/lib/mpv.lib
-    version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32
+    version imm32 setupapi gdi32 winmm ole32 oleaut32 shell32 user32 advapi32 opengl32
 )
 target_compile_definitions(aarcadecore PRIVATE AARCADECORE_EXPORTS)
 

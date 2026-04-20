@@ -98,7 +98,7 @@ function initEditType() {
         var form = document.createElement('table');
         form.className = 'aa-edit-form';
         form.appendChild(createRow('titleicon.png', 'Title', type.title, 'title').row);
-        form.appendChild(createRow('typeicon.png', 'Priority', String(type.priority || 0), 'priority').row);
+        // form.appendChild(createRow('typeicon.png', 'Priority', String(type.priority || 0), 'priority').row);
         content.appendChild(form);
 
         if (!(window.aapi && aapi.library && aapi.library.saveTypeAttribute)) {

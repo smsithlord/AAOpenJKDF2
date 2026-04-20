@@ -131,14 +131,12 @@ function initEditItem() {
         return { row: row, input: input };
     }
 
-    /* Load types for dropdown */
-    var typeOptions = [];
+    /* Load types for dropdown. Uses the shared helper so the blank "Other"
+     * sentinel shows at position 0, matching createItem.js / editApp.js. */
+    var typeOptions = [{ value: '', label: 'Other' }];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            var types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes());
-            for (var t = 0; t < types.length; t++) {
-                typeOptions.push({ value: types[t].id, label: types[t].title || types[t].id });
-            }
+            typeOptions = arcadeHud.typeOptionsWithOther(aapi.library.getTypes() || []);
         }
     } catch (e) {}
 
@@ -210,6 +208,26 @@ function initEditItem() {
             ]
         });
         form.appendChild(r3.row);
+
+        /* "Default (Windows)" is the "no app set" sentinel — value is the empty
+         * string and there's nothing to edit for it. Reflect that in the UI by
+         * disabling the Edit-icon button when Default is selected; re-enable
+         * when any real app is picked. (The + Create button stays active since
+         * it's still useful from this state.) */
+        (function() {
+            var actionBtns = r3.row.querySelectorAll('.aa-edit-cell-actions .aa-edit-row-action-btn');
+            var editBtn = actionBtns && actionBtns.length ? actionBtns[0] : null;
+            if (!editBtn) return;
+            function syncEditBtn() {
+                var hasAppSelected = !!(r3.input && r3.input.value);
+                editBtn.disabled = !hasAppSelected;
+                editBtn.style.opacity = hasAppSelected ? '' : '0.3';
+                editBtn.style.pointerEvents = hasAppSelected ? '' : 'none';
+                editBtn.title = hasAppSelected ? 'Edit app' : 'Default (Windows) cannot be edited';
+            }
+            syncEditBtn();
+            if (r3.input) r3.input.addEventListener('change', syncEditBtn);
+        })();
 
         var r4 = createRow('fileicon.png', 'File Target', item ? item.file : '', {
             field: 'file',

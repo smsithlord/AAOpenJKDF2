@@ -288,6 +288,24 @@ void InstanceManager::ensureItemInstance(const Arcade::Item& item, const std::st
                 }
             }
             if (!coreDll.empty()) {
+                /* Phase 6 (interim): hard-cap at one libretro instance live at a
+                 * time. If one already exists, refuse the new request — user
+                 * must close the active one first. Multi-core / hot-swap is a
+                 * later phase. */
+                bool libretroAlreadyLive = false;
+                for (auto& kv : itemInstances_) {
+                    if (kv.second.browser && kv.second.browser->type == EMBEDDED_LIBRETRO) {
+                        libretroAlreadyLive = true;
+                        if (g_host.host_printf)
+                            g_host.host_printf("InstanceManager: refusing libretro spawn for '%s' — instance for item=%s already active\n",
+                                               item.file.c_str(), kv.second.itemId.c_str());
+                        break;
+                    }
+                }
+                if (libretroAlreadyLive) {
+                    return; /* leave inst.browser null; caller treats as no-op */
+                }
+
                 std::string corePath = std::string("aarcadecore/libretro/cores/") + coreDll;
                 if (g_host.host_printf)
                     g_host.host_printf("InstanceManager: '%s' matched core '%s' — creating Libretro instance (game: %s)\n",
@@ -461,25 +479,40 @@ void InstanceManager::requestSpawn(const Arcade::Item& item)
     SpawnRequest req;
     req.item = item;
 
-    /* Check localStorage for best model: per-item first, then global, then default */
-    std::string bestModelId;
+    /* Pick the best remembered model for this item.
+     *   1. Per-item key  (lastSpawnModelId_<itemId>) — user's last choice for this specific item.
+     *   2. Item-scoped global (lastSpawnModelId_item) — user's last cabinet across all items.
+     *   3. Default movie stand cabinet.
+     * The legacy shared 'lastSpawnModelId' key is intentionally NOT consulted here:
+     * prop spawns write to it too, so reading it here leaks a prop model into item
+     * spawns (that's the bug this guards against). Each candidate is also run
+     * through isModelCabinet() as a belt-and-suspenders check in case the key
+     * contents are stale. */
+    auto tryModel = [&](const std::string& mid, const char* reason) -> bool {
+        if (mid.empty()) return false;
+        std::string tmpl = g_library.findModelPlatformFile(mid, OPENJK_PLATFORM_ID);
+        if (tmpl.empty()) return false;
+        if (!isModelCabinet(mid)) {
+            if (g_host.host_printf)
+                g_host.host_printf("InstanceManager: Rejecting remembered model %s — not a cabinet (source=%s)\n",
+                                   mid.c_str(), reason);
+            return false;
+        }
+        req.modelId = mid;
+        req.templateName = tmpl;
+        if (g_host.host_printf)
+            g_host.host_printf("InstanceManager: Using remembered model %s (%s) [source=%s]\n",
+                               mid.c_str(), tmpl.c_str(), reason);
+        return true;
+    };
+
+    bool chose = false;
     if (!item.id.empty()) {
         std::string key = std::string("lastSpawnModelId_") + item.id;
-        bestModelId = UltralightManager_EvalLocalStorage(key.c_str());
+        chose = tryModel(UltralightManager_EvalLocalStorage(key.c_str()), "per-item");
     }
-    if (bestModelId.empty())
-        bestModelId = UltralightManager_EvalLocalStorage("lastSpawnModelId");
-
-    if (!bestModelId.empty()) {
-        std::string tmpl = g_library.findModelPlatformFile(bestModelId, OPENJK_PLATFORM_ID);
-        if (!tmpl.empty()) {
-            req.modelId = bestModelId;
-            req.templateName = tmpl;
-            if (g_host.host_printf)
-                g_host.host_printf("InstanceManager: Using remembered model %s (%s)\n",
-                                  bestModelId.c_str(), tmpl.c_str());
-        }
-    }
+    if (!chose)
+        chose = tryModel(UltralightManager_EvalLocalStorage("lastSpawnModelId_item"), "item-global");
 
     /* Fallback to default if no remembered model found */
     if (req.templateName.empty()) {

@@ -288,6 +288,12 @@ void stdControl_SetSDLKeydown(int keyNum, int bDown, uint32_t readTime)
     stdControl_SetKeydown(stdControl_aSdlToDik[keyNum], bDown, readTime);
 }
 
+void* stdControl_GetGamepad(int idx)
+{
+    if (idx < 0 || idx >= JK_NUM_JOYSTICKS) return NULL;
+    return pGamepads[idx];
+}
+
 void stdControl_FreeSdlJoysticks()
 {
     stdPlatform_Printf("Free SDL joysticks...\n");

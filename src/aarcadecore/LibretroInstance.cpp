@@ -28,48 +28,79 @@ typedef struct LibretroInstanceData {
  * Input — uses host callback to read key state
  * ======================================================================== */
 
-/* Key indices matching OpenJKDF2's KEY_JOY1_* defines.
- * These are the values the host's get_key_state expects. */
-#define AACORE_KEY_JOY1_B1   0x100
-#define AACORE_KEY_JOY1_B2   0x101
-#define AACORE_KEY_JOY1_B3   0x102
-#define AACORE_KEY_JOY1_B4   0x103
-#define AACORE_KEY_JOY1_B5   0x104
-#define AACORE_KEY_JOY1_B7   0x106
-#define AACORE_KEY_JOY1_B8   0x107
-#define AACORE_KEY_JOY1_B10  0x12D
-#define AACORE_KEY_JOY1_B11  0x12E
-#define AACORE_KEY_JOY1_B16  0x133
-#define AACORE_KEY_JOY1_B17  0x134
-#define AACORE_KEY_JOY1_B9   0x12C
-#define AACORE_KEY_JOY1_HUP  0x109
-#define AACORE_KEY_JOY1_HDOWN 0x10B
-#define AACORE_KEY_JOY1_HLEFT 0x108
-#define AACORE_KEY_JOY1_HRIGHT 0x10A
+/* SDL_GameControllerButton values — keep in sync with SDL_gamecontroller.h.
+ * We mirror them here so LibretroInstance.cpp doesn't need to pull in SDL. */
+#define AA_BTN_A             0
+#define AA_BTN_B             1
+#define AA_BTN_X             2
+#define AA_BTN_Y             3
+#define AA_BTN_BACK          4
+#define AA_BTN_GUIDE         5
+#define AA_BTN_START         6
+#define AA_BTN_LEFTSTICK     7
+#define AA_BTN_RIGHTSTICK    8
+#define AA_BTN_LEFTSHOULDER  9
+#define AA_BTN_RIGHTSHOULDER 10
+#define AA_BTN_DPAD_UP       11
+#define AA_BTN_DPAD_DOWN     12
+#define AA_BTN_DPAD_LEFT     13
+#define AA_BTN_DPAD_RIGHT    14
 
+#define AA_TRIGGER_THRESH    0x2666  /* ~30% of 0x7FFF, matches stdControl_ReadGamepad */
+
+/* Build a RETRO_DEVICE_JOYPAD button mask from the host gamepad snapshot.
+ * SNES-style face mapping (physical position, not name):
+ *   Xbox A (south)  -> RETRO B   (action/jump, SNES south)
+ *   Xbox B (east)   -> RETRO A
+ *   Xbox X (west)   -> RETRO Y
+ *   Xbox Y (north)  -> RETRO X
+ * Uses host->get_gamepad_state instead of stdControl_aKeyInfo so input keeps
+ * flowing to the core even when engine input polling is suppressed
+ * (input lock mode, pause menus, etc.). */
 static int16_t libretro_build_joypad_state(void)
 {
     int16_t buttons = 0;
-    if (!g_host.get_key_state) return 0;
+    if (!g_host.get_gamepad_state) return 0;
 
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B1))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_B);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B2))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_A);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B3))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_Y);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B4))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_X);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B5))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_SELECT);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B7))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_START);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B10))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B11))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B16))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L2);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B17))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R2);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B8))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L3);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_B9))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R3);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_HUP))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_UP);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_HDOWN))  buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_DOWN);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_HLEFT))  buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_LEFT);
-    if (g_host.get_key_state(AACORE_KEY_JOY1_HRIGHT)) buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_RIGHT);
+    AACoreGamepadState s;
+    g_host.get_gamepad_state(0, &s);
+    if (!s.connected) return 0;
+
+    if (s.buttons & (1u << AA_BTN_A))             buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_B);
+    if (s.buttons & (1u << AA_BTN_B))             buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_A);
+    if (s.buttons & (1u << AA_BTN_X))             buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_Y);
+    if (s.buttons & (1u << AA_BTN_Y))             buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_X);
+    if (s.buttons & (1u << AA_BTN_BACK))          buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_SELECT);
+    if (s.buttons & (1u << AA_BTN_START))         buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_START);
+    if (s.buttons & (1u << AA_BTN_LEFTSHOULDER))  buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L);
+    if (s.buttons & (1u << AA_BTN_RIGHTSHOULDER)) buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R);
+    if (s.buttons & (1u << AA_BTN_LEFTSTICK))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L3);
+    if (s.buttons & (1u << AA_BTN_RIGHTSTICK))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R3);
+    if (s.buttons & (1u << AA_BTN_DPAD_UP))       buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_UP);
+    if (s.buttons & (1u << AA_BTN_DPAD_DOWN))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_DOWN);
+    if (s.buttons & (1u << AA_BTN_DPAD_LEFT))     buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_LEFT);
+    if (s.buttons & (1u << AA_BTN_DPAD_RIGHT))    buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_RIGHT);
+    if (s.lt > AA_TRIGGER_THRESH)                 buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_L2);
+    if (s.rt > AA_TRIGGER_THRESH)                 buttons |= (1 << RETRO_DEVICE_ID_JOYPAD_R2);
 
     return buttons;
+}
+
+/* Push analog stick values for port 0 into the host. Left stick -> index 0,
+ * Right stick -> index 1. Most N64 cores automatically treat the right stick
+ * as the C-buttons, so no extra mapping needed here. */
+static void libretro_push_analog_state(LibretroHost* host)
+{
+    if (!host || !g_host.get_gamepad_state) return;
+    AACoreGamepadState s;
+    g_host.get_gamepad_state(0, &s);
+    if (!s.connected) {
+        libretro_host_set_analog(host, 0, 0, 0, 0);
+        libretro_host_set_analog(host, 0, 1, 0, 0);
+        return;
+    }
+    libretro_host_set_analog(host, 0, 0, s.lx, s.ly);
+    libretro_host_set_analog(host, 0, 1, s.rx, s.ry);
 }
 
 /* ========================================================================
@@ -132,6 +163,7 @@ static void libretro_inst_update(EmbeddedInstance* inst)
     /* OR physical gamepad with emulated keyboard joypad */
     joypad_buttons |= data->emulatedJoypad;
     libretro_host_set_input(data->host, 0, joypad_buttons);
+    libretro_push_analog_state(data->host);
     libretro_host_run_frame(data->host);
 
     data->frame_counter++;
@@ -360,6 +392,14 @@ static const EmbeddedInstanceVtable g_libretroVtable = {
 /* ========================================================================
  * Public API (internal to DLL)
  * ======================================================================== */
+
+/* Used by JS bridge to reach the host of the currently-active core for option queries. */
+extern "C" LibretroHost* LibretroInstance_GetHost(EmbeddedInstance* inst)
+{
+    if (!inst || inst->type != EMBEDDED_LIBRETRO || !inst->user_data) return NULL;
+    LibretroInstanceData* data = (LibretroInstanceData*)inst->user_data;
+    return data->host;
+}
 
 EmbeddedInstance* LibretroInstance_Create(const char* core_path, const char* game_path, const char* material_name)
 {

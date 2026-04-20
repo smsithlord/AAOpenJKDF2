@@ -97,7 +97,7 @@ function initEditModel() {
 
         form.appendChild(createRow('titleicon.png', 'Title', model ? model.title : '', { field: 'title' }).row);
         form.appendChild(createRow('fileicon.png', 'Template Name', templateName, { readOnly: true }).row);
-        form.appendChild(createRow('screenicon.png', 'Screen Image', model ? model.screen : '', { field: 'screen' }).row);
+        // form.appendChild(createRow('screenicon.png', 'Screen Image', model ? model.screen : '', { field: 'screen' }).row);
 
         content.appendChild(form);
     }

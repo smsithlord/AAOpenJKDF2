@@ -8,13 +8,43 @@ function initCreateItem() {
     var TUBEINFO_URL = 'https://anarchyarcade.com/metaverse/tubeinfo.php';
     var APPLIED_FIELDS = ['title', 'type', 'file', 'screen', 'preview', 'marquee', 'description', 'app'];
 
-    /* Load types for dropdown */
+    /* Load types for dropdown. Raw list used by title/detection helpers;
+     * `typeOptions` is what the Type select actually renders and has the
+     * blank "Other" sentinel prepended (value ''). */
     var types = [];
     try {
         if (window.aapi && aapi.library && aapi.library.getTypes) {
-            types = arcadeHud.dedupTypesByLabel(aapi.library.getTypes() || []);
+            types = aapi.library.getTypes() || [];
         }
     } catch (e) {}
+    var typeOptions = arcadeHud.typeOptionsWithOther(types);
+
+    /* Load Open-With apps — same list editItem.js uses, with the "no app set"
+     * sentinel as the first entry. Picking an app auto-guesses Type from the
+     * app's declared type. */
+    var apps = [];
+    try {
+        if (window.aapi && aapi.library && aapi.library.getApps) {
+            apps = aapi.library.getApps(0, 100) || [];
+        }
+    } catch (e) {}
+    var appOptions = [{ value: '', label: 'Default (Windows)' }];
+    for (var aoi = 0; aoi < apps.length; aoi++) {
+        appOptions.push({ value: apps[aoi].id, label: apps[aoi].title || apps[aoi].id });
+    }
+
+    /* Without an Open-With app, Type stays on the "Other" sentinel (''). With
+     * one, inherit that app's declared type if it has one. */
+    function typeIdForApp(appId) {
+        if (!appId) return '';
+        try {
+            if (window.aapi && aapi.library && aapi.library.getAppById) {
+                var a = aapi.library.getAppById(appId);
+                if (a && a.type) return a.type;
+            }
+        } catch (e) {}
+        return '';
+    }
 
     function onItemTab(content) {
         content.innerHTML = '';
@@ -86,16 +116,59 @@ function initCreateItem() {
         var typeSelect = document.createElement('select');
         typeSelect.className = 'aa-edit-row-input aa-edit-row-select';
         typeSelect.style.cssText = 'width:100%; margin-bottom:12px;';
-        for (var i = 0; i < types.length; i++) {
+        for (var i = 0; i < typeOptions.length; i++) {
             var opt = document.createElement('option');
-            opt.value = types[i].id;
-            opt.textContent = types[i].title || types[i].id;
-            if (givenType && types[i].id === givenType) opt.selected = true;
+            opt.value = typeOptions[i].value;
+            opt.textContent = typeOptions[i].label;
+            if (givenType && typeOptions[i].value === givenType) opt.selected = true;
             typeSelect.appendChild(opt);
         }
+        /* Default to the blank "Other" sentinel (value '') when no givenType
+         * was passed in, matching how the Open-With dropdown defaults to
+         * "Default (Windows)". The Open-With change handler overrides this
+         * when the user picks an app that declares its own type. */
+        if (!givenType) typeSelect.value = '';
         formArea.appendChild(typeSelect);
         if (typeof arcadeHud !== 'undefined' && arcadeHud.ui && arcadeHud.ui.enhanceSelect) {
             arcadeHud.ui.enhanceSelect(typeSelect);
+        }
+
+        /* Open-With dropdown — picking an app auto-guesses Type from that
+         * app's declared type. Default sentinel "Default (Windows)" means no
+         * Open-With app is set; in that case Type stays on "Other". */
+        var appLabel = document.createElement('label');
+        appLabel.style.cssText = 'color:#aaa; font-size:12px; display:block; margin-bottom:4px;';
+        appLabel.textContent = 'Open With:';
+        formArea.appendChild(appLabel);
+
+        var appSelect = document.createElement('select');
+        appSelect.className = 'aa-edit-row-input aa-edit-row-select';
+        appSelect.style.cssText = 'width:100%; margin-bottom:12px;';
+        for (var ao = 0; ao < appOptions.length; ao++) {
+            var aOpt = document.createElement('option');
+            aOpt.value = appOptions[ao].value;
+            aOpt.textContent = appOptions[ao].label;
+            appSelect.appendChild(aOpt);
+        }
+        formArea.appendChild(appSelect);
+        appSelect.addEventListener('change', function() {
+            itemFields.app = appSelect.value;
+            var guessedType = typeIdForApp(appSelect.value);
+            if (guessedType) {
+                /* Only apply if that type id is actually an option (don't
+                 * silently stamp an invalid id onto the select). */
+                var has = false;
+                for (var k = 0; k < typeSelect.options.length; k++) {
+                    if (typeSelect.options[k].value === guessedType) { has = true; break; }
+                }
+                if (has) {
+                    typeSelect.value = guessedType;
+                    itemFields.type = guessedType;
+                }
+            }
+        });
+        if (typeof arcadeHud !== 'undefined' && arcadeHud.ui && arcadeHud.ui.enhanceSelect) {
+            arcadeHud.ui.enhanceSelect(appSelect);
         }
 
         /* File display (read-only) */

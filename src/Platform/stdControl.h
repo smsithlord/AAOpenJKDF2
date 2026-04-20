@@ -30,6 +30,9 @@
 #ifdef SDL2_RENDER
 void stdControl_FreeSdlJoysticks();
 void stdControl_InitSdlJoysticks();
+/* Returns SDL_GameController* for the pad at idx, or NULL if none open.
+ * Opaque here so callers don't need the SDL headers. */
+void* stdControl_GetGamepad(int idx);
 #endif
 
 void stdControl_Reset();

@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <vector>
 #include <stdint.h>
 
 using namespace ultralight;
@@ -138,6 +139,10 @@ AAPI_CALLBACK(js_manager_openMainMenu) {
 #include "InstanceManager.h"
 #include "SQLiteLibrary.h"
 #include "LibretroCoreConfig.h"
+#include "libretro_host.h"
+
+/* Forward decl — implemented in LibretroManager.cpp (C++ linkage). */
+EmbeddedInstance* LibretroManager_GetActive(void);
 #include "ImageLoader.h"
 extern InstanceManager g_instanceManager;
 extern SQLiteLibrary g_library;
@@ -560,12 +565,95 @@ AAPI_CALLBACK(js_manager_resetLibretroCoreOptions) {
     return JSValueMakeBoolean(ctx, true);
 }
 
+/* Return options for the currently-loaded core, or null if no core is active.
+ * Editing options without an active core isn't meaningful — the schema (which
+ * values are valid) only exists once the core has called SET_VARIABLES /
+ * SET_CORE_OPTIONS* through the env callback. */
+/* Find the live libretro instance the user is interacting with.
+ * LibretroManager_GetActive() is wrong here — it only tracks the legacy
+ * default-bsnes startup instance. Runtime libretro instances created from
+ * library spawns live in InstanceManager.itemInstances_. With Phase 6's
+ * single-instance cap there's at most one. */
+static EmbeddedInstance* findActiveLibretroInstance() {
+    EmbeddedInstance* t = aarcadecore_getInputModeInstance();
+    if (t && t->type == EMBEDDED_LIBRETRO) return t;
+    t = aarcadecore_getFullscreenInstance();
+    if (t && t->type == EMBEDDED_LIBRETRO) return t;
+    auto active = g_instanceManager.getActiveInstances();
+    for (size_t i = 0; i < active.size(); ++i)
+        if (active[i]->browser && active[i]->browser->type == EMBEDDED_LIBRETRO)
+            return active[i]->browser;
+    return nullptr;
+}
+
+AAPI_CALLBACK(js_manager_getLibretroCoreOptions) {
+    EmbeddedInstance* inst = findActiveLibretroInstance();
+    LibretroHost* host = inst ? LibretroInstance_GetHost(inst) : nullptr;
+    if (!host) return JSValueMakeNull(ctx);
+
+    /* Two-call: query needed size, then alloc exactly. Cores like
+     * mupen64plus-next declare 85 options whose JSON exceeded an old fixed
+     * 16KB buffer — silent truncation produced unparseable JSON. */
+    int needed = libretro_host_get_options_json(host, nullptr, 0);
+    if (needed <= 0) return JSValueMakeNull(ctx);
+    std::vector<char> buf((size_t)needed + 1);
+    int n = libretro_host_get_options_json(host, buf.data(), (int)buf.size());
+    if (n <= 0) return JSValueMakeNull(ctx);
+
+    JSStringRef str = JSStringCreateWithUTF8CString(buf.data());
+    JSValueRef parsed = JSValueMakeFromJSONString(ctx, str);
+    JSStringRelease(str);
+    return parsed ? parsed : JSValueMakeNull(ctx);
+}
+
+AAPI_CALLBACK(js_manager_setLibretroCoreOption) {
+    if (argumentCount < 2) return JSValueMakeBoolean(ctx, false);
+    EmbeddedInstance* inst = findActiveLibretroInstance();
+    LibretroHost* host = inst ? LibretroInstance_GetHost(inst) : nullptr;
+    if (!host) return JSValueMakeBoolean(ctx, false);
+
+    std::string key  = jsValueToString(ctx, arguments[0]);
+    std::string val  = jsValueToString(ctx, arguments[1]);
+    /* Optional 3rd arg "core" (default) or "game". For "game" tier, an empty
+     * value means "clear the override" (i.e. inherit from core). */
+    std::string tier = (argumentCount >= 3) ? jsValueToString(ctx, arguments[2]) : std::string("core");
+    bool ok = libretro_host_set_option(host, key.c_str(), val.c_str(), tier.c_str());
+    return JSValueMakeBoolean(ctx, ok);
+}
+
+/* Returns the active libretro instance's core path + currently-loaded game
+ * basename so the UI overlay's options panel can label the tabs accurately
+ * ("Game Override: Super Mario 64..."). Returns null when no core is active. */
+AAPI_CALLBACK(js_manager_getLibretroActiveInfo) {
+    EmbeddedInstance* inst = findActiveLibretroInstance();
+    LibretroHost* host = inst ? LibretroInstance_GetHost(inst) : nullptr;
+    if (!host) return JSValueMakeNull(ctx);
+
+    const char* core_path = libretro_host_get_core_path(host);
+    const char* core_name = nullptr;
+    const char* core_ver  = nullptr;
+    libretro_host_get_system_info(host, &core_name, &core_ver);
+
+    JSObjectRef obj = JSObjectMake(ctx, nullptr, nullptr);
+    auto setStr = [&](const char* k, const char* v) {
+        JSStringRef key = JSStringCreateWithUTF8CString(k);
+        JSStringRef val = JSStringCreateWithUTF8CString(v ? v : "");
+        JSObjectSetProperty(ctx, obj, key, JSValueMakeString(ctx, val), 0, nullptr);
+        JSStringRelease(val); JSStringRelease(key);
+    };
+    setStr("corePath", core_path ? core_path : "");
+    setStr("coreName", core_name ? core_name : "");
+    setStr("coreVersion", core_ver ? core_ver : "");
+    return obj;
+}
+
 void UltralightManager_OpenTabMenu(void);
 int UltralightManager_ConsumeRequestedTab(void);
 AAPI_CALLBACK(js_manager_openTabMenu) {
     UltralightManager_OpenTabMenu();
     return JSValueMakeBoolean(ctx, true);
 }
+
 AAPI_CALLBACK(js_manager_getRequestedTab) {
     int idx = UltralightManager_ConsumeRequestedTab();
     if (idx < 0) return JSValueMakeNull(ctx);
@@ -1131,6 +1219,9 @@ void UltralightData::OnWindowObjectReady(ultralight::View* caller, uint64_t fram
     addJSMethod(ctx, managerObj, "getAllLibretroCores", js_manager_getAllLibretroCores);
     addJSMethod(ctx, managerObj, "updateLibretroCore", js_manager_updateLibretroCore);
     addJSMethod(ctx, managerObj, "resetLibretroCoreOptions", js_manager_resetLibretroCoreOptions);
+    addJSMethod(ctx, managerObj, "getLibretroCoreOptions", js_manager_getLibretroCoreOptions);
+    addJSMethod(ctx, managerObj, "setLibretroCoreOption", js_manager_setLibretroCoreOption);
+    addJSMethod(ctx, managerObj, "getLibretroActiveInfo", js_manager_getLibretroActiveInfo);
 
     JSStringRef managerName = JSStringCreateWithUTF8CString("manager");
     JSObjectSetProperty(ctx, aapiObj, managerName, managerObj, 0, nullptr);

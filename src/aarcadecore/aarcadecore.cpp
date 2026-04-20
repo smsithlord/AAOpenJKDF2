@@ -231,12 +231,15 @@ static void notifyOverlayState(void)
     UltralightManager_NotifyOverlayMode(json);
 }
 
-/* Check if the HUD pixel at overlay coords (x,y) is fully opaque (HUD element) */
-static bool isHudPixelOpaque(int x, int y)
+/* Check if the HUD pixel at overlay coords (x,y) has any non-transparent
+ * content. Used to decide whether a mouse event lands on the overlay UI vs
+ * passes through to the underlying instance. ANY non-zero alpha = overlay
+ * interaction; zero alpha = pass-through. */
+static bool isHudPixelVisible(int x, int y)
 {
     const uint8_t* buf = UltralightManager_GetHudPixels();
     if (!buf || x < 0 || x >= 1920 || y < 0 || y >= 1080) return false;
-    return buf[(y * 1920 + x) * 4 + 3] >= 250;
+    return buf[(y * 1920 + x) * 4 + 3] > 0;
 }
 
 /* Get the instance that should receive input:
@@ -476,7 +479,7 @@ AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
     /* Forward to instance only if HUD pixel is not opaque (click-through) */
     EmbeddedInstance* inst = get_input_target();
     if (inst && inst->vtable->mouse_move) {
-        if (overlayActive && isHudPixelOpaque(x, y))
+        if (overlayActive && isHudPixelVisible(x, y))
             return; /* HUD element under cursor — don't forward to instance */
         if ((g_fullscreenInstance == inst || g_inputModeInstance == inst) && inst->vtable->get_width && inst->vtable->get_height) {
             int sx = x * inst->vtable->get_width(inst) / 1920;
@@ -491,7 +494,7 @@ AARCADECORE_EXPORT void aarcadecore_mouse_move(int x, int y)
 AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
 {
     bool overlayActive = g_fullscreenInstance || g_inputModeInstance;
-    bool hudOpaque = overlayActive && isHudPixelOpaque(g_lastMouseX, g_lastMouseY);
+    bool hudOpaque = overlayActive && isHudPixelVisible(g_lastMouseX, g_lastMouseY);
 
     if (hudOpaque) {
         /* Click on opaque HUD element — send only to HUD */
@@ -507,7 +510,7 @@ AARCADECORE_EXPORT void aarcadecore_mouse_down(int button)
 AARCADECORE_EXPORT void aarcadecore_mouse_up(int button)
 {
     bool overlayActive = g_fullscreenInstance || g_inputModeInstance;
-    bool hudOpaque = overlayActive && isHudPixelOpaque(g_lastMouseX, g_lastMouseY);
+    bool hudOpaque = overlayActive && isHudPixelVisible(g_lastMouseX, g_lastMouseY);
 
     if (hudOpaque) {
         UltralightManager_ForwardMouseUp(button);

@@ -173,6 +173,7 @@ void UltralightManager_OpenTabMenu(void)
     g_overlayLoaded = false;
 }
 
+
 void UltralightManager_OpenTabMenuToTab(int tabIndex)
 {
     g_requestedTabIndex = tabIndex;

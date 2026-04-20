@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* API version — bump when the interface changes */
-#define AARCADECORE_API_VERSION 5
+#define AARCADECORE_API_VERSION 7
 
 /* DLL export/import macros */
 #ifdef _WIN32
@@ -43,6 +43,40 @@ typedef int  (*AACore_IsTemplateCabinetFn)(const char* templateName);
 typedef int  (*AACore_CaptureRectPixelsFn)(int x, int y, int w, int h, void** pixelsOut, int* outW, int* outH);
 typedef void (*AACore_ResetThingTextureFn)(int thingIdx);
 
+/* Phase 4: hardware-accelerated Libretro rendering.
+ *
+ * The DLL needs an OpenGL context that shares resources with the engine's main
+ * GL context, so GL-rendering cores (Mupen64Plus-Next, PPSSPP, Beetle PSX HW,
+ * etc.) can render through their own context while we read the result back via
+ * glReadPixels and feed it into the existing texture pipeline.
+ *
+ * libretro_create_gl_context — MUST be called from a thread where the engine's
+ *   main GL context is current (so SHARE_WITH_CURRENT_CONTEXT picks it up).
+ *   Returns an opaque SDL_GLContext* or NULL on failure.
+ * libretro_set_current_gl_context — May be called from any thread. Pass NULL to
+ *   release whatever context is current on the calling thread; pass a non-NULL
+ *   context returned by create to make it current here.
+ * libretro_destroy_gl_context — Releases the context. Engine should ensure the
+ *   context is no longer current before calling.
+ */
+typedef void* (*AACore_CreateGLContextFn)(int major, int minor, int profile_mask, int need_depth, int need_stencil);
+typedef void  (*AACore_SetCurrentGLContextFn)(void* ctx);
+typedef void  (*AACore_DestroyGLContextFn)(void* ctx);
+
+/* Gamepad state snapshot — direct SDL_GameController read, bypasses the
+ * engine's stdControl polling so gamepad input keeps flowing to embedded
+ * instances (Libretro etc.) even when stdControl is suppressed (input lock
+ * mode, paused engine, etc.). Values follow SDL_GameController semantics.
+ * buttons bit i = (SDL_CONTROLLER_BUTTON_i pressed ? 1 : 0). */
+typedef struct AACoreGamepadState {
+    int      connected;      /* 1 if a pad is open at this index, else 0 */
+    uint32_t buttons;        /* bit i = SDL_CONTROLLER_BUTTON_i */
+    int16_t  lx, ly;         /* left  stick, -32768..32767 (Y+ = down) */
+    int16_t  rx, ry;         /* right stick */
+    int16_t  lt, rt;         /* triggers, 0..32767 */
+} AACoreGamepadState;
+typedef void (*AACore_GetGamepadStateFn)(int pad_index, AACoreGamepadState* out);
+
 typedef struct AACoreHostCallbacks {
     int api_version;
     AACore_PrintfFn          host_printf;
@@ -51,6 +85,10 @@ typedef struct AACoreHostCallbacks {
     AACore_IsTemplateCabinetFn is_template_cabinet;
     AACore_CaptureRectPixelsFn capture_rect_pixels;
     AACore_ResetThingTextureFn reset_thing_texture;
+    AACore_CreateGLContextFn     libretro_create_gl_context;
+    AACore_SetCurrentGLContextFn libretro_set_current_gl_context;
+    AACore_DestroyGLContextFn    libretro_destroy_gl_context;
+    AACore_GetGamepadStateFn     get_gamepad_state;
 } AACoreHostCallbacks;
 
 /* ========================================================================

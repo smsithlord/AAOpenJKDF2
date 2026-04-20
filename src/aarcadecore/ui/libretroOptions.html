@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Libretro Options</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <style>
+        /* Cursor sprite — copied from overlay.html so the mouse stays visible
+         * after the user navigates from overlay.html to this page. The engine
+         * doesn't render the OS cursor for overlay pages; pages must draw
+         * their own. */
+        .overlay-cursor { position: absolute; pointer-events: none; z-index: 99999; }
+        .overlay-cursor img {
+            width: 48px; height: 48px; display: block;
+            transform: translate(-22%, -3%); opacity: 0.9;
+        }
+    </style>
+    <script src="imageCache.js"></script>
+    <script src="arcadeHud.js"></script>
+    <script src="libretroOptions.js"></script>
+</head>
+<body>
+<div class="overlay-cursor" id="overlayCursor"><img src="cursors/default.png" alt=""></div>
+<script>
+    /* Track mouse with the cursor sprite. Same pattern as overlay.html. */
+    (function() {
+        var cur = document.getElementById('overlayCursor');
+        document.addEventListener('mousemove', function(e) {
+            cur.style.left = e.clientX + 'px';
+            cur.style.top  = e.clientY + 'px';
+        });
+    })();
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initLibretroOptions(); });
+    } else {
+        arcadeHud.initialize();
+        initLibretroOptions();
+    }
+</script>
+</body>
+</html>

@@ -124,7 +124,8 @@
             <span style="color:#888; font-size:15px; margin-right:6px;">Core:</span>
             <input type="text" id="coreInput" readonly style="flex:1; margin-right:12px;" />
             <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
-            <input type="text" id="fileInput" readonly style="flex:1;" />
+            <input type="text" id="fileInput" readonly style="flex:1; margin-right:8px;" />
+            <button id="btnLibretroOptions" title="Edit core + per-game options for this core">Options</button>
         </div>
         <div class="address-bar" id="videoBar">
             <span style="color:#888; font-size:15px; margin-right:6px;">File:</span>
@@ -164,6 +165,14 @@
     var isVideoPlayer = false;
     var timelineInterval = null;
     var currentVideoFile = '';
+
+    /* Per-core/per-game options menu (Phase 7). Loads in the overlay slot —
+     * libretroOptions.html itself spawns its own cursor sprite so navigation
+     * across overlay pages doesn't lose the mouse. */
+    document.getElementById('btnLibretroOptions').addEventListener('click', function(e) {
+        location.href = 'libretroOptions.html';
+        e.stopPropagation();
+    });
 
     /* Navigation buttons */
     btnBack.addEventListener('click', function(e) {

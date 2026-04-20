@@ -90,6 +90,15 @@ function initOptions() {
             window.location.href = 'file:///ui/steamworksWebBrowserConfig.html';
         });
         content.appendChild(btn3);
+
+        var btn4 = document.createElement('button');
+        btn4.className = 'aa-btn';
+        btn4.style.marginTop = '8px';
+        btn4.textContent = 'Ultralight Config';
+        btn4.addEventListener('click', function() {
+            window.location.href = 'file:///ui/ultralightConfig.html';
+        });
+        content.appendChild(btn4);
     }
 
     arcadeHud.ui.createWindow({

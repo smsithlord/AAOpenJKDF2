@@ -284,13 +284,18 @@
             models.push(allModels[fi]);
     }
 
-    /* Set initial model index from current spawn/move object */
+    /* Set initial model index from current spawn/move object. If the C++ side
+     * handed us a model that doesn't belong to the current category (e.g. a
+     * prop model leaked into an item spawn), fall back to index 0 AND push
+     * that choice back to C++ so a confirm-without-scrolling doesn't place
+     * the leaked wrong-category model. */
+    var initMatched = false;
     try {
         if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnModelId) {
             var initModelId = aapi.manager.getSpawnModelId();
             if (initModelId) {
                 for (var mi = 0; mi < models.length; mi++) {
-                    if (models[mi].id === initModelId) { currentIndex = mi; break; }
+                    if (models[mi].id === initModelId) { currentIndex = mi; initMatched = true; break; }
                 }
             }
         }
@@ -345,6 +350,9 @@
     };
 
     renderList();
+    /* If the initial C++ model wasn't in this category's filtered list, push
+     * the category's index-0 choice back so a no-scroll confirm spawns it. */
+    if (!initMatched && models.length > 0) applyModel();
 
     /* Transform panel */
     var transformPanel = document.getElementById('transformPanel');
@@ -499,11 +507,19 @@
     /* Called from C++ via EvaluateScript when spawn is confirmed */
     window.onSpawnConfirmed = function() {
         saveTransformForModel();
-        /* Remember last confirmed model globally and per-item */
+        /* Remember last confirmed model. Split by category so a prop spawn
+         * doesn't overwrite the user's last cabinet choice (and vice versa).
+         * Key scheme:
+         *   lastSpawnModelId_item  — last cabinet model across all items
+         *   lastSpawnModelId_prop  — last prop model
+         *   lastSpawnModelId_<itemId> — per-item override (items only)
+         *   lastSpawnModelId — legacy unified key, kept writing for any old
+         *                      consumers but no longer read by the C++ side. */
         if (models.length > 0 && models[currentIndex]) {
             var mid = models[currentIndex].id;
             try {
                 localStorage.setItem('lastSpawnModelId', mid);
+                localStorage.setItem(isPropMode ? 'lastSpawnModelId_prop' : 'lastSpawnModelId_item', mid);
                 if (typeof aapi !== 'undefined' && aapi.manager && aapi.manager.getSpawnItemId) {
                     var itemId = aapi.manager.getSpawnItemId();
                     if (itemId) localStorage.setItem('lastSpawnModelId_' + itemId, mid);

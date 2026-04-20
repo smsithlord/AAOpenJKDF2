@@ -40,12 +40,16 @@ macro(plat_link_and_package)
         # the PE image version field.
         VERSION ${CMAKE_SYSTEM_VERSION}
     )
+    # Release-family builds hide the Win32 console window. Both pieces are
+    # required: WIN32_EXECUTABLE flips the PE subsystem to GUI, and
+    # OPENJKDF2_NO_CONSOLE gates out the explicit AllocConsole() call in
+    # src/main.c plus provides the WinMain shim. Debug keeps the console.
     if(CMAKE_BUILD_TYPE STREQUAL Release OR
        CMAKE_BUILD_TYPE STREQUAL MinSizeRel OR
        CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo)
         set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
         target_compile_definitions(${BIN_NAME} PRIVATE OPENJKDF2_NO_CONSOLE)
-    elseif(CMAKE_BUILD_TYPE STREQUAL Debug)
+    else()
         set_target_properties(${BIN_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
     endif()
 

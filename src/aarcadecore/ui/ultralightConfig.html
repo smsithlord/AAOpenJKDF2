@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Ultralight Config</title>
+    <link rel="stylesheet" href="arcadeHud.css">
+    <script src="imageCache.js"></script>
+    <script src="arcadeHud.js"></script>
+    <script src="ultralightConfig.js"></script>
+</head>
+<body>
+<script>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { arcadeHud.initialize(); initUltralightConfig(); });
+    } else {
+        arcadeHud.initialize();
+        initUltralightConfig();
+    }
+</script>
+</body>
+</html>
