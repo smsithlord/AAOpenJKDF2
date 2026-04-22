@@ -122,6 +122,8 @@ build_openjkdf2_venv/*
 build_msvc/
 build_libretro_host/
 build_aarcade/
+AAOpenJKDF2.zip
+AAOJK README.txt
 __pycache__/
 .claude/
 .vscode/
